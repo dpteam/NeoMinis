@@ -635,12 +635,14 @@
     var tabs = '<div class="feed-tabs" style="margin-bottom:10px">' +
       adminTab('overview', 'chart-pie', T('admin.overview'), sub) +
       adminTab('users', 'users', T('admin.users'), sub) +
+      adminTab('ai', 'robot', T('admin.ai'), sub) +
       adminTab('reports', 'flag', T('admin.reports'), sub) +
       adminTab('logs', 'terminal', T('admin.logs'), sub) +
       '</div>';
     main.innerHTML = tabs + '<div id="admin-body">' + spinnerCard() + '</div>';
     var body = document.getElementById('admin-body');
     if (sub === 'users') adminUsers(body);
+    else if (sub === 'ai') adminAi(body);
     else if (sub === 'reports') adminReports(body);
     else if (sub === 'logs') adminLogs(body);
     else adminOverview(body);
@@ -841,6 +843,202 @@
     box.querySelector('#au-reset').addEventListener('click', function () { send('reset'); });
     box.querySelector('#au-delete').addEventListener('click', function () {
       UI.confirm(T('admin.delete'), T('admin.confirmDelete'), T('common.delete'), function () { send('delete'); }, true);
+    });
+  }
+
+  // ------------------------------------------------------------------- AI
+
+  function adminAi(body) {
+    Api.request('GET', '/api/admin/ai', null, function (err, data) {
+      if (err) { body.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+      var c = data.config || {};
+      var s = data.status || {};
+      var personas = data.personas || [];
+      var bots = data.bots || [];
+
+      var personaOpts = function (selected) {
+        var h = '<option value=""' + (!selected ? ' selected' : '') + '>' + T('admin.aiNone') + '</option>';
+        for (var i = 0; i < personas.length; i++) {
+          h += '<option value="' + UI.attr(personas[i]) + '"' + (selected === personas[i] ? ' selected' : '') + '>' + UI.esc(personas[i]) + '</option>';
+        }
+        return h;
+      };
+      var moodOpts = function (selected) {
+        var moods = [['', T('admin.aiMoodNone')], ['happy', T('admin.aiHappy')], ['sad', T('admin.aiSad')], ['neutral', T('admin.aiNeutral')]];
+        var h = '';
+        for (var i = 0; i < moods.length; i++) {
+          h += '<option value="' + moods[i][0] + '"' + (selected === moods[i][0] ? ' selected' : '') + '>' + UI.esc(moods[i][1]) + '</option>';
+        }
+        return h;
+      };
+
+      var html = '';
+
+      // ---- status
+      html += '<div class="admin-grid">' +
+        stat('robot', s.bots, T('admin.aiBots'), '') +
+        stat('wand-magic-sparkles', s.actions, T('admin.aiActions'), '') +
+        stat('pen', s.postsLastHour, T('admin.aiPostsHour'), '') +
+        stat('comment', s.commentsLastHour, T('admin.aiCommentsHour'), '') +
+        stat('heart', s.likesLastHour, T('admin.aiLikesHour'), '') +
+        stat('triangle-exclamation', s.failed, T('admin.aiFailed'), s.failed > 0 ? 'warn' : 'ok') +
+        '</div>';
+
+      html += '<div class="card"><div class="card-h">' + UI.icon('robot') + ' ' + T('admin.aiTitle') +
+        '<span class="right">' + (s.ready ? '<span class="badge online">' + UI.esc(s.providerLabel) + '</span>'
+          : '<span class="badge err">' + UI.esc(s.providerLabel) + '</span>') + '</span></div>' +
+        '<div class="card-b">' +
+        '<div class="tiny muted" style="margin-bottom:8px">' + T('admin.aiLastAction') + ': ' +
+        (s.lastAction ? UI.esc(s.lastAction) + ' · ' + UI.timeAgo(s.lastActionAt) : T('common.none')) + '</div>' +
+        (s.lastError ? '<div class="alert err" style="margin-bottom:8px">' + UI.esc(s.lastError) + '</div>' : '') +
+        '<div class="tiny muted">' + T('admin.aiImported') + ': ' + s.imported + ' · ' + T('admin.aiNext') + ': ' +
+        (s.nextRun ? UI.timeAgo(s.nextRun) : '—') + ' · ' + T('admin.aiChain') + ': ' + s.chainPosts + ' ' + T('admin.aiPosts') + '</div>' +
+        '</div></div>';
+
+      // ---- config
+      html += '<div class="card"><div class="card-h">' + UI.icon('sliders') + ' ' + T('admin.aiConfig') + '</div><div class="card-b">';
+      html += '<div class="settings-grid">';
+
+      html += '<div class="settings-block"><h3>' + T('admin.aiProvider') + '</h3>' +
+        '<div class="field"><label>' + T('admin.aiProvider') + '</label><select class="select" id="ai-provider">' +
+        '<option value="off"' + (c.provider === 'off' ? ' selected' : '') + '>' + T('admin.aiOff') + '</option>' +
+        '<option value="markov"' + (c.provider === 'markov' ? ' selected' : '') + '>' + T('admin.aiMarkov') + '</option>' +
+        '<option value="openai"' + (c.provider === 'openai' ? ' selected' : '') + '>' + T('admin.aiOpenAI') + '</option>' +
+        '</select></div>' +
+        '<label class="check" style="margin-bottom:8px"><input type="checkbox" id="ai-enabled"' + (c.enabled ? ' checked' : '') + '> <span>' + T('admin.aiEnabled') + '</span></label>' +
+        '<div class="field"><label>' + T('admin.aiEndpoint') + '</label><input class="input" id="ai-endpoint" value="' + UI.attr(c.endpoint) + '" placeholder="http://localhost:1234/v1/chat/completions"></div>' +
+        '<div class="field"><label>' + T('admin.aiModel') + '</label><input class="input" id="ai-model" value="' + UI.attr(c.model) + '"></div>' +
+        '<div class="field"><label>' + T('admin.aiKey') + '</label><input class="input" id="ai-key" type="password" placeholder="' + UI.attr(c.hasKey ? T('admin.aiKeySet') : '') + '" autocomplete="off"></div>' +
+        '<div class="hint">' + T('admin.aiKeyHint') + '</div>' +
+        '</div>';
+
+      html += '<div class="settings-block"><h3>' + T('admin.aiBehaviour') + '</h3>' +
+        '<div class="inline-fields">' +
+        '<div class="field"><label>' + T('admin.aiInterval') + '</label><input class="input" id="ai-interval" type="number" min="30" value="' + c.intervalSec + '"></div>' +
+        '<div class="field"><label>' + T('admin.aiMaxTokens') + '</label><input class="input" id="ai-tokens" type="number" min="16" value="' + c.maxTokens + '"></div></div>' +
+        '<div class="inline-fields">' +
+        '<div class="field"><label>' + T('admin.aiTemp') + '</label><input class="input" id="ai-temp" type="number" step="0.05" min="0" max="2" value="' + c.temperature + '"></div>' +
+        '<div class="field"><label>' + T('admin.aiHumanTarget') + '</label><input class="input" id="ai-human" type="number" min="0" max="100" value="' + c.humanTargetPercent + '"></div></div>' +
+        '<div class="sound-events" style="margin:6px 0 10px">' +
+        '<label class="check"><input type="checkbox" id="ai-posts"' + (c.allowPosts ? ' checked' : '') + '> <span>' + T('admin.aiAllowPosts') + '</span></label>' +
+        '<label class="check"><input type="checkbox" id="ai-comments"' + (c.allowComments ? ' checked' : '') + '> <span>' + T('admin.aiAllowComments') + '</span></label>' +
+        '<label class="check"><input type="checkbox" id="ai-likes"' + (c.allowLikes ? ' checked' : '') + '> <span>' + T('admin.aiAllowLikes') + '</span></label>' +
+        '<label class="check"><input type="checkbox" id="ai-messages"' + (c.allowMessages ? ' checked' : '') + '> <span>' + T('admin.aiAllowMessages') + '</span></label>' +
+        '</div>' +
+        '<div class="inline-fields">' +
+        '<div class="field"><label>' + T('admin.aiPostsHour') + '</label><input class="input" id="ai-cap-posts" type="number" min="0" value="' + c.maxPostsPerHour + '"></div>' +
+        '<div class="field"><label>' + T('admin.aiCommentsHour') + '</label><input class="input" id="ai-cap-comments" type="number" min="0" value="' + c.maxCommentsPerHour + '"></div></div>' +
+        '<div class="inline-fields">' +
+        '<div class="field"><label>' + T('admin.aiLikesHour') + '</label><input class="input" id="ai-cap-likes" type="number" min="0" value="' + c.maxLikesPerHour + '"></div>' +
+        '<div class="field"><label>' + T('admin.aiMessagesHour') + '</label><input class="input" id="ai-cap-messages" type="number" min="0" value="' + c.maxMessagesPerHour + '"></div></div>' +
+        '</div>';
+      html += '</div>';
+
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">' +
+        '<button class="btn btn-primary" id="ai-save">' + UI.icon('floppy-disk') + ' ' + T('common.save') + '</button>' +
+        '<button class="btn" id="ai-test">' + UI.icon('plug-circle-check') + ' ' + T('admin.aiTest') + '</button>' +
+        '<button class="btn" id="ai-step">' + UI.icon('forward-step') + ' ' + T('admin.aiStep') + '</button>' +
+        '</div>';
+      html += '</div></div>';
+
+      // ---- bots
+      html += '<div class="card"><div class="card-h">' + UI.icon('users-gear') + ' ' + T('admin.aiBots') +
+        '<span class="right tiny muted">' + bots.length + '</span></div><div class="card-b flush">' +
+        '<div class="table-wrap" style="max-height:520px"><table class="table"><thead><tr>' +
+        '<th>' + T('auth.username') + '</th><th>' + T('admin.aiPersona') + '</th><th>' + T('admin.aiMood') + '</th>' +
+        '<th>' + T('admin.aiStatusCol') + '</th><th></th></tr></thead><tbody>';
+      for (var i = 0; i < bots.length; i++) {
+        var b = bots[i];
+        html += '<tr><td><div class="user-cell">' + UI.avatar(b, 22) +
+          '<a href="#/u/' + encodeURIComponent(b.username) + '">' + UI.esc(b.displayName) + '</a></div></td>' +
+          '<td><select class="select ai-bot-persona" data-id="' + b.id + '" style="padding:2px 20px 2px 6px;font-size:11px">' + personaOpts(b.persona) + '</select></td>' +
+          '<td><select class="select ai-bot-mood" data-id="' + b.id + '" style="padding:2px 20px 2px 6px;font-size:11px">' + moodOpts(b.mood) + '</select></td>' +
+          '<td><input class="input ai-bot-status" data-id="' + b.id + '" value="' + UI.attr(b.status) + '" style="font-size:11px;padding:3px 6px"></td>' +
+          '<td><button class="btn btn-xs ai-bot-save" data-id="' + b.id + '">' + T('common.save') + '</button></td></tr>';
+      }
+      html += '</tbody></table></div></div></div>';
+
+      body.innerHTML = html;
+
+      // ---- bind
+      var save = document.getElementById('ai-save');
+      if (save) save.addEventListener('click', function () {
+        var patch = {
+          provider: App.val('ai-provider'),
+          enabled: document.getElementById('ai-enabled').checked,
+          endpoint: App.val('ai-endpoint'),
+          model: App.val('ai-model'),
+          intervalSec: Number(App.val('ai-interval')) || 180,
+          maxTokens: Number(App.val('ai-tokens')) || 1200,
+          temperature: Number(App.val('ai-temp')),
+          humanTargetPercent: Number(App.val('ai-human')),
+          allowPosts: document.getElementById('ai-posts').checked,
+          allowComments: document.getElementById('ai-comments').checked,
+          allowLikes: document.getElementById('ai-likes').checked,
+          allowMessages: document.getElementById('ai-messages').checked,
+          maxPostsPerHour: Number(App.val('ai-cap-posts')),
+          maxCommentsPerHour: Number(App.val('ai-cap-comments')),
+          maxLikesPerHour: Number(App.val('ai-cap-likes')),
+          maxMessagesPerHour: Number(App.val('ai-cap-messages'))
+        };
+        var key = App.val('ai-key');
+        if (key) patch.apiKey = key;
+        save.disabled = true;
+        Api.request('POST', '/api/admin/ai/config', patch, function (e2, d2) {
+          save.disabled = false;
+          if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+          UI.toast(T('settings.saved'), 'ok');
+          SoundFX.play('success');
+          App.route();
+        });
+      });
+
+      var test = document.getElementById('ai-test');
+      if (test) test.addEventListener('click', function () {
+        test.disabled = true;
+        test.innerHTML = UI.spinner() + ' ' + T('admin.aiTesting');
+        Api.request('POST', '/api/admin/ai/test', {}, function (e2, d2) {
+          test.disabled = false;
+          test.innerHTML = UI.icon('plug-circle-check') + ' ' + T('admin.aiTest');
+          if (e2) { UI.toast(T('admin.aiTestFail') + ': ' + (e2.message || Api.errorText(e2)), 'err'); return; }
+          UI.toast(T('admin.aiTestOk') + ' · ' + d2.latencyMs + 'ms', 'ok');
+          SoundFX.play('success');
+        });
+      });
+
+      var step = document.getElementById('ai-step');
+      if (step) step.addEventListener('click', function () {
+        step.disabled = true;
+        step.innerHTML = UI.spinner() + ' ' + T('admin.aiStepping');
+        Api.request('POST', '/api/admin/ai/step', {}, function (e2, d2) {
+          step.disabled = false;
+          step.innerHTML = UI.icon('forward-step') + ' ' + T('admin.aiStep');
+          if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+          UI.toast(d2.result, 'info');
+          App.route();
+        });
+      });
+
+      var saves = body.querySelectorAll('.ai-bot-save');
+      for (var k = 0; k < saves.length; k++) {
+        saves[k].addEventListener('click', function () {
+          var id = this.getAttribute('data-id');
+          var persona = body.querySelector('.ai-bot-persona[data-id="' + id + '"]');
+          var mood = body.querySelector('.ai-bot-mood[data-id="' + id + '"]');
+          var status = body.querySelector('.ai-bot-status[data-id="' + id + '"]');
+          this.disabled = true;
+          Api.request('POST', '/api/admin/ai/persona', {
+            id: Number(id),
+            persona: persona ? persona.value : '',
+            mood: mood ? mood.value : '',
+            status: status ? status.value : ''
+          }, function (e2) {
+            this.disabled = false;
+            if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+            UI.toast(T('settings.saved'), 'ok');
+          }.bind(this));
+        });
+      }
     });
   }
 

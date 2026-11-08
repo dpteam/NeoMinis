@@ -20,6 +20,8 @@ limits from `config.ini` and ship your own network.
 | **Groups** | public/private groups, membership, group feed, owner role |
 | **Notifications** | likes, comments, friend requests, messages, admin broadcasts, reports |
 | **Search** | people and public posts, plus a top-bar quick search |
+| **Bookmarks** | save any post, a dedicated list |
+| **AI citizens** | imported personas that post / comment / like on their own — Markov chain or any OpenAI-compatible endpoint (LM Studio, Ollama, OpenAI, OpenRouter). Off by default. See [docs/AI.md](docs/AI.md) |
 | **Admin** | **separate board on its own port** — dashboard, users (ban / unban / role / warn / reset / delete), reports queue, live log tail, broadcast, backup, storage repair, config reload |
 | **Themes** | `light` / `dark` / `oled`, instant switch, remembered per user |
 | **Sounds** | WebAudio synth (no audio files): click, post, like, comment, message, notification, friend, login, error, success, theme — with per-event toggles and volume |
@@ -94,18 +96,19 @@ build.cmd                stock csc.exe build, no NuGet/MSBuild
 run.cmd                  start from bin\
 config.example.ini       every setting, documented
 src/SocialServer/
-  Program.cs             CLI, crash handler, --selftest / --backup / --reset-admin
-  SocialApp.cs           owns store, sessions, stats, captcha, media, web
+  Program.cs             CLI, crash handler, --selftest / --backup / --import-deadvk
+  SocialApp.cs           owns store, sessions, stats, captcha, media, AI, web
   AppSupervisor.cs       watchdog + debounced saves + snapshots + cleanup
-  ConsoleUi.cs           TUI: title, hotkeys, no log echo
+  ConsoleUi.cs           TUI: ASCII banner, status line, hotkeys, no log echo
   SelfTest.cs            crypto vectors, envelope tampering, JSON, captcha, storage
   Core/                  Config, Log, Crypto, Json, Models, SocialStore, Sessions,
-                         Captcha, Media, StatsStore, Store (atomic IO), Util
+                         Captcha, Media, StatsStore, Store (atomic IO), Util,
+                         Branding, Ai + AiRunner, DeadVkImport
   Web/                   HttpCore (HTTP/1.1), WebServer (static/media/routing),
-                         ApiRouter (auth, views, social, admin)
+                         ApiRouter (auth, views, social, admin, ai)
 public/                  SPA: index.html, 404/403, assets/css, assets/js
 tools/                   firewall.ps1/.cmd, test-web.mjs, ci-test.ps1, rename-user.mjs
-docs/                    ARCHITECTURE, API, SECURITY, I18N
+docs/                    ARCHITECTURE, API, SECURITY, I18N, AI, IMPORT
 ```
 
 Runtime folders (git-ignored): `bin/`, `data/`, `logs/`, `config.ini`.
@@ -173,6 +176,14 @@ level=Info                  ; Error | Warn | Info | Debug | Verbose
 apiTrace=true
 maxFileMB=8
 retentionDays=14
+
+[ai]
+provider=off                ; off | markov | openai
+enabled=false
+; any OpenAI-compatible /chat/completions endpoint
+endpoint=http://localhost:1234/v1/chat/completions
+model=local-model
+intervalSec=180
 ```
 
 Changing `port`, `bind`, `adminPort`, `webRoot` or `dataDir` needs a restart;
@@ -230,10 +241,17 @@ administrator, so the admin block runs automatically there.
 ### Maintenance
 
 ```cmd
-bin\SocialServer.exe --backup            :: snapshot data/ and exit
-bin\SocialServer.exe --reset-admin NAME  :: promote an existing user to admin
+bin\SocialServer.exe --backup                     :: snapshot data/ and exit
+bin\SocialServer.exe --reset-admin NAME           :: promote an existing user to admin
+bin\SocialServer.exe --import-deadvk <db folder>  :: import an old DeadVK history
 node tools\rename-user.mjs old new "New Name" [password]
 ```
+
+`--import-deadvk` copies users, posts, comments, likes, messages, friends,
+bookmarks, blocks, notifications, avatars and post images from the old project and
+prefixes every imported status with *"Импортировано из старого проекта DeadVK"*.
+Imported accounts cannot log in (their password scheme is different) — they are
+content and AI personas. Details: **[docs/IMPORT.md](docs/IMPORT.md)**.
 
 `rename-user.mjs` re-derives the login verifier, because it is bound to the
 username (`social.login.v1|username`) — without that the account would be locked out.
@@ -251,6 +269,8 @@ username (`social.login.v1|username`) — without that the account would be lock
 | "Wrong username or password" but it is correct | username is case-insensitive, password is exact; `security.kdfIterations` must not change after registration |
 | Behind a proxy everyone looks like `127.0.0.1` | add the proxy to `trustedProxies`, keep `trustProxyHeaders=true` |
 | Admin menu is missing | you are on the public board: open the admin port (`server.adminPort`), the SPA tells you where it is |
+| AI posts nothing | check Admin → AI: provider/enabled, then *Test connection*. Reasoning models need `maxTokens` around 1000+ |
+| AI writes nonsense | that is the Markov provider learning from old posts; switch to `openai` or raise `temperature`/`intervalSec` |
 | Secure cookie not set behind HTTPS | set `cookieSecure=true` or make the proxy send `X-Forwarded-Proto: https` |
 | Captcha unreadable | click it for a new code; disable with `security.requireCaptcha=false` |
 | `data/*.json` corrupt after a crash | the server restores `.bak` automatically and quarantines the broken file as `*.bad-YYYYMMDD-HHMMSS` |
