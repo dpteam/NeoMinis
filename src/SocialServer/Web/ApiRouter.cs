@@ -567,6 +567,11 @@ namespace Social.Web
             if (r == "group/join") { RequireMethod(m, "POST"); HandleGroupJoin(ctx, true); return; }
             if (r == "group/leave") { RequireMethod(m, "POST"); HandleGroupJoin(ctx, false); return; }
             if (r == "group/feed") { RequireMethod(m, "GET"); HandleGroupFeed(ctx); return; }
+            if (r == "group/edit") { RequireMethod(m, "POST"); HandleGroupEdit(ctx); return; }
+            if (r == "group/avatar") { RequireMethod(m, "POST"); HandleGroupAvatar(ctx); return; }
+            if (r == "group/kick") { RequireMethod(m, "POST"); HandleGroupKick(ctx); return; }
+            if (r == "tag") { RequireMethod(m, "GET"); HandleTag(ctx); return; }
+            if (r == "tags") { RequireMethod(m, "GET"); HandleTags(ctx); return; }
             if (r == "report") { RequireMethod(m, "POST"); HandleReport(ctx); return; }
 
             if (r.StartsWith("admin/", StringComparison.Ordinal)) { DispatchAdmin(ctx, r.Substring(6)); return; }

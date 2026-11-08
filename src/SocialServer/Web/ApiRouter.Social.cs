@@ -54,6 +54,22 @@ namespace Social.Web
             }
         }
 
+        // =========================================================== mentions
+
+        private void NotifyMentions(User author, string text, string link)
+        {
+            if (author == null || string.IsNullOrEmpty(text)) return;
+            List<string> names = Util.Mentions(text);
+            int sent = 0;
+            for (int i = 0; i < names.Count && sent < 10; i++)
+            {
+                User target = _store.FindUser(names[i]);
+                if (target == null || target.Deleted || target.Id == author.Id) continue;
+                _store.Notify(target.Id, author.Id, "mention", "mentioned you", link);
+                sent++;
+            }
+        }
+
         // ========================================================== settings
 
         private void HandleSettings(ApiCtx ctx)
@@ -256,6 +272,7 @@ namespace Social.Web
                     _store.Notify(g.Owner, ctx.User.Id, "group", "posted in " + g.Name, "#/group/" + g.Id);
             }
             GrantBadges(ctx.User);
+            NotifyMentions(ctx.User, text, "#/post/" + post.Id);
 
             JsonBuilder b = new JsonBuilder(1024);
             b.BeginObject();
@@ -505,6 +522,7 @@ namespace Social.Web
                 _store.Notify(p.Wall, ctx.User.Id, "comment", "commented on a post on your wall", "#/post/" + p.Id);
             GrantBadges(ctx.User);
             GrantBadges(_store.FindUser(p.Author));
+            NotifyMentions(ctx.User, text, "#/post/" + p.Id);
 
             JsonBuilder b = new JsonBuilder(512);
             b.BeginObject();
@@ -1020,7 +1038,7 @@ namespace Social.Web
 
             List<Post> posts = _store.GroupFeed(g.Id, ctx.User.Id, 0, 10);
             List<User> members = new List<User>();
-            for (int i = 0; i < g.Members.Count && i < 20; i++)
+            for (int i = 0; i < g.Members.Count && i < 60; i++)
             {
                 User u = _store.FindUser(g.Members[i]);
                 if (u != null) members.Add(u);
@@ -1048,6 +1066,112 @@ namespace Social.Web
             JsonBuilder b = new JsonBuilder(512);
             b.BeginObject();
             b.Name("group").Raw(GroupView(g, ctx.User));
+            SendOk(ctx, b);
+        }
+
+        private void HandleGroupEdit(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            Group g = _store.FindGroup(id);
+            if (g == null) throw new ApiException(404, "no-group", "Group not found");
+            if (g.Owner != ctx.User.Id && !ctx.User.IsAdmin)
+                throw new ApiException(403, "not-owner", "Only the owner can edit the group");
+
+            string name = BodyStr(ctx, "name", g.Name).Trim();
+            if (name.Length < 2) throw new ApiException(400, "bad-name", "Name is too short");
+            if (name.Length > 80) name = Util.SingleLine(name, 80);
+
+            _store.UpdateGroup(g.Id, name, BodyStr(ctx, "description", g.Description),
+                BodyStr(ctx, "visibility", g.Visibility));
+            Log.Info("DATA", "group #" + g.Id + " edited by @" + ctx.User.Username);
+
+            JsonBuilder b = new JsonBuilder(512);
+            b.BeginObject();
+            b.Name("group").Raw(GroupView(g, ctx.User));
+            SendOk(ctx, b);
+        }
+
+        private void HandleGroupAvatar(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            Group g = _store.FindGroup(id);
+            if (g == null) throw new ApiException(404, "no-group", "Group not found");
+            if (g.Owner != ctx.User.Id && !ctx.User.IsAdmin)
+                throw new ApiException(403, "not-owner", "Only the owner can edit the group");
+
+            string err;
+            string url = _media.SaveDataUrl(BodyStr(ctx, "data", ""), "group", _cfg.MaxAvatarKB, out err);
+            if (url == null) throw new ApiException(400, err, "Image could not be saved");
+            string old = g.Avatar;
+            _store.SetGroupAvatar(g.Id, url);
+            if (!string.IsNullOrEmpty(old)) _media.Delete(old);
+
+            JsonBuilder b = new JsonBuilder(128);
+            b.BeginObject();
+            b.Prop("avatar", url);
+            SendOk(ctx, b);
+        }
+
+        private void HandleGroupKick(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            long userId = BodyLong(ctx, "user", 0);
+            Group g = _store.FindGroup(id);
+            if (g == null) throw new ApiException(404, "no-group", "Group not found");
+            if (g.Owner != ctx.User.Id && !ctx.User.IsAdmin)
+                throw new ApiException(403, "not-owner", "Only the owner can remove members");
+            if (userId == g.Owner) throw new ApiException(400, "owner", "The owner cannot be removed");
+            if (!_store.RemoveGroupMember(g.Id, userId))
+                throw new ApiException(400, "not-member", "That user is not a member");
+
+            _store.Notify(userId, ctx.User.Id, "group", "removed you from " + g.Name, "#/group/" + g.Id);
+            Log.Info("DATA", "@" + ctx.User.Username + " removed #" + userId + " from group #" + g.Id);
+
+            JsonBuilder b = new JsonBuilder(256);
+            b.BeginObject();
+            b.Name("group").Raw(GroupView(g, ctx.User));
+            SendOk(ctx, b);
+        }
+
+        // ============================================================== tags
+
+        private void HandleTag(ApiCtx ctx)
+        {
+            string tag = (GetQuery(ctx.Query, "tag") ?? "").Trim();
+            if (tag.StartsWith("#", StringComparison.Ordinal)) tag = tag.Substring(1);
+            tag = tag.ToLowerInvariant();
+            if (tag.Length < 2 || tag.Length > 40)
+                throw new ApiException(400, "bad-tag", "Tag must be 2-40 characters");
+
+            int limit = LimitParam(ctx, 20, 50);
+            long before = LongQuery(ctx, "before");
+            List<Post> posts = _store.PostsByTag(tag, ctx.User.Id, before, limit + 1);
+            bool hasMore = posts.Count > limit;
+            if (hasMore) posts.RemoveAt(posts.Count - 1);
+
+            JsonBuilder b = new JsonBuilder(4096);
+            b.BeginObject();
+            b.Prop("tag", tag);
+            AppendPosts(b, "posts", posts, ctx.User);
+            b.Prop("hasMore", hasMore);
+            b.Prop("next", posts.Count == 0 ? 0 : posts[posts.Count - 1].Id);
+            SendOk(ctx, b);
+        }
+
+        private void HandleTags(ApiCtx ctx)
+        {
+            List<KeyValuePair<string, int>> tags = _store.TopTags(20);
+            JsonBuilder b = new JsonBuilder(1024);
+            b.BeginObject();
+            b.Name("tags").BeginArray();
+            for (int i = 0; i < tags.Count; i++)
+            {
+                b.BeginObject();
+                b.Prop("tag", tags[i].Key);
+                b.Prop("count", tags[i].Value);
+                b.EndObject();
+            }
+            b.EndArray();
             SendOk(ctx, b);
         }
 

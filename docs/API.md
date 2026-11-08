@@ -202,7 +202,7 @@ Reading a conversation marks it read. Blocked users cannot exchange messages.
 | GET | `/api/notifications` | `before`, `limit` | `{ notifications[], unread, hasMore, next }` |
 | POST | `/api/notifications/read` | `all` or `id` | `{ unread }` |
 
-Types: `like`, `comment`, `friend`, `message`, `wall`, `group`, `admin`, `report`, `system`.
+Types: `like`, `comment`, `friend`, `message`, `wall`, `group`, `mention`, `badge`, `admin`, `report`, `system`.
 
 ### Groups
 
@@ -215,6 +215,23 @@ Types: `like`, `comment`, `friend`, `message`, `wall`, `group`, `admin`, `report
 | POST | `/api/group/join` | `id` | `{ group }` |
 | POST | `/api/group/leave` | `id` | `{ group }` (owner cannot leave) |
 | GET | `/api/group/feed` | `id`, `before`, `limit` | `{ group, posts[], hasMore, next }` |
+| POST | `/api/group/edit` | `id`, `name`, `description`, `visibility` | `{ group }` |
+| POST | `/api/group/avatar` | `id`, `data` (data URL) | `{ avatar }` |
+| POST | `/api/group/kick` | `id`, `user` | `{ group }` |
+
+Only the group owner (or an administrator) may edit a group, change its picture or
+remove a member; the owner can never be removed.
+
+### Tags
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| GET | `/api/tag` | `tag`, `before`, `limit` | `{ tag, posts[], hasMore, next }` |
+| GET | `/api/tags` | — | `{ tags[{ tag, count }] }` (top 20 public tags) |
+
+`#hashtags` in a post body are extracted server side; `#tag` matches only the exact
+tag, not a longer word that starts with it. `@username` mentions create a `mention`
+notification for every mentioned user (at most 10 per post/comment, never yourself).
 
 ### Misc
 

@@ -17,9 +17,11 @@ limits from `config.ini` and ship your own network.
 | **Profiles** | avatar, status, bio, city/country, birthday, gender, website, interests (games / films / music / books), mood, achievements, photo gallery, privacy level, friends wall |
 | **Friends** | requests, accept/decline, remove, block, incoming/outgoing lists |
 | **Messages** | private conversations, thread list with unread counters, polling |
-| **Groups** | public/private groups, membership, group feed, owner role |
-| **Notifications** | likes, comments, friend requests, messages, badges, admin broadcasts, reports |
+| **Groups** | public/private groups, membership, group feed, owner role, editable name/description/picture and member management (kick) |
+| **Notifications** | likes, comments, friend requests, messages, mentions, badges, admin broadcasts, reports |
 | **Search** | people and public posts, plus a top-bar quick search |
+| **Tags** | `#hashtags` become tag pages, trending tags in the right column |
+| **Mentions** | `@username` with autocomplete in the composer, links in posts and a notification for every mentioned person |
 | **Bookmarks** | toggle "save" on any post, a dedicated list with paging |
 | **Achievements** | 13 badges, auto-granted from activity (posts, comments, likes, friends, messages, bookmarks, age) plus manual awards; admin can grant/revoke any badge |
 | **AI citizens** | imported personas that post / comment / like on their own — Markov chain or any OpenAI-compatible endpoint (LM Studio, Ollama, OpenAI, OpenRouter). Off by default. See [docs/AI.md](docs/AI.md) |

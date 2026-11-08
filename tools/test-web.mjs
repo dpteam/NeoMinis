@@ -215,6 +215,7 @@ async function main() {
 
   // ---- registration
   const stamp = Date.now().toString(36);
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   const alice = new Client('alice');
   const bob = new Client('bob');
   const ua = 'alice_' + stamp;
@@ -290,6 +291,18 @@ async function main() {
   const comments = await alice.call('GET', '/api/comments?post=' + postId);
   ok('comment listed', comments.data && comments.data.comments.length === 1, '');
 
+  const mentionPost = await bob.call('POST', '/api/post', { body: 'hello @' + ua + ' and #newtag' });
+  ok('post with mention and tag', mentionPost.status === 200, String(mentionPost.status));
+  const aliceNotif = await alice.call('GET', '/api/notifications?limit=50');
+  ok('mention notified', aliceNotif.data && aliceNotif.data.notifications.some(n => n.type === 'mention'), '');
+  const tagRes = await alice.call('GET', '/api/tag?tag=newtag');
+  ok('tag page finds the post', tagRes.status === 200 && tagRes.data.posts.some(p => p.id === mentionPost.data.post.id),
+    String(tagRes.status));
+  const tagList = await alice.call('GET', '/api/tags');
+  ok('tag cloud lists the tag', tagList.data && tagList.data.tags.some(t => t.tag === 'newtag'), '');
+  const tagMissing = await alice.call('GET', '/api/tag?tag=');
+  ok('empty tag rejected', tagMissing.status === 400, String(tagMissing.status));
+
   const fr = await bob.call('POST', '/api/friend', { user: alice.user.id, action: 'request' });
   ok('friend request sent', fr.status === 200 && fr.data.status === 'pending', JSON.stringify(fr.data && fr.data.status));
   const friends = await alice.call('GET', '/api/friends');
@@ -315,6 +328,16 @@ async function main() {
   ok('group post created', gpost.status === 200, String(gpost.status));
   const gfeed = await alice.call('GET', '/api/group/feed?id=' + gid);
   ok('group feed has post', gfeed.data && gfeed.data.posts.length === 1, '');
+
+  const gedit = await alice.call('POST', '/api/group/edit', { id: gid, name: 'Renamed ' + stamp, description: 'updated', visibility: 'public' });
+  ok('group edit', gedit.status === 200 && gedit.data.group.name === 'Renamed ' + stamp, String(gedit.status));
+  const geditBad = await bob.call('POST', '/api/group/edit', { id: gid, name: 'hijack' });
+  ok('non-owner group edit refused', geditBad.status === 403, String(geditBad.status));
+  const gav = await alice.call('POST', '/api/group/avatar', { id: gid, data: PNG });
+  ok('group avatar saved', gav.status === 200 && String(gav.data.avatar).indexOf('/media/groups/') === 0,
+    String(gav.status));
+  const kick = await alice.call('POST', '/api/group/kick', { id: gid, user: bob.user.id });
+  ok('member kicked', kick.status === 200 && kick.data.group.members === 1, String(kick.status));
 
   const notif = await alice.call('GET', '/api/notifications');
   ok('notifications delivered', notif.data && notif.data.notifications.length > 0, String(notif.data && notif.data.unread));
@@ -376,7 +399,6 @@ async function main() {
   ok('likes list', likes.status === 200 && likes.data.users.some(u => u.id === bob.user.id) && likes.data.total >= 1,
     String(likes.status));
 
-  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   const photoPost = await alice.call('POST', '/api/post', { body: 'a picture', image: PNG });
   ok('post with image', photoPost.status === 200 && String(photoPost.data.post.image).indexOf('/media/posts/') === 0,
     String(photoPost.status));

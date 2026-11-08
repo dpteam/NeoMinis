@@ -210,6 +210,7 @@ namespace Social.Web
             b.Prop("members", g.Members.Count);
             b.Prop("isMember", member);
             b.Prop("isOwner", viewer != null && g.Owner == viewer.Id);
+            b.Prop("canManage", viewer != null && (g.Owner == viewer.Id || viewer.IsAdmin));
             b.Prop("visibility", g.Visibility);
             b.Prop("created", Util.Iso(g.Created));
             b.Prop("canPost", member && !g.Deleted);

@@ -195,6 +195,7 @@ var App = (function () {
 
     html += '<aside class="col-right">';
     if (site.motd) html += '<div class="card"><div class="card-h">' + UI.icon('bullhorn') + ' ' + T('motd.title') + '</div><div class="card-b" style="font-size:12px">' + UI.nl2br(site.motd) + '</div></div>';
+    html += '<div class="card"><div class="card-h">' + UI.icon('hashtag') + ' ' + T('tags.title') + '</div><div class="card-b" id="tags-box">' + UI.spinner() + '</div></div>';
     html += '<div class="card"><div class="card-h">' + UI.icon('chart-simple') + ' ' + T('stats.title') + '</div><div class="card-b" id="stats-box">' + UI.spinner() + '</div></div>';
     html += '<div class="card"><div class="card-h">' + UI.icon('comments') + ' ' + T('online.title') + '</div><div class="online-list" id="online-list">' + UI.spinner() + '</div></div>';
     html += '<div class="card"><div class="card-f" style="text-align:center;border-top:0">' + UI.esc(site.footer || T('footer.powered')) + '</div></div>';
@@ -206,6 +207,7 @@ var App = (function () {
     bindShell();
     loadOnline();
     loadStats();
+    loadTags();
   }
 
   function tab(href, iconName, label, key, count, badgeId) {
@@ -260,6 +262,22 @@ var App = (function () {
       }
       if (mini) mini.innerHTML = html;
       if (full) full.innerHTML = html;
+    });
+  }
+
+  function loadTags() {
+    Api.request('GET', '/api/tags', null, function (err, data) {
+      var box = document.getElementById('tags-box');
+      if (!box) return;
+      if (err) { box.innerHTML = '<div class="tiny muted">' + T('tags.empty') + '</div>'; return; }
+      var tags = (data && data.tags) || [];
+      if (!tags.length) { box.innerHTML = '<div class="tiny muted">' + T('tags.empty') + '</div>'; return; }
+      var html = '<div class="tag-cloud">';
+      for (var i = 0; i < tags.length; i++) {
+        html += '<a class="tag-chip" href="#/tag/' + encodeURIComponent(tags[i].tag) + '">#' +
+          UI.esc(tags[i].tag) + ' <b>' + tags[i].count + '</b></a>';
+      }
+      box.innerHTML = html + '</div>';
     });
   }
 
@@ -647,6 +665,7 @@ var App = (function () {
       '<textarea id="composer-text" maxlength="' + (state.site.maxPostLength || 8000) + '" placeholder="' + UI.attr(T('feed.composerPlaceholder')) + '"></textarea>' +
       '</div>' +
       '<div class="composer-preview hidden" id="composer-preview"></div>' +
+      '<div class="mention-pop hidden" id="composer-mentions"></div>' +
       '<div class="composer-video-row hidden" id="composer-video-row">' +
       '<div class="composer-video-input">' + UI.icon('video') +
       '<input class="input" id="composer-video-url" placeholder="' + UI.attr(T('feed.videoPlaceholder')) + '" autocomplete="off"></div>' +
@@ -665,7 +684,7 @@ var App = (function () {
       '</div></form>';
   }
 
-  function bindComposer(wallId) {
+  function bindComposer(wallId, groupId) {
     var form = document.getElementById('composer');
     if (!form) return;
     var text = document.getElementById('composer-text');
@@ -676,6 +695,7 @@ var App = (function () {
     var videoRow = document.getElementById('composer-video-row');
     var videoInput = document.getElementById('composer-video-url');
     var videoPreview = document.getElementById('composer-video-preview');
+    var pop = document.getElementById('composer-mentions');
     var imageData = '';
 
     if (text) {
@@ -694,6 +714,83 @@ var App = (function () {
       var u = videoInput.value.trim();
       videoPreview.innerHTML = u ? videoHtml(u) : '';
     });
+
+    // ------------------------------------------------------ @mention helper
+    var mentionSeq = 0;
+
+    function hideMentions() {
+      if (!pop) return;
+      pop.className = 'mention-pop hidden';
+      pop.innerHTML = '';
+    }
+
+    function currentMention() {
+      if (!text || typeof text.selectionStart !== 'number') return null;
+      var pos = text.selectionStart;
+      var before = text.value.slice(0, pos);
+      var m = /(^|[^\w@])@([A-Za-z0-9_.-]{1,24})$/.exec(before);
+      if (!m) return null;
+      return { name: m[2], start: pos - m[2].length - 1, end: pos };
+    }
+
+    function insertMention(name) {
+      var m = currentMention();
+      if (!m || !text) return;
+      var before = text.value.slice(0, m.start);
+      var after = text.value.slice(m.end);
+      text.value = before + '@' + name + ' ' + after;
+      var pos = (before + '@' + name + ' ').length;
+      try { text.setSelectionRange(pos, pos); } catch (e) { }
+      hideMentions();
+      text.focus();
+      text.style.height = 'auto';
+      text.style.height = Math.min(220, text.scrollHeight) + 'px';
+    }
+
+    function lookupMentions() {
+      if (!text || !pop) return;
+      var m = currentMention();
+      if (!m) { hideMentions(); return; }
+      var seq = ++mentionSeq;
+      Api.request('GET', '/api/people?q=' + encodeURIComponent(m.name) + '&limit=6', null, function (err, data) {
+        if (seq !== mentionSeq) return;
+        if (err) { hideMentions(); return; }
+        var users = (data && data.users) || [];
+        if (!users.length) { hideMentions(); return; }
+        var html = '';
+        for (var i = 0; i < users.length; i++) {
+          html += '<button type="button" class="mention-item" data-name="' + UI.attr(users[i].username) + '">' +
+            UI.avatar(users[i], 22) + '<span>' + UI.esc(users[i].displayName || users[i].username) +
+            ' <em>@' + UI.esc(users[i].username) + '</em></span></button>';
+        }
+        pop.innerHTML = html;
+        pop.className = 'mention-pop';
+        var items = pop.querySelectorAll('.mention-item');
+        for (var j = 0; j < items.length; j++) {
+          items[j].addEventListener('mousedown', function (e) {
+            if (e) e.preventDefault();
+            insertMention(this.getAttribute('data-name'));
+          });
+        }
+      });
+    }
+
+    if (text) {
+      text.addEventListener('input', lookupMentions);
+      text.addEventListener('click', lookupMentions);
+      text.addEventListener('keydown', function (e) {
+        var key = e.keyCode || e.which;
+        if (key === 27) { hideMentions(); return; }
+        if (key === 13 && pop && pop.className.indexOf('hidden') < 0) {
+          var first = pop.querySelector('.mention-item');
+          if (first) {
+            e.preventDefault();
+            insertMention(first.getAttribute('data-name'));
+          }
+        }
+      });
+      text.addEventListener('blur', function () { setTimeout(hideMentions, 200); });
+    }
     if (file) file.addEventListener('change', function () {
       var f = file.files && file.files[0];
       if (!f) return;
@@ -718,6 +815,7 @@ var App = (function () {
         body: body,
         visibility: val('composer-visibility') || 'public',
         wall: wallId || 0,
+        group: groupId || 0,
         image: imageData || '',
         video: videoUrl
       };
@@ -733,10 +831,11 @@ var App = (function () {
         if (videoRow) videoRow.className = 'composer-video-row hidden';
         SoundFX.play('post');
         UI.toast(T('feed.posted'), 'ok');
-        if (state.route === 'feed') {
+        if (state.route === 'feed' && !groupId) {
           state.feed.posts.unshift(data.post);
           renderFeedList(null);
-        } else if (wallId) {
+          loadTags();
+        } else if (wallId || groupId) {
           route();
         }
       });

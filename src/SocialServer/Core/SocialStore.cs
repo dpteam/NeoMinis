@@ -1433,6 +1433,107 @@ namespace Social.Core
             }
         }
 
+        public bool UpdateGroup(long id, string name, string description, string visibility)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Group g = FindGroup(id);
+                if (g == null) return false;
+                if (!string.IsNullOrEmpty(name))
+                {
+                    g.Name = Util.SingleLine(name, 80);
+                    g.Slug = Util.Slug(g.Name, 40);
+                    if (g.Slug.Length == 0) g.Slug = "group";
+                    g.Slug = g.Slug + "-" + g.Id.ToString(CultureInfo.InvariantCulture);
+                }
+                g.Description = Util.CleanText(description, 2000);
+                g.Visibility = visibility == "private" ? "private" : "public";
+                MarkGroups();
+                return true;
+            }
+        }
+
+        public bool SetGroupAvatar(long id, string url)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Group g = FindGroup(id);
+                if (g == null) return false;
+                g.Avatar = url ?? "";
+                MarkGroups();
+                return true;
+            }
+        }
+
+        public bool RemoveGroupMember(long groupId, long userId)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Group g = FindGroup(groupId);
+                if (g == null || g.Owner == userId) return false;
+                if (!g.Members.Remove(userId)) return false;
+                MarkGroups();
+                return true;
+            }
+        }
+
+        // ============================================================== tags
+
+        /// <summary>Public posts containing #tag, newest first.</summary>
+        public List<Post> PostsByTag(string tag, long viewerId, long before, int limit)
+        {
+            List<Post> result = new List<Post>();
+            if (string.IsNullOrEmpty(tag)) return result;
+            string needle = "#" + tag.ToLowerInvariant();
+            lock (_sync)
+            {
+                for (int i = 0; i < _posts.Count && result.Count < limit; i++)
+                {
+                    Post p = _posts[i];
+                    if (p.Deleted || string.IsNullOrEmpty(p.Body)) continue;
+                    if (before > 0 && p.Id >= before) continue;
+                    if (!VisibleTo(viewerId, p)) continue;
+                    if (p.Body.ToLowerInvariant().IndexOf(needle, StringComparison.Ordinal) < 0) continue;
+                    // exact tag, not a prefix of a longer word
+                    List<string> tags = Util.Hashtags(p.Body);
+                    if (!tags.Contains(tag.ToLowerInvariant())) continue;
+                    result.Add(p);
+                }
+            }
+            return result;
+        }
+
+        public List<KeyValuePair<string, int>> TopTags(int limit)
+        {
+            Dictionary<string, int> counts = new Dictionary<string, int>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _posts.Count; i++)
+                {
+                    Post p = _posts[i];
+                    if (p.Deleted || p.Visibility != "public" || string.IsNullOrEmpty(p.Body)) continue;
+                    List<string> tags = Util.Hashtags(p.Body);
+                    for (int t = 0; t < tags.Count; t++)
+                    {
+                        int n;
+                        counts.TryGetValue(tags[t], out n);
+                        counts[tags[t]] = n + 1;
+                    }
+                }
+            }
+            List<KeyValuePair<string, int>> list = new List<KeyValuePair<string, int>>(counts);
+            list.Sort(delegate(KeyValuePair<string, int> a, KeyValuePair<string, int> b)
+            {
+                int byCount = b.Value.CompareTo(a.Value);
+                return byCount != 0 ? byCount : string.Compare(a.Key, b.Key, StringComparison.Ordinal);
+            });
+            if (list.Count > limit) list.RemoveRange(limit, list.Count - limit);
+            return list;
+        }
+
         // ============================================================ reports
 
         public Report CreateReport(string type, long target, long reporter, string reason)

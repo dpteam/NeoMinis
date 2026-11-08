@@ -315,20 +315,52 @@
         UI.avatar({ id: g.id, displayName: g.name, avatar: g.avatar }, 72, false) +
         '<div style="flex:1;min-width:0"><h1>' + UI.esc(g.name) + '</h1><div class="desc">' + UI.esc(g.description || '') + '</div>' +
         '<div class="tiny" style="opacity:.8;margin-top:4px">' + T('groups.members') + ': ' + g.members + ' · ' + (g.visibility === 'private' ? T('groups.private') : T('groups.public')) + '</div></div>' +
+        (g.canManage ? '<button class="btn" id="group-edit">' + UI.icon('pen') + ' ' + T('groups.edit') + '</button>' : '') +
         '<button class="btn" id="group-toggle">' + (g.isMember ? (g.isOwner ? UI.icon('crown') + ' ' + T('groups.owner') : UI.icon('right-from-bracket') + ' ' + T('groups.leave')) : UI.icon('plus') + ' ' + T('groups.join')) + '</button>' +
         '</div><div class="card-b">';
       html += '<div class="feed-tabs"><a class="tab2 active" href="#/group/' + g.id + '">' + T('groups.posts') + '</a></div>';
       if (g.isMember) html += App.composerHtml(0);
       html += '<div id="group-posts"></div><div id="group-more"></div>';
       html += '</div></div>';
-      html += '<div class="card"><div class="card-h">' + UI.icon('users') + ' ' + T('groups.members') + '</div><div class="card-b"><div class="user-grid">';
+
+      // members: owners get a "remove" button on everyone but themselves
       var members = data.members || [];
-      for (var i = 0; i < members.length; i++) html += App.userCard(members[i]);
+      var ownerId = (g.owner && g.owner.id) || 0;
+      html += '<div class="card"><div class="card-h">' + UI.icon('users') + ' ' + T('groups.members') +
+        '<span class="right tiny muted">' + g.members + '</span></div><div class="card-b"><div class="user-grid">';
+      for (var i = 0; i < members.length; i++) {
+        var m = members[i];
+        if (g.canManage && Number(m.id) !== Number(ownerId)) {
+          html += '<div class="user-card"><a href="#/u/' + encodeURIComponent(m.username) + '">' + UI.avatar(m, 52) + '</a>' +
+            '<a class="name" href="#/u/' + encodeURIComponent(m.username) + '">' + UI.esc(m.displayName) + '</a>' +
+            '<div class="sub">' + (m.online ? T('profile.online') : '@' + UI.esc(m.username)) + '</div>' +
+            '<button class="btn btn-sm btn-danger g-kick" data-id="' + m.id + '">' + T('groups.kick') + '</button></div>';
+        } else {
+          html += App.userCard(m);
+        }
+      }
       html += '</div></div></div>';
       main.innerHTML = html;
       if (g.isMember) {
-        // group posts go through /api/post with group id
-        bindGroupComposer(g.id);
+        // group posts go through /api/post with the group id
+        App.bindComposer(0, g.id);
+      }
+      var ge = document.getElementById('group-edit');
+      if (ge) ge.addEventListener('click', function () { groupEditModal(g); });
+
+      var kicks = main.querySelectorAll('.g-kick');
+      for (var k = 0; k < kicks.length; k++) {
+        kicks[k].addEventListener('click', function () {
+          var uid = this.getAttribute('data-id');
+          UI.confirm(T('groups.kick'), T('groups.kickConfirm'), T('groups.kick'), function () {
+            Api.request('POST', '/api/group/kick', { id: g.id, user: Number(uid) }, function (e2) {
+              if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+              UI.toast(T('groups.kicked'), 'ok');
+              SoundFX.play('success');
+              App.route();
+            });
+          }, true);
+        });
       }
       var tg = document.getElementById('group-toggle');
       if (tg) tg.addEventListener('click', function () {
@@ -345,26 +377,80 @@
     });
   };
 
-  function bindGroupComposer(groupId) {
-    var form = document.getElementById('composer');
-    if (!form) return;
-    // replace the wall id with a group marker handled by the submit override
-    form.setAttribute('data-group', groupId);
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var text = document.getElementById('composer-text');
-      var body = text ? text.value.trim() : '';
-      if (!body) return;
-      var btn = document.getElementById('composer-submit');
-      App.setBusy(btn, true, T('feed.posting'));
-      Api.request('POST', '/api/post', { body: body, group: Number(groupId), visibility: 'public' }, function (err, data) {
-        App.setBusy(btn, false, T('feed.post'));
-        if (err) { UI.toast(Api.errorText(err), 'err'); return; }
-        if (text) text.value = '';
-        SoundFX.play('post');
-        App.route();
+  function groupEditModal(g) {
+    var avatar = UI.safeUrl(g.avatar);
+    var body = '<div class="field"><label>' + T('groups.name') + '</label>' +
+      '<input class="input" id="ge-name" maxlength="80" value="' + UI.attr(g.name) + '"></div>' +
+      '<div class="field"><label>' + T('groups.description') + '</label>' +
+      '<textarea class="textarea" id="ge-desc" rows="4" maxlength="2000">' + UI.esc(g.description || '') + '</textarea></div>' +
+      '<div class="field"><label>' + T('groups.visibility') + '</label><select class="select" id="ge-vis">' +
+      '<option value="public"' + (g.visibility === 'public' ? ' selected' : '') + '>' + T('groups.public') + '</option>' +
+      '<option value="private"' + (g.visibility === 'private' ? ' selected' : '') + '>' + T('groups.private') + '</option>' +
+      '</select></div>' +
+      '<div class="field"><label>' + T('groups.avatar') + '</label>' +
+      '<div style="display:flex;gap:10px;align-items:center">' +
+      UI.avatar({ id: g.id, displayName: g.name, avatar: g.avatar }, 56, false) +
+      '<input type="file" id="ge-file" accept="image/png,image/jpeg,image/gif,image/webp">' +
+      '</div><div class="hint">' + T('settings.avatarHint', state.site.maxAvatarKB || 512) + '</div></div>' +
+      '<div style="display:flex;gap:6px;justify-content:flex-end">' +
+      '<button type="button" class="btn btn-ghost" id="ge-cancel">' + T('common.cancel') + '</button>' +
+      '<button type="button" class="btn btn-primary" id="ge-save">' + UI.icon('floppy-disk') + ' ' + T('common.save') + '</button>' +
+      '</div>';
+
+    UI.modal({ title: T('groups.edit'), icon: 'people-group', wide: true, body: body, actions: [] });
+    var boxes = document.querySelectorAll('.modal');
+    var box = boxes[boxes.length - 1];
+    if (!box) return;
+
+    function close() {
+      var scrim = box.parentNode;
+      if (scrim && scrim.parentNode) scrim.parentNode.removeChild(scrim);
+    }
+
+    box.querySelector('#ge-cancel').addEventListener('click', close);
+    box.querySelector('#ge-save').addEventListener('click', function () {
+      var btn = this;
+      btn.disabled = true;
+      var file = box.querySelector('#ge-file');
+      var f = file && file.files && file.files[0];
+
+      function saveMeta(done) {
+        Api.request('POST', '/api/group/edit', {
+          id: g.id,
+          name: box.querySelector('#ge-name').value.trim(),
+          description: box.querySelector('#ge-desc').value,
+          visibility: box.querySelector('#ge-vis').value
+        }, function (err) {
+          if (err) { btn.disabled = false; UI.toast(Api.errorText(err), 'err'); return; }
+          done();
+        });
+      }
+
+      function saveAvatar(done) {
+        if (!f) { done(); return; }
+        UI.fileToDataUrl(f, (state.site.maxAvatarKB || 512) * 1024, function (e2, dataUrl) {
+          if (e2) {
+            btn.disabled = false;
+            UI.toast(e2 === 'too-large' ? T('settings.avatarHint', state.site.maxAvatarKB) : T('errors.generic'), 'err');
+            return;
+          }
+          Api.request('POST', '/api/group/avatar', { id: g.id, data: dataUrl }, function (e3) {
+            if (e3) { btn.disabled = false; UI.toast(Api.errorText(e3), 'err'); return; }
+            done();
+          });
+        });
+      }
+
+      saveMeta(function () {
+        saveAvatar(function () {
+          btn.disabled = false;
+          close();
+          UI.toast(T('groups.saved'), 'ok');
+          SoundFX.play('success');
+          App.route();
+        });
       });
-    }, true);
+    });
   }
 
   function renderGroupPosts(g, posts) {
@@ -528,6 +614,50 @@
           ? '<button type="button" class="load-more" id="ph-load">' + T('feed.loadMore') + '</button>'
           : '';
         var b = document.getElementById('ph-load');
+        if (b) b.addEventListener('click', function () { load(true); });
+      });
+    }
+
+    load(false);
+  };
+
+  // ------------------------------------------------------------------- tags
+
+  views.tag = function (main, r) {
+    var tag = decodeURIComponent(r.parts[1] || '');
+    var next = 0;
+    main.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('hashtag') + ' <span id="tag-title">#' + UI.esc(tag) + '</span>' +
+      '<span class="right"><a href="#/feed">' + UI.icon('house') + ' ' + T('nav.feed') + '</a></span></div>' +
+      '<div class="card-b" id="tag-list"><div class="center" style="padding:22px">' + UI.spinner() + '</div></div></div>' +
+      '<div id="tag-more"></div>';
+    var list = document.getElementById('tag-list');
+    var moreBox = document.getElementById('tag-more');
+
+    function load(more) {
+      var url = '/api/tag?tag=' + encodeURIComponent(tag) + '&limit=20' + (more && next ? '&before=' + encodeURIComponent(next) : '');
+      if (more) moreBox.innerHTML = '<div class="center" style="padding:10px">' + UI.spinner() + '</div>';
+      Api.request('GET', url, null, function (err, data) {
+        if (err) {
+          list.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>';
+          moreBox.innerHTML = '';
+          return;
+        }
+        var posts = data.posts || [];
+        if (!more) list.innerHTML = '';
+        if (!posts.length) {
+          if (!more) list.innerHTML = UI.empty('hashtag', T('tag.empty'), T('tag.emptyHint'));
+          moreBox.innerHTML = '';
+          return;
+        }
+        var html = '';
+        for (var i = 0; i < posts.length; i++) html += App.postHtml(posts[i]);
+        list.insertAdjacentHTML('beforeend', html);
+        App.bindPosts(list);
+        next = data.next || 0;
+        moreBox.innerHTML = data.hasMore
+          ? '<button type="button" class="load-more" id="tag-load">' + T('feed.loadMore') + '</button>'
+          : '';
+        var b = document.getElementById('tag-load');
         if (b) b.addEventListener('click', function () { load(true); });
       });
     }

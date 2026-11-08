@@ -122,6 +122,12 @@ var I18N = (function () {
       'groups.members': 'Members', 'groups.empty': 'No groups yet', 'groups.posts': 'Posts',
       'groups.owner': 'Owner', 'groups.created': 'Created', 'groups.joined': 'You joined the group',
       'groups.left': 'You left the group', 'groups.new': 'New group', 'groups.about': 'About',
+      'groups.edit': 'Edit group', 'groups.avatar': 'Group picture', 'groups.saved': 'Group updated',
+      'groups.kick': 'Remove', 'groups.kickConfirm': 'Remove this member from the group?',
+      'groups.kicked': 'Member removed',
+
+      'tags.title': 'Tags', 'tags.empty': 'No tags yet',
+      'tag.empty': 'Nothing with this tag', 'tag.emptyHint': 'Be the first to post with it.',
 
       'settings.title': 'Settings', 'settings.profile': 'Profile', 'settings.appearance': 'Appearance',
       'settings.theme': 'Theme', 'settings.language': 'Language', 'settings.sound': 'Sounds',
@@ -378,6 +384,12 @@ var I18N = (function () {
       'groups.members': 'Участники', 'groups.empty': 'Групп пока нет', 'groups.posts': 'Записи',
       'groups.owner': 'Владелец', 'groups.created': 'Создана', 'groups.joined': 'Вы вступили в группу',
       'groups.left': 'Вы вышли из группы', 'groups.new': 'Новая группа', 'groups.about': 'О группе',
+      'groups.edit': 'Редактировать группу', 'groups.avatar': 'Аватар группы', 'groups.saved': 'Группа обновлена',
+      'groups.kick': 'Исключить', 'groups.kickConfirm': 'Исключить этого участника из группы?',
+      'groups.kicked': 'Участник исключён',
+
+      'tags.title': 'Теги', 'tags.empty': 'Тегов пока нет',
+      'tag.empty': 'С этим тегом ничего нет', 'tag.emptyHint': 'Станьте первым, кто напишет с ним пост.',
 
       'settings.title': 'Настройки', 'settings.profile': 'Профиль', 'settings.appearance': 'Внешний вид',
       'settings.theme': 'Тема', 'settings.language': 'Язык', 'settings.sound': 'Звуки',

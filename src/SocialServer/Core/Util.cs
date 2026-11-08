@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Net;
 using System.Text;
@@ -249,6 +250,66 @@ namespace Social.Core
             }
             string s = sb.ToString();
             return s.Length == 0 ? "file" : s;
+        }
+
+        private static bool IsTagChar(char c)
+        {
+            return char.IsLetterOrDigit(c) || c == '_';
+        }
+
+        /// <summary>Lower-case unique #hashtags found in free text.</summary>
+        public static List<string> Hashtags(string text)
+        {
+            List<string> tags = new List<string>();
+            if (string.IsNullOrEmpty(text)) return tags;
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] != '#') continue;
+                if (i > 0 && (IsTagChar(text[i - 1]) || text[i - 1] == '#' || text[i - 1] == '&')) continue;
+                int start = i + 1;
+                int end = start;
+                while (end < text.Length && IsTagChar(text[end])) end++;
+                int len = end - start;
+                if (len >= 2 && len <= 40)
+                {
+                    string tag = text.Substring(start, len).ToLowerInvariant();
+                    if (!tags.Contains(tag)) tags.Add(tag);
+                }
+                i = end > i ? end - 1 : i;
+            }
+            return tags;
+        }
+
+        /// <summary>Unique @usernames found in free text (without the @).</summary>
+        public static List<string> Mentions(string text)
+        {
+            List<string> names = new List<string>();
+            if (string.IsNullOrEmpty(text)) return names;
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] != '@') continue;
+                if (i > 0)
+                {
+                    char prev = text[i - 1];
+                    if (char.IsLetterOrDigit(prev) || prev == '_' || prev == '@' || prev == '.') continue;
+                }
+                int start = i + 1;
+                int end = start;
+                while (end < text.Length && end - start < 24)
+                {
+                    char c = text[end];
+                    if (char.IsLetterOrDigit(c) || c == '_' || c == '.') end++;
+                    else break;
+                }
+                int len = end - start;
+                if (len >= 3)
+                {
+                    string name = text.Substring(start, len).ToLowerInvariant();
+                    if (!names.Contains(name)) names.Add(name);
+                }
+                i = end > i ? end - 1 : i;
+            }
+            return names;
         }
 
         public static bool IsPrivateIpv4(string ip)

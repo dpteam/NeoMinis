@@ -34,10 +34,21 @@ var UI = (function () {
 
   function linkify(text) {
     var safe = esc(text);
-    return safe.replace(/(https?:\/\/[^\s<]+[^\s<.,:;"')\]\}])/gi, function (m) {
+    var urls = [];
+    safe = safe.replace(/(https?:\/\/[^\s<]+[^\s<.,:;"')\]\}])/gi, function (m) {
       var href = m.replace(/&amp;/g, '&');
-      return '<a href="' + attr(href) + '" target="_blank" rel="noopener noreferrer nofollow">' + m + '</a>';
+      urls.push('<a href="' + attr(href) + '" target="_blank" rel="noopener noreferrer nofollow">' + m + '</a>');
+      return '\u0001' + (urls.length - 1) + '\u0001';
     });
+    // @mentions -> profile links (only when a real @ starts the word)
+    safe = safe.replace(/(^|[^\w@\/])@([A-Za-z0-9_.-]{3,24})/g, function (m, pre, name) {
+      return pre + '<a class="mention" href="#/u/' + encodeURIComponent(name) + '">@' + name + '</a>';
+    });
+    // #hashtags -> tag pages (latin, digits, underscore, cyrillic)
+    safe = safe.replace(/(^|[^\w#&\/])#([0-9A-Za-z_\u0400-\u04FF]{2,40})/g, function (m, pre, tag) {
+      return pre + '<a class="tag" href="#/tag/' + encodeURIComponent(tag) + '">#' + tag + '</a>';
+    });
+    return safe.replace(/\u0001(\d+)\u0001/g, function (m, i) { return urls[Number(i)] || ''; });
   }
 
   function timeAgo(iso) {
