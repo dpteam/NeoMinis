@@ -88,7 +88,7 @@ permission, `404` missing, `409` conflict, `413` too large, `429` rate limit,
 | GET | `/api/me` | — | `{ me, site, notifications[5], threads[5] }` |
 | POST | `/api/logout` | — | drops the session |
 | GET | `/api/settings` | — | `{ user, site }` |
-| POST | `/api/settings` | `theme`, `lang`, `sound`, `hideOnline`, `privacy`, `status` | `{ user }` |
+| POST | `/api/settings` | `theme`, `lang`, `sound`, `hideOnline`, `privacy`, `status`, `notifyMute[]` | `{ user }` |
 | POST | `/api/password` | `oldVerifier`, `newVerifier` | `{ sessionSalt }` (all other sessions dropped) |
 | POST | `/api/avatar` | `data` (data URL, png/jpg/gif/webp) | `{ avatar }` |
 
@@ -200,7 +200,18 @@ Reading a conversation marks it read. Blocked users cannot exchange messages.
 | Method | Path | Body / query | Result |
 | --- | --- | --- | --- |
 | GET | `/api/notifications` | `before`, `limit` | `{ notifications[], unread, hasMore, next }` |
+| GET | `/api/notifications/wait` | `after`, `timeout` | `{ notifications[], unread, latest, live }` |
 | POST | `/api/notifications/read` | `all` or `id` | `{ unread }` |
+
+`/api/notifications/wait` is a long poll: it holds the request until a
+notification newer than `after` appears or `timeout` seconds pass (capped at 25,
+default `ui.notifyWaitSec`). The SPA keeps a single loop open so likes, comments
+and mentions pop up instantly. When `ui.liveNotifications=false` the endpoint
+answers immediately and the SPA goes back to plain polling.
+
+`notifyMute` in `/api/settings` is the list of notification types the user does
+not want: `like`, `comment`, `friend`, `message`, `wall`, `group`, `mention`,
+`badge`. `admin` and `system` can never be muted.
 
 Types: `like`, `comment`, `friend`, `message`, `wall`, `group`, `mention`, `badge`, `admin`, `report`, `system`.
 
@@ -269,6 +280,7 @@ Administrator: additionally `user` (destructive actions), `broadcast`, `reload`,
 | GET | `/api/admin/settings` | — | the whole config, grouped for the Settings tab |
 | POST | `/api/admin/settings/save` | grouped config | `{ warnings[] }` (written back to `config.ini`) |
 | POST | `/api/admin/badges/recalc` | — | `{ granted, users }` |
+| POST | `/api/admin/notify-test` | — | `{ id }` (sends a system notification to yourself, handy to verify live delivery) |
 
 `action`: `ban` (`days` 0 = forever) · `unban` · `role` (`user|moderator|admin`) ·
 `grant-admin` · `revoke-admin` · `grant-mod` · `badge` (`badge`, `on`) ·

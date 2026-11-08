@@ -14,6 +14,7 @@ namespace Social.Web
             if (sub == "overview") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminOverview(ctx); return; }
             if (sub == "users") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminUsers(ctx); return; }
             if (sub == "badges/recalc") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminBadgesRecalc(ctx); return; }
+            if (sub == "notify-test") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminNotifyTest(ctx); return; }
             if (sub == "user")
             {
                 if (IsMethod(ctx.Req, "GET")) { RequireModerator(ctx.User); HandleAdminUserGet(ctx); return; }
@@ -143,6 +144,17 @@ namespace Social.Web
         }
 
         // ============================================================= users
+
+        private void HandleAdminNotifyTest(ApiCtx ctx)
+        {
+            Notification n = _store.Notify(ctx.User.Id, 0, "system",
+                "test notification — live delivery is working", "#/notifications");
+            Log.Info("ADMIN", "@" + ctx.User.Username + " sent a test notification to self");
+            JsonBuilder b = new JsonBuilder(128);
+            b.BeginObject();
+            b.Prop("id", n == null ? 0 : n.Id);
+            SendOk(ctx, b);
+        }
 
         private void HandleAdminBadgesRecalc(ApiCtx ctx)
         {

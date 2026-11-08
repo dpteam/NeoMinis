@@ -82,6 +82,7 @@ namespace Social.Web
                 if (self || staff)
                 {
                     b.Prop("email", u.Email);
+                    b.Prop("notifyMute", u.NotifyMute);
                     b.Prop("banned", u.Banned);
                     b.Prop("banReason", u.BanReason);
                     b.Prop("bannedUntil", u.BannedUntil == DateTime.MinValue ? "" : Util.Iso(u.BannedUntil));

@@ -1275,6 +1275,7 @@ namespace Social.Core
             {
                 if (userId <= 0) return null;
                 if (userId == actorId) return null;
+                if (IsNotifyMuted(FindUser(userId), type)) return null;
                 Notification n = new Notification();
                 n.Id = _meta.NextNotificationId++;
                 n.User = userId;
@@ -1316,6 +1317,28 @@ namespace Social.Core
                 }
             }
             return list;
+        }
+
+        public bool IsNotifyMuted(User u, string type)
+        {
+            if (u == null || string.IsNullOrEmpty(type) || string.IsNullOrEmpty(u.NotifyMute)) return false;
+            // admin broadcasts and system messages always get through
+            if (type == "admin" || type == "system") return false;
+            string[] parts = u.NotifyMute.Split(',');
+            for (int i = 0; i < parts.Length; i++)
+                if (string.Equals(parts[i].Trim(), type, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        /// <summary>Newest notification id for a user, 0 when there is none.</summary>
+        public long LatestNotificationId(long userId)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _notifications.Count; i++)
+                    if (_notifications[i].User == userId) return _notifications[i].Id;
+                return 0;
+            }
         }
 
         public int UnreadNotifications(long userId)
@@ -1992,7 +2015,7 @@ namespace Social.Core
             d["lastMessageAt"] = u.LastMessageAt;
             d["favGames"] = u.FavGames; d["favMovies"] = u.FavMovies; d["favMusic"] = u.FavMusic;
             d["favBooks"] = u.FavBooks; d["persona"] = u.Persona; d["mood"] = u.Mood;
-            d["badges"] = u.Badges; d["legacySource"] = u.LegacySource; d["legacyId"] = u.LegacyId;
+            d["badges"] = u.Badges; d["notifyMute"] = u.NotifyMute; d["legacySource"] = u.LegacySource; d["legacyId"] = u.LegacyId;
             return d;
         }
 
@@ -2042,6 +2065,7 @@ namespace Social.Core
             u.Persona = Json.GetString(d, "persona", "");
             u.Mood = Json.GetString(d, "mood", "");
             u.Badges = Json.GetString(d, "badges", "");
+            u.NotifyMute = Json.GetString(d, "notifyMute", "");
             u.LegacySource = Json.GetString(d, "legacySource", "");
             u.LegacyId = Json.GetString(d, "legacyId", "");
             return u;

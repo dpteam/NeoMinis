@@ -177,6 +177,9 @@ namespace Social.Core
         public int OnlineWindowSec = 300;
         public string AllowThemes = "light,dark,oled";
         public bool AllowSounds = true;
+        // long-poll notifications: on/off and how long a single wait may block
+        public bool LiveNotifications = true;
+        public int NotifyWaitSec = 20;
 
         public bool Degraded;
         public string DegradedReason = "";
@@ -454,6 +457,8 @@ namespace Social.Core
                     else if (key == "onlinewindowsec") OnlineWindowSec = Int(val, OnlineWindowSec);
                     else if (key == "allowthemes") AllowThemes = val;
                     else if (key == "allowsounds") AllowSounds = Bool(val, AllowSounds);
+                    else if (key == "livenotifications") LiveNotifications = Bool(val, LiveNotifications);
+                    else if (key == "notifywaitsec") NotifyWaitSec = Int(val, NotifyWaitSec);
                     break;
             }
         }
@@ -478,6 +483,8 @@ namespace Social.Core
             if (MaxBodyBytes > 64 * 1024 * 1024) MaxBodyBytes = 64 * 1024 * 1024;
             if (RefreshMs < 1000) RefreshMs = 1000;
             if (OnlineWindowSec < 30) OnlineWindowSec = 30;
+            if (NotifyWaitSec < 1) NotifyWaitSec = 1;
+            if (NotifyWaitSec > 25) NotifyWaitSec = 25;
             if (MaxAvatarKB < 16) MaxAvatarKB = 16;
             if (MaxPostImageKB < 64) MaxPostImageKB = 64;
             if (BackupKeep < 1) BackupKeep = 1;

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Threading;
 using Social.Core;
 
 namespace Social.Web
@@ -110,6 +111,24 @@ namespace Social.Web
                 if (p != "public" && p != "friends" && p != "private")
                     throw new ApiException(400, "bad-privacy", "Unknown privacy level");
                 ctx.User.Privacy = p;
+            }
+            if (ctx.Body.ContainsKey("notifyMute"))
+            {
+                string[] allowed = new string[] { "like", "comment", "friend", "message", "wall", "group", "mention", "badge" };
+                List<string> mute = new List<string>();
+                List<object> raw = Json.Get(ctx.Body, "notifyMute") as List<object>;
+                if (raw != null)
+                {
+                    for (int i = 0; i < raw.Count; i++)
+                    {
+                        string type = (raw[i] as string ?? "").Trim().ToLowerInvariant();
+                        if (type.Length == 0) continue;
+                        bool known = false;
+                        for (int k = 0; k < allowed.Length; k++) if (allowed[k] == type) known = true;
+                        if (known && !mute.Contains(type)) mute.Add(type);
+                    }
+                }
+                ctx.User.NotifyMute = Badges.Join(mute);
             }
             if (ctx.Body.ContainsKey("status"))
                 ctx.User.Status = Util.SingleLine(BodyStr(ctx, "status", ""), _cfg.MaxStatusLength);
@@ -942,6 +961,53 @@ namespace Social.Web
             JsonBuilder b = new JsonBuilder(128);
             b.BeginObject();
             b.Prop("unread", _store.UnreadNotifications(ctx.User.Id));
+            SendOk(ctx, b);
+        }
+
+        // ========================================================= live notifications
+
+        /// <summary>
+        /// Long poll: blocks until a notification newer than `after` exists or the
+        /// timeout expires, then answers with the new ones. Used by the SPA so new
+        /// likes/comments/mentions pop up instantly instead of on the next poll tick.
+        /// </summary>
+        private void HandleNotificationsWait(ApiCtx ctx)
+        {
+            long after = LongQuery(ctx, "after");
+            int timeout = _cfg.NotifyWaitSec;
+            string raw = GetQuery(ctx.Query, "timeout");
+            if (!string.IsNullOrEmpty(raw))
+            {
+                int parsed;
+                if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed)) timeout = parsed;
+            }
+            if (timeout < 1) timeout = 1;
+            if (timeout > 25) timeout = 25;
+            if (!_cfg.LiveNotifications) timeout = 1;
+
+            DateTime until = DateTime.UtcNow.AddSeconds(timeout);
+            List<Notification> fresh = new List<Notification>();
+            while (true)
+            {
+                if (_store.LatestNotificationId(ctx.User.Id) > after)
+                {
+                    List<Notification> all = _store.NotificationsFor(ctx.User.Id, 0, 20);
+                    for (int i = 0; i < all.Count; i++) if (all[i].Id > after) fresh.Add(all[i]);
+                    if (fresh.Count > 0) break;
+                }
+                if (DateTime.UtcNow >= until) break;
+                // short sleeps keep shutdown responsive while staying cheap
+                Thread.Sleep(350);
+            }
+
+            JsonBuilder b = new JsonBuilder(4096);
+            b.BeginObject();
+            b.Name("notifications").BeginArray();
+            for (int i = 0; i < fresh.Count; i++) b.Raw(NotificationView(fresh[i], ctx.User));
+            b.EndArray();
+            b.Prop("unread", _store.UnreadNotifications(ctx.User.Id));
+            b.Prop("latest", _store.LatestNotificationId(ctx.User.Id));
+            b.Prop("live", _cfg.LiveNotifications);
             SendOk(ctx, b);
         }
 

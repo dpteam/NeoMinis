@@ -18,7 +18,7 @@ limits from `config.ini` and ship your own network.
 | **Friends** | requests, accept/decline, remove, block, incoming/outgoing lists |
 | **Messages** | private conversations, thread list with unread counters, polling |
 | **Groups** | public/private groups, membership, group feed, owner role, editable name/description/picture and member management (kick) |
-| **Notifications** | likes, comments, friend requests, messages, mentions, badges, admin broadcasts, reports |
+| **Notifications** | likes, comments, friend requests, messages, mentions, badges, admin broadcasts, reports — delivered **live** over a long poll (instant toast, sound, tab title counter, optional desktop notification), with per-type switches in Settings and All / Unread / Mentions filters |
 | **Search** | people and public posts, plus a top-bar quick search |
 | **Tags** | `#hashtags` become tag pages, trending tags in the right column |
 | **Mentions** | `@username` with autocomplete in the composer, links in posts and a notification for every mentioned person |

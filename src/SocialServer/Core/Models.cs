@@ -50,6 +50,7 @@ namespace Social.Core
         public string Persona = "";
         public string Mood = "";            // happy | sad | "" (legacy mood files)
         public string Badges = "";          // comma separated badge ids
+        public string NotifyMute = "";      // comma separated notification types the user muted
         public string LegacySource = "";    // e.g. "deadvk" for imported accounts
         public string LegacyId = "";        // id in the old database
 

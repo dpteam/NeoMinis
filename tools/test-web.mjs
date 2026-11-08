@@ -303,6 +303,23 @@ async function main() {
   const tagMissing = await alice.call('GET', '/api/tag?tag=');
   ok('empty tag rejected', tagMissing.status === 400, String(tagMissing.status));
 
+  // ---- live notifications and per-type mutes
+  const baseNotif = await alice.call('GET', '/api/notifications?limit=1');
+  const lastId = baseNotif.data.notifications.length ? baseNotif.data.notifications[0].id : 0;
+  const mute = await alice.call('POST', '/api/settings', { notifyMute: ['mention'] });
+  ok('notify mute saved', mute.status === 200 && mute.data.user.notifyMute === 'mention', String(mute.status));
+  await bob.call('POST', '/api/post', { body: 'quiet @' + ua });
+  const waitMuted = await alice.call('GET', '/api/notifications/wait?after=' + lastId + '&timeout=2');
+  ok('muted mention is dropped', waitMuted.status === 200 && waitMuted.data.notifications.length === 0,
+    JSON.stringify(waitMuted.data && waitMuted.data.notifications.length));
+  const unmute = await alice.call('POST', '/api/settings', { notifyMute: [] });
+  ok('notify mute cleared', unmute.status === 200 && unmute.data.user.notifyMute === '', '');
+  await bob.call('POST', '/api/post', { body: 'loud @' + ua });
+  const waitLive = await alice.call('GET', '/api/notifications/wait?after=' + lastId + '&timeout=10');
+  ok('live wait returns the mention',
+    waitLive.status === 200 && waitLive.data.notifications.some(n => n.type === 'mention'),
+    JSON.stringify((waitLive.data && waitLive.data.notifications || []).map(n => n.type)));
+
   const fr = await bob.call('POST', '/api/friend', { user: alice.user.id, action: 'request' });
   ok('friend request sent', fr.status === 200 && fr.data.status === 'pending', JSON.stringify(fr.data && fr.data.status));
   const friends = await alice.call('GET', '/api/friends');

@@ -17,6 +17,7 @@ var App = (function () {
     feed: { tab: 'home', posts: [], next: 0, hasMore: false, loading: false },
     im: { withId: 0, timer: null },
     adminLogs: { timer: null },
+    notify: { started: false, last: 0, unreadAt: 0 },
     booted: false
   };
 
@@ -79,6 +80,8 @@ var App = (function () {
         renderShell();
         route();
         startBadgePoll();
+        startNotifyStream();
+        updateTitle((state.me && state.me.unreadNotifications) || 0);
       } else {
         renderAuth('login');
       }
@@ -101,6 +104,7 @@ var App = (function () {
   }
 
   function startBadgePoll() {
+    if (state.site && state.site.liveNotifications) return;
     setInterval(function () {
       if (!state.authed || document.hidden) return;
       Api.request('GET', '/api/me', null, function (err, data) {
@@ -124,6 +128,84 @@ var App = (function () {
     if (!el) return;
     if (n > 0) { el.textContent = n > 99 ? '99+' : String(n); el.className = 'count'; }
     else { el.textContent = ''; el.className = 'hidden'; }
+  }
+
+  function updateTitle(n) {
+    var name = (state.site && state.site.name) || 'Social';
+    document.title = (n > 0 ? '(' + (n > 99 ? '99+' : n) + ') ' : '') + name;
+  }
+
+  function desktopNotify(title, body) {
+    try {
+      if (!window.Notification || Notification.permission !== 'granted') return;
+      new Notification(title, { body: body, icon: 'assets/img/favicon.svg' });
+    } catch (e) { }
+  }
+
+  function announce(n) {
+    if (!n) return;
+    var a = n.actor || {};
+    var name = a.displayName || a.username || T('notifications.someone');
+    var text = name + ' ' + n.text;
+    UI.toast(text, 'info');
+    SoundFX.play('notification');
+    if (document.hidden) desktopNotify(T('notifications.title'), text);
+  }
+
+  /// Applies an unread counter, but lets a local mark-read win for a moment so a
+  /// long-poll reply that was already in flight cannot bring the badge back up.
+  function applyUnread(n) {
+    if (typeof n !== 'number') return;
+    if (Date.now() - (state.notify.unreadAt || 0) < 2500) return;
+    setBadge('badge-notif', n);
+    updateTitle(n);
+  }
+
+  /// Authoritative update from an action the user just performed.
+  function setUnreadLocal(n) {
+    state.notify.unreadAt = Date.now();
+    if (typeof n !== 'number') return;
+    setBadge('badge-notif', n);
+    updateTitle(n);
+  }
+
+  /// Long-poll the server for fresh notifications and announce them instantly.
+  function startNotifyStream() {
+    var n = state.notify;
+    if (n.started || !state.authed) return;
+    if (!(state.site && state.site.liveNotifications)) return;
+    n.started = true;
+
+    Api.request('GET', '/api/notifications?limit=1', null, function (err, data) {
+      if (err) { n.started = false; setTimeout(startNotifyStream, 5000); return; }
+      var list = (data && data.notifications) || [];
+      n.last = list.length ? list[0].id : 0;
+      if (data && typeof data.unread === 'number') updateTitle(data.unread);
+      pump();
+    });
+
+    function pump() {
+      if (!state.authed) { n.started = false; return; }
+      Api.request('GET', '/api/notifications/wait?after=' + n.last, null, function (err, data) {
+        if (!state.authed) { n.started = false; return; }
+        if (err) { setTimeout(pump, 5000); return; }
+        var fresh = (data && data.notifications) || [];
+        if (data && data.latest && data.latest > n.last) n.last = data.latest;
+        if (fresh.length) {
+          // oldest first so the toasts stack in the right order
+          for (var i = fresh.length - 1; i >= 0; i--) announce(fresh[i]);
+          if (typeof data.unread === 'number') {
+            state.notify.unreadAt = 0;
+            setBadge('badge-notif', data.unread);
+            updateTitle(data.unread);
+          }
+          if (state.route === 'notifications') route();
+        } else {
+          applyUnread(data && data.unread);
+        }
+        pump();
+      });
+    }
   }
 
   // ------------------------------------------------------------------ shell
@@ -539,6 +621,9 @@ var App = (function () {
     applyUserPrefs();
     renderShell();
     go('#/feed');
+    state.notify.started = false;
+    startNotifyStream();
+    updateTitle((state.me && state.me.unreadNotifications) || 0);
     SoundFX.play('login');
     if (isRegister && data.recoveryCode) {
       UI.modal({
@@ -562,6 +647,9 @@ var App = (function () {
       state.authed = false;
       state.me = null;
       state.user = null;
+      state.notify.started = false;
+      state.notify.last = 0;
+      updateTitle(0);
       SoundFX.play('logout');
       renderAuth('login');
     });
@@ -1570,6 +1658,9 @@ var App = (function () {
     toast: UI.toast,
     doLogout: doLogout,
     onLoggedIn: onLoggedIn,
+    desktopNotify: desktopNotify,
+    applyUnread: applyUnread,
+    setUnreadLocal: setUnreadLocal,
     stopTimers: stopTimers
   };
 

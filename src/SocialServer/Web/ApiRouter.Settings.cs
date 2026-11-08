@@ -76,6 +76,8 @@ namespace Social.Web
                 .Prop("onlineWindowSec", _cfg.OnlineWindowSec)
                 .Prop("allowThemes", _cfg.AllowThemes)
                 .Prop("allowSounds", _cfg.AllowSounds)
+                .Prop("liveNotifications", _cfg.LiveNotifications)
+                .Prop("notifyWaitSec", _cfg.NotifyWaitSec)
                 .EndObject();
 
             b.Name("logging").BeginObject()
@@ -310,6 +312,19 @@ namespace Social.Web
                 {
                     _cfg.AllowSounds = Json.GetBool(ui, "allowSounds", _cfg.AllowSounds);
                     _cfg.SetIniValue("ui", "allowSounds", _cfg.AllowSounds ? "true" : "false");
+                }
+                if (ui.ContainsKey("liveNotifications"))
+                {
+                    _cfg.LiveNotifications = Json.GetBool(ui, "liveNotifications", _cfg.LiveNotifications);
+                    _cfg.SetIniValue("ui", "liveNotifications", _cfg.LiveNotifications ? "true" : "false");
+                }
+                if (ui.ContainsKey("notifyWaitSec"))
+                {
+                    int v = Json.GetInt(ui, "notifyWaitSec", _cfg.NotifyWaitSec);
+                    if (v < 1) v = 1;
+                    if (v > 25) v = 25;
+                    _cfg.NotifyWaitSec = v;
+                    _cfg.SetIniValue("ui", "notifyWaitSec", v.ToString(CultureInfo.InvariantCulture));
                 }
             }
 

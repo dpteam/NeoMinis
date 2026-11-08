@@ -170,6 +170,8 @@ namespace Social.Web
             b.Prop("version", Version);
             b.Prop("onlineWindowSec", _cfg.OnlineWindowSec);
             b.Prop("refreshMs", _cfg.RefreshMs);
+            b.Prop("liveNotifications", _cfg.LiveNotifications);
+            b.Prop("notifyWaitSec", _cfg.NotifyWaitSec);
             b.Prop("maxPostLength", _cfg.MaxPostLength);
             b.Prop("maxCommentLength", _cfg.MaxCommentLength);
             b.Prop("maxMessageLength", _cfg.MaxMessageLength);
@@ -559,6 +561,7 @@ namespace Social.Web
             if (r == "messages/delete") { RequireMethod(m, "POST"); HandleMessageDelete(ctx); return; }
             if (r == "notifications") { RequireMethod(m, "GET"); HandleNotifications(ctx); return; }
             if (r == "notifications/read") { RequireMethod(m, "POST"); HandleNotificationsRead(ctx); return; }
+            if (r == "notifications/wait") { RequireMethod(m, "GET"); HandleNotificationsWait(ctx); return; }
             if (r == "online") { RequireMethod(m, "GET"); HandleOnline(ctx); return; }
             if (r == "stats") { RequireMethod(m, "GET"); HandleStats(ctx); return; }
             if (r == "groups") { HandleGroups(ctx); return; }

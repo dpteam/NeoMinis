@@ -484,33 +484,72 @@
   // --------------------------------------------------------- notifications
 
   views.notifications = function (main, r) {
+    var filter = App.qs('f') || 'all';
+    if (filter !== 'unread' && filter !== 'mentions') filter = 'all';
     main.innerHTML = spinnerCard();
-    Api.request('GET', '/api/notifications?limit=50', null, function (err, data) {
+    Api.request('GET', '/api/notifications?limit=60', null, function (err, data) {
       if (err) { main.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
-      var list = data.notifications || [];
+      var all = data.notifications || [];
+      var list = [];
+      for (var i = 0; i < all.length; i++) {
+        var n = all[i];
+        if (filter === 'unread' && n.read) continue;
+        if (filter === 'mentions' && n.type !== 'mention') continue;
+        list.push(n);
+      }
+
+      function ntab(key, label, count) {
+        return '<a class="tab2' + (filter === key ? ' active' : '') + '" href="#/notifications' +
+          (key === 'all' ? '' : '?f=' + key) + '">' + UI.esc(label) +
+          (count ? ' <span class="count" style="margin-left:4px">' + (count > 99 ? '99+' : count) + '</span>' : '') + '</a>';
+      }
+
       var html = '<div class="card"><div class="card-h">' + UI.icon('bell') + ' ' + T('notifications.title') +
-        '<span class="right"><button class="btn btn-xs" id="notif-read">' + T('notifications.markAll') + '</button></span></div><div class="card-b flush">';
-      if (!list.length) html += UI.empty('bell', T('notifications.empty'));
-      else {
-        for (var i = 0; i < list.length; i++) {
-          var n = list[i];
-          var a = n.actor || {};
-          var ic = n.type === 'like' ? 'heart' : n.type === 'comment' ? 'comment' : n.type === 'friend' ? 'user-plus' : n.type === 'message' ? 'envelope' : n.type === 'admin' ? 'bullhorn' : n.type === 'badge' ? 'trophy' : 'bell';
-          html += '<a class="notif' + (n.read ? '' : ' unread') + '" href="' + UI.attr(n.link || '#/notifications') + '">' +
-            UI.avatar(a, 32) + '<div class="notif-main"><span class="who">' + UI.esc(a.displayName || a.username || '?') + '</span> ' + UI.esc(n.text) +
-            '<div class="when">' + UI.timeAgo(n.created) + '</div></div><span class="type">' + UI.icon(ic) + '</span></a>';
+        '<span class="right"><button class="btn btn-xs" id="notif-read">' + T('notifications.markAll') + '</button></span></div>' +
+        '<div class="card-b" style="padding:8px 10px 0"><div class="feed-tabs" style="margin:0">' +
+        ntab('all', T('notifications.all')) +
+        ntab('unread', T('notifications.unreadTab'), data.unread) +
+        ntab('mentions', T('notifications.mentions')) +
+        '</div></div><div class="card-b flush">';
+      if (!list.length) {
+        html += UI.empty('bell', filter === 'unread' ? T('notifications.noUnread') : T('notifications.empty'),
+          filter === 'mentions' ? T('notifications.noMentions') : '');
+      } else {
+        for (var j = 0; j < list.length; j++) {
+          var item = list[j];
+          var a = item.actor || {};
+          var ic = item.type === 'like' ? 'heart' : item.type === 'comment' ? 'comment' : item.type === 'friend' ? 'user-plus'
+            : item.type === 'message' ? 'envelope' : item.type === 'admin' ? 'bullhorn' : item.type === 'badge' ? 'trophy'
+            : item.type === 'mention' ? 'at' : 'bell';
+          html += '<a class="notif' + (item.read ? '' : ' unread') + '" data-id="' + item.id + '" href="' + UI.attr(item.link || '#/notifications') + '">' +
+            UI.avatar(a, 32) + '<div class="notif-main"><span class="who">' + UI.esc(a.displayName || a.username || '?') + '</span> ' + UI.esc(item.text) +
+            '<div class="when">' + UI.timeAgo(item.created) + '</div></div><span class="type">' + UI.icon(ic) + '</span></a>';
         }
       }
       html += '</div></div>';
       main.innerHTML = html;
+
       var b = document.getElementById('notif-read');
       if (b) b.addEventListener('click', function () {
-        Api.request('POST', '/api/notifications/read', { all: true }, function (err2) {
+        Api.request('POST', '/api/notifications/read', { all: true }, function (err2, d2) {
           if (err2) { UI.toast(Api.errorText(err2), 'err'); return; }
           UI.toast(T('notifications.marked'), 'ok');
+          if (d2) App.setUnreadLocal(d2.unread);
           App.route();
         });
       });
+
+      // opening a notification marks it read
+      var items = main.querySelectorAll('.notif.unread');
+      for (var k = 0; k < items.length; k++) {
+        items[k].addEventListener('click', function () {
+          var id = Number(this.getAttribute('data-id'));
+          Api.request('POST', '/api/notifications/read', { id: id }, function (err3, d3) {
+            if (err3 || !d3) return;
+            App.setUnreadLocal(d3.unread);
+          });
+        });
+      }
     });
   };
 
@@ -689,6 +728,25 @@
         evHtml += '<label class="check"><input type="checkbox" data-sound-event="' + events[k] + '"' + (ev[events[k]] !== false ? ' checked' : '') + '> <span>' + T('sound.' + events[k]) + '</span></label>';
       }
 
+      // notification preferences: unchecked = muted on the server
+      var mutedTypes = String(u.notifyMute || '').split(',');
+      var notifTypes = [
+        ['like', 'notify.like'], ['comment', 'notify.comment'], ['friend', 'notify.friend'],
+        ['message', 'notify.message'], ['wall', 'notify.wall'], ['group', 'notify.group'],
+        ['mention', 'notify.mention'], ['badge', 'notify.badge']
+      ];
+      var notifHtml = '';
+      for (var nti = 0; nti < notifTypes.length; nti++) {
+        var nt = notifTypes[nti][0];
+        notifHtml += '<label class="check"><input type="checkbox" data-notify-type="' + nt + '"' +
+          (mutedTypes.indexOf(nt) < 0 ? ' checked' : '') + '> <span>' + T(notifTypes[nti][1]) + '</span></label>';
+      }
+      var desktopOn = false;
+      try {
+        desktopOn = localStorage.getItem('social.desktop') === '1' &&
+          !!window.Notification && Notification.permission === 'granted';
+      } catch (e) { }
+
       var html = '<div class="card"><div class="card-h">' + UI.icon('gear') + ' ' + T('settings.title') + '</div><div class="card-b">';
       html += '<div class="settings-grid">';
 
@@ -738,6 +796,12 @@
         '<option value="friends"' + (u.privacy === 'friends' ? ' selected' : '') + '>' + T('feed.friendsOnly') + '</option>' +
         '<option value="private"' + (u.privacy === 'private' ? ' selected' : '') + '>' + T('feed.private') + '</option></select></div>' +
         '<label class="check"><input type="checkbox" id="s-hide"' + (u.hideOnline ? ' checked' : '') + '> <span>' + T('settings.hideOnline') + '</span></label></div>';
+
+      html += '<div class="settings-block"><h3>' + T('settings.notifications') + '</h3>' +
+        '<div class="hint" style="margin-bottom:6px">' + T('settings.notificationsHint') + '</div>' +
+        '<div class="sound-events">' + notifHtml + '</div>' +
+        '<label class="check" style="margin-top:10px"><input type="checkbox" id="s-desktop"' + (desktopOn ? ' checked' : '') + '> <span>' + T('settings.desktopNotify') + '</span></label>' +
+        '<div class="hint">' + T('settings.desktopHint') + '</div></div>';
 
       html += '<div class="settings-block"><h3>' + T('settings.password') + '</h3>' +
         '<div class="field"><label>' + T('settings.oldPassword') + '</label><input class="input" type="password" id="p-old" autocomplete="current-password"></div>' +
@@ -841,6 +905,42 @@
           SoundFX.setEventEnabled(this.getAttribute('data-sound-event'), this.checked);
         });
       }
+
+      // notification types: unchecked boxes are muted on the server
+      var nts = document.querySelectorAll('[data-notify-type]');
+      function saveNotifyPrefs() {
+        var mute = [];
+        for (var q = 0; q < nts.length; q++) {
+          if (!nts[q].checked) mute.push(nts[q].getAttribute('data-notify-type'));
+        }
+        Api.request('POST', '/api/settings', { notifyMute: mute }, function (e2, d2) {
+          if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+          if (d2 && d2.user) state.user = d2.user;
+        });
+      }
+      for (var ni = 0; ni < nts.length; ni++) nts[ni].addEventListener('change', saveNotifyPrefs);
+
+      var db = document.getElementById('s-desktop');
+      if (db) db.addEventListener('change', function () {
+        if (!db.checked) {
+          try { localStorage.setItem('social.desktop', '0'); } catch (e) { }
+          return;
+        }
+        if (!window.Notification) {
+          db.checked = false;
+          UI.toast(T('settings.desktopUnsupported'), 'err');
+          return;
+        }
+        Notification.requestPermission(function (p) {
+          if (p === 'granted') {
+            try { localStorage.setItem('social.desktop', '1'); } catch (e) { }
+            UI.toast(T('settings.desktopOn'), 'ok');
+          } else {
+            db.checked = false;
+            UI.toast(T('settings.desktopDenied'), 'err');
+          }
+        });
+      });
 
       // privacy + hide online
       var pr = document.getElementById('s-privacy');
@@ -1577,6 +1677,9 @@
         '</div>' +
         field('cfg-themes', T('admin.allowThemes'), ui.allowThemes) +
         check('cfg-sounds', T('admin.allowSounds'), ui.allowSounds) +
+        check('cfg-live', T('admin.liveNotifications'), ui.liveNotifications) +
+        field('cfg-notifywait', T('admin.notifyWait'), ui.notifyWaitSec, 'number', ' min="1" max="25"') +
+        '<div style="margin-top:6px"><button class="btn btn-sm" id="cfg-notify-test">' + UI.icon('bell') + ' ' + T('admin.notifyTest') + '</button></div>' +
         '<hr><h3 style="margin-top:10px">' + T('admin.settingsLogging') + '</h3>' +
         select('cfg-loglevel', T('admin.logLevel'), [['Error', 'Error'], ['Warn', 'Warn'], ['Info', 'Info'], ['Debug', 'Debug'], ['Verbose', 'Verbose']], lg.level) +
         check('cfg-apitrace', T('admin.apiTrace'), lg.apiTrace) +
@@ -1660,7 +1763,9 @@
             refreshMs: Number(App.val('cfg-refresh')),
             onlineWindowSec: Number(App.val('cfg-online')),
             allowThemes: App.val('cfg-themes'),
-            allowSounds: document.getElementById('cfg-sounds').checked
+            allowSounds: document.getElementById('cfg-sounds').checked,
+            liveNotifications: document.getElementById('cfg-live').checked,
+            notifyWaitSec: Number(App.val('cfg-notifywait'))
           },
           logging: {
             level: App.val('cfg-loglevel'),
@@ -1711,6 +1816,16 @@
         Api.request('POST', '/api/admin/backup', {}, function (e2, d2) {
           if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
           UI.toast(T('admin.backupDone') + ': ' + d2.path, 'ok');
+        });
+      });
+
+      var ntBtn = document.getElementById('cfg-notify-test');
+      if (ntBtn) ntBtn.addEventListener('click', function () {
+        ntBtn.disabled = true;
+        Api.request('POST', '/api/admin/notify-test', {}, function (e2) {
+          ntBtn.disabled = false;
+          if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+          UI.toast(T('admin.notifyTestSent'), 'ok');
         });
       });
     });
