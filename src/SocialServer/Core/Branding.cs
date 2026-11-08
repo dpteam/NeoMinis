@@ -69,9 +69,25 @@ namespace Social.Core
                 body.Append("--link:").Append(dark ? h : a).Append(';');
                 body.Append("--link-hi:").Append(dark ? Mix(h, "#ffffff", 0.25) : Mix(a, "#000000", 0.18)).Append(';');
                 body.Append("--accent-soft:").Append(Rgba(a, dark ? 0.16 : 0.11)).Append(';');
-                body.Append("--topbar:linear-gradient(").Append(h).Append(',').Append(a).Append(" 55%,").Append(l).Append(");");
-                body.Append("--head-strong:linear-gradient(").Append(h).Append(',').Append(a).Append(" 55%,").Append(l).Append(");");
-                body.Append("--cover:linear-gradient(120deg,").Append(h).Append(',').Append(a).Append(" 45%,").Append(l).Append(");");
+                if (dark)
+                {
+                    // dark chrome: a deep navy bar with the accent only as a glow,
+                    // otherwise a saturated bar overwhelms the whole layout
+                    string bar = Mix(l, "#000000", 0.55);
+                    string barHi = Mix(a, "#000000", 0.62);
+                    body.Append("--topbar:linear-gradient(").Append(barHi).Append(',').Append(bar).Append(");");
+                    body.Append("--topbar-text:#dce9f8;");
+                    body.Append("--head-strong:linear-gradient(").Append(Mix(a, "#000000", 0.25)).Append(',')
+                        .Append(Mix(l, "#000000", 0.2)).Append(");");
+                }
+                else
+                {
+                    body.Append("--topbar:linear-gradient(").Append(h).Append(',').Append(a).Append(" 55%,").Append(l).Append(");");
+                    body.Append("--head-strong:linear-gradient(").Append(h).Append(',').Append(a).Append(" 55%,").Append(l).Append(");");
+                }
+                body.Append("--cover:linear-gradient(120deg,").Append(Mix(h, "#000000", dark ? 0.72 : 0)).Append(',')
+                    .Append(Mix(a, "#000000", dark ? 0.8 : 0)).Append(" 45%,")
+                    .Append(Mix(l, "#000000", dark ? 0.78 : 0)).Append(");");
                 body.Append("--boot:linear-gradient(").Append(h).Append(',').Append(a).Append(" 60%,").Append(l).Append(");");
             }
 
