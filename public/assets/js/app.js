@@ -749,20 +749,25 @@ var App = (function () {
       '<span>' + UI.timeAgo(p.created) + '</span>' +
       (p.edited ? '<span>· ' + T('feed.edited') + '</span>' : '') +
       (p.visibility && p.visibility !== 'public' ? '<span>· ' + UI.icon(p.visibility === 'private' ? 'lock' : 'user-group') + ' ' + T(p.visibility === 'private' ? 'feed.private' : 'feed.friendsOnly') + '</span>' : '') +
-      (p.wallUser ? '<span>· ' + UI.icon('arrow-right') + ' ' + UI.esc(p.wallUser.displayName) + '</span>' : '');
+      (p.wallUser ? '<span>· ' + UI.icon('arrow-right') + ' ' + UI.esc(p.wallUser.displayName) + '</span>' : '') +
+      (p.pinned ? '<span class="pin-mark">' + UI.icon('thumbtack') + ' ' + T('feed.pinned') + '</span>' : '');
     var body = UI.linkify(p.body || '').replace(/\n/g, '<br>');
     var img = UI.safeUrl(p.image);
     var vid = videoHtml(p.video);
     var html = '<article class="post" data-post="' + p.id + '">' +
       '<div class="post-head">' + UI.avatar(author, 38) +
       '<div class="post-who"><div class="meta">' + meta + '</div></div>' +
-      '<div class="post-menu">' + (p.canDelete ? '<button type="button" class="icon-btn post-delete" data-id="' + p.id + '" title="' + UI.attr(T('common.delete')) + '">' + UI.icon('trash') + '</button>' : '') + '</div>' +
+      '<div class="post-menu">' +
+      (p.canPin ? '<button type="button" class="icon-btn post-pin' + (p.pinned ? ' active' : '') + '" data-id="' + p.id + '" data-on="' + (p.pinned ? '1' : '0') + '" title="' + UI.attr(T(p.pinned ? 'feed.unpin' : 'feed.pin')) + '">' + UI.icon('thumbtack') + '</button>' : '') +
+      (p.canEdit ? '<button type="button" class="icon-btn post-edit" data-id="' + p.id + '" title="' + UI.attr(T('feed.editPost')) + '">' + UI.icon('pen') + '</button>' : '') +
+      (p.canDelete ? '<button type="button" class="icon-btn post-delete" data-id="' + p.id + '" title="' + UI.attr(T('common.delete')) + '">' + UI.icon('trash') + '</button>' : '') +
+      '</div>' +
       '</div>' +
       (body ? '<div class="post-body">' + body + '</div>' : '') +
       (img ? '<div class="post-media"><img class="post-img" src="' + UI.attr(img) + '" alt="" loading="lazy"></div>' : '') +
       vid +
       '<div class="post-actions">' +
-      '<button type="button" class="pa post-like' + (p.liked ? ' liked' : '') + '" data-id="' + p.id + '">' + UI.icon(p.liked ? 'heart' : 'heart') + ' <span>' + (p.liked ? T('feed.liked') : T('feed.like')) + '</span> <b>' + (p.likes || 0) + '</b></button>' +
+      '<button type="button" class="pa post-like' + (p.liked ? ' liked' : '') + '" data-id="' + p.id + '">' + UI.icon(p.liked ? 'heart' : 'heart') + ' <span>' + (p.liked ? T('feed.liked') : T('feed.like')) + '</span> <b class="likes-count" data-id="' + p.id + '" title="' + UI.attr(T('feed.likedBy')) + '">' + (p.likes || 0) + '</b></button>' +
       '<button type="button" class="pa post-comment-toggle" data-id="' + p.id + '">' + UI.icon('comment') + ' <span>' + T('feed.comment') + '</span> <b>' + (p.comments || 0) + '</b></button>' +
       '<button type="button" class="pa post-share" data-id="' + p.id + '">' + UI.icon('share') + ' <span>' + T('feed.share') + '</span></button>' +
       '<button type="button" class="pa post-bookmark' + (p.bookmarked ? ' active' : '') + '" data-id="' + p.id + '" title="' + UI.attr(T('feed.bookmark')) + '">' + UI.icon('bookmark') + ' <span>' + (p.bookmarked ? T('feed.bookmarked') : T('feed.bookmark')) + '</span></button>' +
@@ -771,6 +776,148 @@ var App = (function () {
       '<div class="comments hidden" data-comments="' + p.id + '"></div>' +
       '</article>';
     return html;
+  }
+
+  // ------------------------------------------------------------ post tools
+
+  function visibilityOptions(selected) {
+    var opts = [['public', 'feed.public'], ['friends', 'feed.friendsOnly'], ['private', 'feed.private']];
+    var html = '';
+    for (var i = 0; i < opts.length; i++) {
+      html += '<option value="' + opts[i][0] + '"' + (selected === opts[i][0] ? ' selected' : '') + '>' +
+        T(opts[i][1]) + '</option>';
+    }
+    return html;
+  }
+
+  function likedBy(id) {
+    Api.request('GET', '/api/likes?post=' + encodeURIComponent(id), null, function (err, data) {
+      if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+      var users = data.users || [];
+      var body = '';
+      if (!users.length) body = UI.empty('heart', T('feed.noLikes'));
+      else {
+        body = '<div class="like-list">';
+        for (var i = 0; i < users.length; i++) {
+          var u = users[i];
+          body += '<a class="online-user" href="#/u/' + encodeURIComponent(u.username) + '">' +
+            UI.avatar(u, 28) + '<span class="name">' + UI.esc(u.displayName || u.username) + '</span></a>';
+        }
+        body += '</div>';
+      }
+      body += '<div class="tiny muted" style="margin-top:8px">' + T('feed.likesTotal', data.total || 0) + '</div>';
+      UI.modal({
+        title: T('feed.likedBy'), icon: 'heart', body: body,
+        actions: [{ label: T('common.close'), cls: 'btn-primary' }]
+      });
+    });
+  }
+
+  function togglePin(id, btn) {
+    var on = btn.getAttribute('data-on') !== '1';
+    btn.disabled = true;
+    Api.request('POST', '/api/post/pin', { id: Number(id), on: on }, function (err, data) {
+      btn.disabled = false;
+      if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+      btn.setAttribute('data-on', data.pinned ? '1' : '0');
+      btn.className = 'icon-btn post-pin' + (data.pinned ? ' active' : '');
+      btn.title = data.pinned ? T('feed.unpin') : T('feed.pin');
+      UI.toast(data.pinned ? T('feed.pinnedOk') : T('feed.unpinnedOk'), 'ok');
+      SoundFX.play('success');
+      // walls and group feeds sort pinned posts first, so reload them
+      if (state.route === 'profile' || state.route === 'group') route();
+    });
+  }
+
+  function editPost(id) {
+    Api.request('GET', '/api/post?id=' + encodeURIComponent(id), null, function (err, data) {
+      if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+      var p = data.post || {};
+      var img = UI.safeUrl(p.image);
+
+      var body = '<div class="field"><label>' + T('feed.postText') + '</label>' +
+        '<textarea class="textarea" id="ep-body" rows="6" maxlength="' + (state.site.maxPostLength || 8000) + '">' +
+        UI.esc(p.body || '') + '</textarea></div>';
+      body += '<div class="field"><label>' + T('feed.video') + '</label>' +
+        '<input class="input" id="ep-video" value="' + UI.attr(p.video || '') + '" placeholder="https://youtube.com/watch?v=..."></div>';
+      body += '<div class="field"><label>' + T('feed.visibility') + '</label>' +
+        '<select class="select" id="ep-vis">' + visibilityOptions(p.visibility) + '</select></div>';
+      if (img) {
+        body += '<div class="field"><label>' + T('feed.photo') + '</label><div class="ep-image">' +
+          '<img src="' + UI.attr(img) + '" alt="">' +
+          '<label class="check"><input type="checkbox" id="ep-drop-image"> <span>' + T('feed.removePhoto') + '</span></label>' +
+          '</div></div>';
+      }
+      body += '<div class="field"><label>' + T('feed.replacePhoto') + '</label>' +
+        '<input type="file" id="ep-file" accept="image/png,image/jpeg,image/gif,image/webp">' +
+        '<div class="hint">' + T('settings.avatarHint', state.site.maxPostImageKB || 4096) + '</div></div>';
+      body += '<div style="display:flex;gap:6px;justify-content:flex-end">' +
+        '<button type="button" class="btn btn-ghost" id="ep-cancel">' + T('common.cancel') + '</button>' +
+        '<button type="button" class="btn btn-primary" id="ep-save">' + UI.icon('floppy-disk') + ' ' + T('common.save') + '</button>' +
+        '</div>';
+
+      UI.modal({ title: T('feed.editPost'), icon: 'pen', wide: true, body: body, actions: [] });
+      var boxes = document.querySelectorAll('.modal');
+      var box = boxes[boxes.length - 1];
+      if (!box) return;
+
+      var close = function () {
+        var scrim = box.parentNode;
+        if (scrim && scrim.parentNode) scrim.parentNode.removeChild(scrim);
+      };
+
+      box.querySelector('#ep-cancel').addEventListener('click', close);
+      box.querySelector('#ep-save').addEventListener('click', function () {
+        var btn = this;
+        var drop = box.querySelector('#ep-drop-image');
+        var file = box.querySelector('#ep-file');
+        var f = file && file.files && file.files[0];
+
+        function finish(action, imageData) {
+          btn.disabled = true;
+          var payload = {
+            id: Number(id),
+            body: box.querySelector('#ep-body').value,
+            video: box.querySelector('#ep-video').value.trim(),
+            visibility: box.querySelector('#ep-vis').value,
+            imageAction: action
+          };
+          if (action === 'replace') payload.image = imageData;
+          Api.request('POST', '/api/post/edit', payload, function (e2, d2) {
+            btn.disabled = false;
+            if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+            close();
+            UI.toast(T('feed.editedOk'), 'ok');
+            SoundFX.play('success');
+            var el = document.querySelector('[data-post="' + id + '"]');
+            if (el) {
+              var parent = el.parentNode;
+              var tmp = document.createElement('div');
+              tmp.innerHTML = postHtml(d2.post);
+              var fresh = tmp.firstChild;
+              parent.insertBefore(fresh, el);
+              parent.removeChild(el);
+              bindPosts(parent);
+              if (fresh && fresh.scrollIntoView) { try { fresh.scrollIntoView({ block: 'nearest' }); } catch (e3) { } }
+            } else route();
+          });
+        }
+
+        if (f) {
+          UI.fileToDataUrl(f, (state.site.maxPostImageKB || 4096) * 1024, function (e2, dataUrl) {
+            if (e2) {
+              UI.toast(e2 === 'too-large' ? T('settings.avatarHint', state.site.maxPostImageKB) : T('errors.generic'), 'err');
+              return;
+            }
+            finish('replace', dataUrl);
+          });
+        } else if (drop && drop.checked) {
+          finish('remove', '');
+        } else {
+          finish('keep', '');
+        }
+      });
+    });
   }
 
   // ---------------------------------------------------------- post video
@@ -823,6 +970,28 @@ var App = (function () {
       if (marks[bm].getAttribute('data-bound')) continue;
       marks[bm].setAttribute('data-bound', '1');
       marks[bm].addEventListener('click', function () { toggleBookmark(this.getAttribute('data-id'), this); });
+    }
+    var counts = (scope || document).querySelectorAll('.likes-count');
+    for (var lc = 0; lc < counts.length; lc++) {
+      if (counts[lc].getAttribute('data-bound')) continue;
+      counts[lc].setAttribute('data-bound', '1');
+      counts[lc].addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        likedBy(this.getAttribute('data-id'));
+      });
+    }
+    var pins = (scope || document).querySelectorAll('.post-pin');
+    for (var pn = 0; pn < pins.length; pn++) {
+      if (pins[pn].getAttribute('data-bound')) continue;
+      pins[pn].setAttribute('data-bound', '1');
+      pins[pn].addEventListener('click', function () { togglePin(this.getAttribute('data-id'), this); });
+    }
+    var edits = (scope || document).querySelectorAll('.post-edit');
+    for (var ed = 0; ed < edits.length; ed++) {
+      if (edits[ed].getAttribute('data-bound')) continue;
+      edits[ed].setAttribute('data-bound', '1');
+      edits[ed].addEventListener('click', function () { editPost(this.getAttribute('data-id')); });
     }
     var dels = (scope || document).querySelectorAll('.post-delete');
     for (var d = 0; d < dels.length; d++) {
@@ -1120,6 +1289,19 @@ var App = (function () {
         '<div class="stat-card"><b>' + (u.likes || 0) + '</b><span>' + T('profile.likes') + '</span></div></div>' +
         '<table class="info-table">' + info + '</table></div></div>';
       html += badgesCard(u.badges, isSelf);
+      var photoList = data.photos || [];
+      if (photoList.length) {
+        html += '<div class="card"><div class="card-h">' + UI.icon('images') + ' ' + T('profile.photos') +
+          '<span class="right"><a href="#/photos/' + u.id + '">' + T('common.all') + '</a></span></div>' +
+          '<div class="card-b"><div class="photo-grid">';
+        for (var ph = 0; ph < photoList.length; ph++) {
+          var psrc = UI.safeUrl(photoList[ph].image);
+          if (!psrc) continue;
+          html += '<button type="button" class="photo-cell" data-full="' + UI.attr(psrc) + '">' +
+            '<img src="' + UI.attr(psrc) + '" alt="" loading="lazy"></button>';
+        }
+        html += '</div></div></div>';
+      }
       if ((data.friends || []).length) {
         html += '<div class="card"><div class="card-h">' + UI.icon('user-group') + ' ' + T('profile.friends') + ' <span class="right"><a href="#/friends?user=' + u.id + '">' + T('common.all') + '</a></span></div><div class="card-b"><div class="user-grid">';
         for (var f = 0; f < data.friends.length; f++) html += userCard(data.friends[f]);
@@ -1138,6 +1320,10 @@ var App = (function () {
       html += '</div>';
       main.innerHTML = html;
       bindFriendActions(main);
+      var cells = main.querySelectorAll('.photo-cell');
+      for (var ci = 0; ci < cells.length; ci++) {
+        cells[ci].addEventListener('click', function () { UI.imageModal(this.getAttribute('data-full')); });
+      }
       if (data.canPost) bindComposer(u.id);
       var wall = data.posts || [];
       var list = document.getElementById('wall-list');

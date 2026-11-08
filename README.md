@@ -13,8 +13,8 @@ limits from `config.ini` and ship your own network.
 
 | Area | What you get |
 | --- | --- |
-| **Feed** | home / everything / friends-only tabs, posts with images and video links (YouTube previews, inline mp4/webm), likes, comments, visibility (`public` / `friends` / `private`), delete with cascade |
-| **Profiles** | avatar, status, bio, city/country, birthday, gender, website, interests (games / films / music / books), mood, achievements, privacy level, friends wall |
+| **Feed** | home / everything / friends-only tabs, posts with images and video links (YouTube previews, inline mp4/webm), likes (with a "who liked" list), comments, edit and pin your own posts, visibility (`public` / `friends` / `private`), delete with cascade |
+| **Profiles** | avatar, status, bio, city/country, birthday, gender, website, interests (games / films / music / books), mood, achievements, photo gallery, privacy level, friends wall |
 | **Friends** | requests, accept/decline, remove, block, incoming/outgoing lists |
 | **Messages** | private conversations, thread list with unread counters, polling |
 | **Groups** | public/private groups, membership, group feed, owner role |

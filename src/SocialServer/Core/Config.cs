@@ -150,6 +150,8 @@ namespace Social.Core
         public int MaxUsernameLength = 24;
         public int MaxAvatarKB = 512;
         public int MaxPostImageKB = 4096;
+        // how long an ordinary user may still edit a post, 0 = forever
+        public int EditWindowMin = 0;
         public int HistorySize = 200;
         public int LogRingSize = 1500;
         public int NotificationsPerUser = 200;
@@ -413,6 +415,7 @@ namespace Social.Core
                     else if (key == "searchpermin") SearchPerMin = Int(val, SearchPerMin);
                     else if (key == "reportsperhour") ReportsPerHour = Int(val, ReportsPerHour);
                     else if (key == "maxpostlength") MaxPostLength = Int(val, MaxPostLength);
+                    else if (key == "editwindowmin") EditWindowMin = Int(val, EditWindowMin);
                     else if (key == "maxcommentlength") MaxCommentLength = Int(val, MaxCommentLength);
                     else if (key == "maxmessagelength") MaxMessageLength = Int(val, MaxMessageLength);
                     else if (key == "maxstatuslength") MaxStatusLength = Int(val, MaxStatusLength);

@@ -276,6 +276,137 @@ namespace Social.Web
             SendOk(ctx, b);
         }
 
+        private void HandlePostEdit(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            Post p = RequirePost(id);
+            if (!CanEditPost(ctx.User, p)) throw new ApiException(403, "forbidden", "You cannot edit this post");
+            if (!ctx.User.IsModerator && _cfg.EditWindowMin > 0 &&
+                (DateTime.UtcNow - p.Created).TotalMinutes > _cfg.EditWindowMin)
+                throw new ApiException(403, "edit-window", "The edit window has expired");
+
+            string text = Util.CleanText(BodyStr(ctx, "body", p.Body), _cfg.MaxPostLength);
+            string video = BodyStr(ctx, "video", p.Video).Trim();
+            if (video.Length > 0 && !Util.IsHttpUrl(video))
+                throw new ApiException(400, "bad-video", "Video link must start with http:// or https://");
+
+            string visibility = BodyStr(ctx, "visibility", p.Visibility).Trim().ToLowerInvariant();
+            if (visibility != "public" && visibility != "friends" && visibility != "private")
+                visibility = p.Visibility;
+
+            string image = p.Image;
+            string imageAction = BodyStr(ctx, "imageAction", "keep").Trim().ToLowerInvariant();
+            if (imageAction == "remove")
+            {
+                if (!string.IsNullOrEmpty(p.Image)) _media.Delete(p.Image);
+                image = "";
+            }
+            else if (imageAction == "replace")
+            {
+                string imageData = BodyStr(ctx, "image", "");
+                string err;
+                string url = _media.SaveDataUrl(imageData, "post", _cfg.MaxPostImageKB, out err);
+                if (url == null) throw new ApiException(400, err, "Image could not be saved");
+                if (!string.IsNullOrEmpty(p.Image)) _media.Delete(p.Image);
+                image = url;
+            }
+
+            if (text.Length == 0 && string.IsNullOrEmpty(image) && video.Length == 0)
+                throw new ApiException(400, "empty", "Write something first");
+
+            _store.UpdatePost(p.Id, text, image, video, visibility);
+            Log.Info("DATA", "post #" + p.Id + " edited by @" + ctx.User.Username);
+
+            JsonBuilder b = new JsonBuilder(1024);
+            b.BeginObject();
+            b.Name("post").Raw(PostView(p, ctx.User));
+            SendOk(ctx, b);
+        }
+
+        private void HandlePostPin(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            Post p = RequirePost(id);
+            if (!CanPinPost(ctx.User, p)) throw new ApiException(403, "forbidden", "You cannot pin this post");
+            bool on = BodyBool(ctx, "on", true);
+            _store.PinPost(p.Id, on);
+            Log.Info("DATA", "post #" + p.Id + (on ? " pinned" : " unpinned") + " by @" + ctx.User.Username);
+
+            JsonBuilder b = new JsonBuilder(256);
+            b.BeginObject();
+            b.Prop("pinned", p.Pinned);
+            SendOk(ctx, b);
+        }
+
+        private void HandleLikes(ApiCtx ctx)
+        {
+            long id = LongQuery(ctx, "post");
+            Post p = RequirePost(id);
+            if (!CanViewPost(ctx.User, p)) throw new ApiException(403, "private", "This post is not available");
+            int limit = LimitParam(ctx, 50, 200);
+
+            JsonBuilder b = new JsonBuilder(4096);
+            b.BeginObject();
+            b.Name("users").BeginArray();
+            int shown = 0;
+            for (int i = p.Likes.Count - 1; i >= 0 && shown < limit; i--)
+            {
+                User u = _store.FindUser(p.Likes[i]);
+                if (u == null || u.Deleted) continue;
+                b.Raw(UserView(u, ctx.User, false));
+                shown++;
+            }
+            b.EndArray();
+            b.Prop("total", p.Likes.Count);
+            SendOk(ctx, b);
+        }
+
+        private void HandlePhotos(ApiCtx ctx)
+        {
+            long userId = LongQuery(ctx, "user");
+            User target = userId > 0 ? RequireUser(userId) : ctx.User;
+            if (target == null || target.Deleted) throw new ApiException(404, "no-user", "User not found");
+            if (!CanViewProfile(ctx.User, target)) throw new ApiException(403, "private", "This profile is private");
+
+            int limit = LimitParam(ctx, 24, 60);
+            long before = LongQuery(ctx, "before");
+            List<Post> raw = _store.PhotoPosts(target.Id, before, limit + 12);
+            List<Post> photos = new List<Post>();
+            for (int i = 0; i < raw.Count; i++)
+            {
+                if (!CanViewPost(ctx.User, raw[i])) continue;
+                photos.Add(raw[i]);
+                if (photos.Count > limit) break;
+            }
+            bool hasMore = photos.Count > limit;
+            if (hasMore) photos.RemoveAt(photos.Count - 1);
+
+            JsonBuilder b = new JsonBuilder(4096);
+            b.BeginObject();
+            b.Name("user").Raw(UserSummary(target));
+            AppendPhotos(b, "photos", photos);
+            b.Prop("hasMore", hasMore);
+            b.Prop("next", photos.Count == 0 ? 0 : photos[photos.Count - 1].Id);
+            SendOk(ctx, b);
+        }
+
+        private void AppendPhotos(JsonBuilder b, string name, List<Post> posts)
+        {
+            b.Name(name).BeginArray();
+            for (int i = 0; i < posts.Count; i++)
+            {
+                Post p = posts[i];
+                b.BeginObject();
+                b.Prop("id", p.Id);
+                b.Prop("image", p.Image);
+                b.Prop("created", Util.Iso(p.Created));
+                b.Prop("likes", p.Likes.Count);
+                b.Prop("comments", p.Comments);
+                b.EndObject();
+            }
+            b.EndArray();
+        }
+
         private void HandleBookmark(ApiCtx ctx)
         {
             long id = BodyLong(ctx, "id", 0);
@@ -424,6 +555,13 @@ namespace Social.Web
                 gb.Name("groups").BeginArray();
                 for (int i = 0; i < groups.Count; i++) gb.Raw(GroupView(groups[i], ctx.User));
                 gb.EndArray();
+
+                List<Post> photoPosts = _store.PhotoPosts(target.Id, 0, 24);
+                List<Post> visiblePhotos = new List<Post>();
+                for (int i = 0; i < photoPosts.Count && visiblePhotos.Count < 9; i++)
+                    if (CanViewPost(ctx.User, photoPosts[i])) visiblePhotos.Add(photoPosts[i]);
+                AppendPhotos(gb, "photos", visiblePhotos);
+
                 gb.Prop("canPost", CanPostOnWall(ctx.User, target));
                 SendOk(ctx, gb);
                 return;

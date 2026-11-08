@@ -58,6 +58,7 @@ namespace Social.Web
                 .Prop("maxMessageLength", _cfg.MaxMessageLength)
                 .Prop("maxAvatarKB", _cfg.MaxAvatarKB)
                 .Prop("maxPostImageKB", _cfg.MaxPostImageKB)
+                .Prop("editWindowMin", _cfg.EditWindowMin)
                 .EndObject();
 
             b.Name("server").BeginObject()
@@ -279,6 +280,7 @@ namespace Social.Web
                 ApplyLimit(limits, "maxMessageLength", _cfg.MaxMessageLength, 100, delegate(int v) { _cfg.MaxMessageLength = v; });
                 ApplyLimit(limits, "maxAvatarKB", _cfg.MaxAvatarKB, 16, delegate(int v) { _cfg.MaxAvatarKB = v; });
                 ApplyLimit(limits, "maxPostImageKB", _cfg.MaxPostImageKB, 64, delegate(int v) { _cfg.MaxPostImageKB = v; });
+                ApplyLimit(limits, "editWindowMin", _cfg.EditWindowMin, 0, delegate(int v) { _cfg.EditWindowMin = v; });
             }
 
             // --------------------------------------------------------------- ui

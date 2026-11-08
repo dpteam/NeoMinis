@@ -357,6 +357,36 @@ async function main() {
   const afterDel = await bob.call('GET', '/api/bookmarks');
   ok('bookmark dropped with the post', afterDel.data && afterDel.data.total === 0, JSON.stringify(afterDel.data && afterDel.data.total));
 
+  // ---- post tools: edit, pin, likes, photos
+  const edit = await alice.call('POST', '/api/post/edit', { id: postId, body: 'Hello edited', imageAction: 'keep' });
+  ok('post edit works', edit.status === 200 && edit.data.post.body === 'Hello edited' && !!edit.data.post.edited,
+    String(edit.status));
+  const editBad = await bob.call('POST', '/api/post/edit', { id: postId, body: 'hijack' });
+  ok('foreign post edit refused', editBad.status === 403, String(editBad.status));
+
+  const pin = await alice.call('POST', '/api/post/pin', { id: postId, on: true });
+  ok('post pinned', pin.status === 200 && pin.data.pinned === true, String(pin.status));
+  const ownWall = await alice.call('GET', '/api/wall?user=' + alice.user.id);
+  ok('pinned post first on the wall', ownWall.data.posts.length > 0 && ownWall.data.posts[0].id === postId &&
+    ownWall.data.posts[0].pinned === true, JSON.stringify(ownWall.data.posts.map(p => p.id).slice(0, 3)));
+  const unpin = await alice.call('POST', '/api/post/pin', { id: postId, on: false });
+  ok('post unpinned', unpin.data && unpin.data.pinned === false, '');
+
+  const likes = await alice.call('GET', '/api/likes?post=' + postId);
+  ok('likes list', likes.status === 200 && likes.data.users.some(u => u.id === bob.user.id) && likes.data.total >= 1,
+    String(likes.status));
+
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const photoPost = await alice.call('POST', '/api/post', { body: 'a picture', image: PNG });
+  ok('post with image', photoPost.status === 200 && String(photoPost.data.post.image).indexOf('/media/posts/') === 0,
+    String(photoPost.status));
+  const photos = await alice.call('GET', '/api/photos?user=' + alice.user.id);
+  ok('photos gallery lists the image', photos.status === 200 && photos.data.photos.length >= 1, String(photos.status));
+  const profPhotos = await alice.call('GET', '/api/profile?user=' + alice.user.id);
+  ok('profile returns recent photos', Array.isArray(profPhotos.data.photos) && profPhotos.data.photos.length >= 1, '');
+  const dropPhoto = await alice.call('POST', '/api/post/delete', { id: photoPost.data.post.id });
+  ok('photo post removed', dropPhoto.status === 200, String(dropPhoto.status));
+
   const interests = await alice.call('POST', '/api/profile', { favGames: 'Doom', favMusic: 'MIDI', mood: 'happy' });
   ok('interests saved', interests.status === 200 && interests.data.user.favGames === 'Doom' &&
     interests.data.user.mood === 'happy', String(interests.status));

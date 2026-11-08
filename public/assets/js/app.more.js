@@ -473,6 +473,68 @@
     load(false);
   };
 
+  // ----------------------------------------------------------------- photos
+
+  views.photos = function (main, r) {
+    var id = r.parts[1] || (state.user && state.user.id) || 0;
+    var next = 0;
+    main.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('images') + ' <span id="ph-title">' + T('photos.title') + '</span>' +
+      '<span class="right tiny muted" id="ph-total"></span></div>' +
+      '<div class="card-b"><div class="photo-grid wide" id="ph-grid"><div class="center" style="padding:22px;grid-column:1/-1">' + UI.spinner() + '</div></div></div></div>' +
+      '<div id="ph-more"></div>';
+    var grid = document.getElementById('ph-grid');
+    var moreBox = document.getElementById('ph-more');
+
+    function bindCells() {
+      var cells = grid.querySelectorAll('.photo-cell');
+      for (var i = 0; i < cells.length; i++) {
+        if (cells[i].getAttribute('data-bound')) continue;
+        cells[i].setAttribute('data-bound', '1');
+        cells[i].addEventListener('click', function () { UI.imageModal(this.getAttribute('data-full')); });
+      }
+    }
+
+    function load(more) {
+      var url = '/api/photos?user=' + encodeURIComponent(id) + '&limit=24' + (more && next ? '&before=' + encodeURIComponent(next) : '');
+      if (more) moreBox.innerHTML = '<div class="center" style="padding:10px">' + UI.spinner() + '</div>';
+      Api.request('GET', url, null, function (err, data) {
+        if (err) {
+          grid.innerHTML = '<div class="alert err" style="grid-column:1/-1">' + UI.esc(Api.errorText(err)) + '</div>';
+          moreBox.innerHTML = '';
+          return;
+        }
+        var photos = data.photos || [];
+        if (data.user) {
+          var title = document.getElementById('ph-title');
+          if (title) title.textContent = T('photos.of', data.user.displayName || data.user.username);
+        }
+        if (!more) grid.innerHTML = '';
+        if (!photos.length) {
+          if (!more) grid.innerHTML = '<div style="grid-column:1/-1">' + UI.empty('images', T('photos.empty'), T('photos.emptyHint')) + '</div>';
+          moreBox.innerHTML = '';
+          return;
+        }
+        var html = '';
+        for (var i = 0; i < photos.length; i++) {
+          var src = UI.safeUrl(photos[i].image);
+          if (!src) continue;
+          html += '<button type="button" class="photo-cell" data-full="' + UI.attr(src) + '" title="' + UI.attr(UI.timeAgo(photos[i].created)) + '">' +
+            '<img src="' + UI.attr(src) + '" alt="" loading="lazy"></button>';
+        }
+        grid.insertAdjacentHTML('beforeend', html);
+        bindCells();
+        next = data.next || 0;
+        moreBox.innerHTML = data.hasMore
+          ? '<button type="button" class="load-more" id="ph-load">' + T('feed.loadMore') + '</button>'
+          : '';
+        var b = document.getElementById('ph-load');
+        if (b) b.addEventListener('click', function () { load(true); });
+      });
+    }
+
+    load(false);
+  };
+
   // -------------------------------------------------------------- settings
 
   views.settings = function (main, r) {
@@ -1374,6 +1436,7 @@
         field('cfg-avatarkb', T('admin.maxAvatarKB'), lim.maxAvatarKB, 'number', ' min="16"') +
         '</div>' +
         field('cfg-imagekb', T('admin.maxPostImageKB'), lim.maxPostImageKB, 'number', ' min="64"') +
+        field('cfg-editwin', T('admin.editWindow'), lim.editWindowMin, 'number', ' min="0"') +
         '</div>';
 
       // ui + logging + storage
@@ -1460,7 +1523,8 @@
             maxCommentLength: Number(App.val('cfg-commentlen')),
             maxMessageLength: Number(App.val('cfg-msglen')),
             maxAvatarKB: Number(App.val('cfg-avatarkb')),
-            maxPostImageKB: Number(App.val('cfg-imagekb'))
+            maxPostImageKB: Number(App.val('cfg-imagekb')),
+            editWindowMin: Number(App.val('cfg-editwin'))
           },
           ui: {
             refreshMs: Number(App.val('cfg-refresh')),

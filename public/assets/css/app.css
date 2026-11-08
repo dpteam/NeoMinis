@@ -1115,3 +1115,42 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 }
 .badge-picker .check { margin: 0; font-size: 12px; }
 .badge-picker .check i { color: var(--gold); width: 14px; }
+
+/* --------------------------------------------------------- post tools */
+
+.post-menu { display: flex; gap: 2px; align-items: center; }
+.post-menu .icon-btn { width: 24px; height: 24px; border-radius: 6px; color: var(--muted); }
+.post-menu .icon-btn:hover { background: var(--hover); color: var(--text); }
+.post-menu .icon-btn.active { color: var(--accent); }
+.pin-mark { display: inline-flex; align-items: center; gap: 4px; color: var(--gold); font-weight: 600; }
+.likes-count { cursor: pointer; }
+.likes-count:hover { text-decoration: underline; }
+
+.like-list { display: flex; flex-direction: column; gap: 2px; max-height: 340px; overflow: auto; }
+.like-list .online-user { padding: 5px 6px; border-radius: var(--radius-xs); }
+.like-list .online-user:hover { background: var(--hover); }
+
+.ep-image { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ep-image img { max-width: 120px; max-height: 90px; border-radius: var(--radius-xs); border: 1px solid var(--border); display: block; }
+
+/* ------------------------------------------------------------- photos */
+
+.photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.photo-grid.wide { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.photo-cell {
+  position: relative; padding: 0; padding-top: 100%;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  overflow: hidden; background: var(--hover); cursor: zoom-in; display: block;
+}
+.photo-cell img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  display: block; transition: transform .25s var(--ease);
+}
+.photo-cell:hover img { transform: scale(1.05); }
+
+@media (max-width: 780px) {
+  .photo-grid.wide { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 460px) {
+  .photo-grid, .photo-grid.wide { grid-template-columns: repeat(2, 1fr); }
+}

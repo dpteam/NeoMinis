@@ -131,6 +131,8 @@ namespace Social.Web
             b.Prop("liked", viewer != null && p.Likes.Contains(viewer.Id));
             b.Prop("comments", p.Comments);
             b.Prop("canDelete", CanDeletePost(viewer, p));
+            b.Prop("canEdit", CanEditPost(viewer, p));
+            b.Prop("canPin", CanPinPost(viewer, p));
             b.Prop("canComment", viewer != null && _store.VisibleTo(viewer.Id, p));
             b.Prop("pinned", p.Pinned);
             b.Prop("bookmarked", viewer != null && _store.IsBookmarked(viewer.Id, p.Id));
@@ -243,6 +245,25 @@ namespace Social.Web
             if (viewer.IsModerator) return true;
             if (viewer.Id == p.Author) return true;
             if (p.Wall > 0 && viewer.Id == p.Wall) return true;
+            return false;
+        }
+
+        private bool CanEditPost(User viewer, Post p)
+        {
+            if (viewer == null || p == null || p.Deleted) return false;
+            return viewer.IsModerator || viewer.Id == p.Author;
+        }
+
+        private bool CanPinPost(User viewer, Post p)
+        {
+            if (viewer == null || p == null || p.Deleted) return false;
+            if (viewer.IsModerator || viewer.Id == p.Author) return true;
+            if (p.Wall > 0 && viewer.Id == p.Wall) return true;
+            if (p.Group > 0)
+            {
+                Group g = _store.FindGroup(p.Group);
+                if (g != null && g.Owner == viewer.Id) return true;
+            }
             return false;
         }
 

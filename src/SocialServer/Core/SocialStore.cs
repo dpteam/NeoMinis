@@ -626,6 +626,63 @@ namespace Social.Core
             }
         }
 
+        public void UpdatePost(long id, string body, string image, string video, string visibility)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Post p = FindPost(id);
+                if (p == null || p.Deleted) return;
+                p.Body = body ?? "";
+                p.Image = image ?? "";
+                p.Video = video ?? "";
+                p.Visibility = visibility ?? "public";
+                p.Edited = DateTime.UtcNow;
+                MarkPosts();
+            }
+        }
+
+        /// <summary>Pins a post; only one post per wall or group stays pinned.</summary>
+        public bool PinPost(long id, bool pinned)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Post p = FindPost(id);
+                if (p == null || p.Deleted) return false;
+                if (pinned)
+                {
+                    for (int i = 0; i < _posts.Count; i++)
+                    {
+                        Post q = _posts[i];
+                        if (q == p || q.Deleted) continue;
+                        if (q.Group != p.Group || q.Wall != p.Wall) continue;
+                        q.Pinned = false;
+                    }
+                }
+                p.Pinned = pinned;
+                MarkPosts();
+                return true;
+            }
+        }
+
+        /// <summary>Posts with an image, newest first, for the profile gallery.</summary>
+        public List<Post> PhotoPosts(long userId, long before, int limit)
+        {
+            List<Post> result = new List<Post>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _posts.Count && result.Count < limit; i++)
+                {
+                    Post p = _posts[i];
+                    if (p.Deleted || p.Author != userId || string.IsNullOrEmpty(p.Image)) continue;
+                    if (before > 0 && p.Id >= before) continue;
+                    result.Add(p);
+                }
+            }
+            return result;
+        }
+
         public bool ToggleLike(long postId, long userId)
         {
             lock (_sync)
@@ -779,10 +836,22 @@ namespace Social.Core
             List<Post> result = new List<Post>();
             lock (_sync)
             {
+                // pinned posts come first on the profile wall, page one only
+                if (before <= 0)
+                {
+                    for (int i = 0; i < _posts.Count && result.Count < limit; i++)
+                    {
+                        Post p = _posts[i];
+                        if (p.Deleted || p.Group != 0 || !p.Pinned) continue;
+                        if (!(p.Wall == userId || (p.Wall == 0 && p.Author == userId))) continue;
+                        if (!VisibleTo(viewerId, p)) continue;
+                        result.Add(p);
+                    }
+                }
                 for (int i = 0; i < _posts.Count && result.Count < limit; i++)
                 {
                     Post p = _posts[i];
-                    if (p.Deleted || p.Group != 0) continue;
+                    if (p.Deleted || p.Group != 0 || p.Pinned) continue;
                     if (!(p.Wall == userId || (p.Wall == 0 && p.Author == userId))) continue;
                     if (before > 0 && p.Id >= before) continue;
                     if (!VisibleTo(viewerId, p)) continue;
@@ -797,10 +866,20 @@ namespace Social.Core
             List<Post> result = new List<Post>();
             lock (_sync)
             {
+                if (before <= 0)
+                {
+                    for (int i = 0; i < _posts.Count && result.Count < limit; i++)
+                    {
+                        Post p = _posts[i];
+                        if (p.Deleted || p.Group != groupId || !p.Pinned) continue;
+                        if (!VisibleTo(viewerId, p)) continue;
+                        result.Add(p);
+                    }
+                }
                 for (int i = 0; i < _posts.Count && result.Count < limit; i++)
                 {
                     Post p = _posts[i];
-                    if (p.Deleted || p.Group != groupId) continue;
+                    if (p.Deleted || p.Group != groupId || p.Pinned) continue;
                     if (before > 0 && p.Id >= before) continue;
                     if (!VisibleTo(viewerId, p)) continue;
                     result.Add(p);

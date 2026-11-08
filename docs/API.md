@@ -101,12 +101,16 @@ permission, `404` missing, `409` conflict, `413` too large, `429` rate limit,
 | GET | `/api/post` | `id` | `{ post, comments[] }` |
 | POST | `/api/post` | `body`, `image`, `video`, `visibility`, `wall`, `group` | `{ post }` |
 | POST | `/api/post/delete` | `id` | `{ ok }` |
+| POST | `/api/post/edit` | `id`, `body`, `video`, `visibility`, `imageAction` (`keep|remove|replace`), `image` | `{ post }` |
+| POST | `/api/post/pin` | `id`, `on` | `{ pinned }` |
 | POST | `/api/like` | `id` | `{ liked, likes }` |
 | GET | `/api/comments` | `post`, `before`, `limit` | `{ comments[], hasMore, next }` |
 | POST | `/api/comment` | `post`, `body` | `{ comment, comments }` |
 | POST | `/api/comment/delete` | `id` | `{ ok }` |
 | GET | `/api/bookmarks` | `before`, `limit` | `{ posts[], hasMore, next, total }` |
 | POST | `/api/bookmark` | `id` | `{ bookmarked, total }` |
+| GET | `/api/likes` | `post`, `limit` | `{ users[], total }` |
+| GET | `/api/photos` | `user`, `before`, `limit` | `{ user, photos[{ id, image, created, likes, comments }], hasMore, next }` |
 
 `visibility`: `public` (default) · `friends` · `private`.
 `wall`: post to someone else's wall (friends only). `group`: post into a group you
@@ -117,11 +121,20 @@ link card.
 Bookmarks are per user and private: `POST /api/bookmark` toggles the saved state
 of a post and the reply tells you the new state and the total saved count.
 
+`POST /api/post/edit` is limited to the author and the staff. When
+`limits.editWindowMin` is greater than zero, an ordinary user can only edit a post
+inside that window (moderators are never limited). Editing sets `post.edited`.
+
+`POST /api/post/pin` pins a post to the top of a wall or group feed; the post
+author, the wall owner, the group owner and the staff may pin. Only one post per
+wall/group stays pinned. `canEdit` / `canPin` come back with every post so the SPA
+can render the buttons without guessing.
+
 ### Profiles, people, search
 
 | Method | Path | Body / query | Result |
 | --- | --- | --- | --- |
-| GET | `/api/profile` | `user` or `username` | `{ user, posts[], friends[], groups[], canPost }` |
+| GET | `/api/profile` | `user` or `username` | `{ user, posts[], friends[], groups[], photos[], canPost }` |
 | POST | `/api/profile` | `displayName`, `bio`, `city`, `country`, `birthday`, `gender`, `website`, `email`, `status`, `favGames`, `favMovies`, `favMusic`, `favBooks`, `mood` | `{ user }` |
 | GET | `/api/people` | `q`, `offset`, `limit` | `{ users[], total, offset, hasMore }` |
 | GET | `/api/search` | `q` (≥ 2 chars) | `{ users[], posts[] }` |
