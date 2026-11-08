@@ -1449,6 +1449,82 @@ namespace Social.Core
             }
         }
 
+        /// <summary>
+        /// Removes an account and everything it produced (posts, comments, messages,
+        /// notifications, likes, bookmarks, friendships). Used by the CLI purge and by
+        /// "delete" in the admin board when a hard removal is requested.
+        /// </summary>
+        public int HardDeleteUser(long userId)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                User u = FindUser(userId);
+                if (u == null) return 0;
+
+                int removed = 0;
+
+                // posts authored by the user
+                for (int i = _posts.Count - 1; i >= 0; i--)
+                {
+                    if (_posts[i].Author != userId && _posts[i].Wall != userId) continue;
+                    long postId = _posts[i].Id;
+                    _posts.RemoveAt(i);
+                    removed++;
+                    // comments of that post and likes on it
+                    for (int c = _comments.Count - 1; c >= 0; c--)
+                        if (_comments[c].Post == postId) _comments.RemoveAt(c);
+                    for (int b = _bookmarks.Count - 1; b >= 0; b--)
+                        if (_bookmarks[b].Post == postId) _bookmarks.RemoveAt(b);
+                }
+
+                // comments elsewhere
+                for (int c = _comments.Count - 1; c >= 0; c--)
+                    if (_comments[c].Author == userId) _comments.RemoveAt(c);
+
+                // likes given
+                for (int p = 0; p < _posts.Count; p++)
+                {
+                    Post post = _posts[p];
+                    if (post.Likes.Remove(userId)) removed++;
+                }
+
+                // private messages either way
+                for (int m = _messages.Count - 1; m >= 0; m--)
+                    if (_messages[m].From == userId || _messages[m].To == userId) _messages.RemoveAt(m);
+
+                // notifications for and about the user
+                for (int n = _notifications.Count - 1; n >= 0; n--)
+                    if (_notifications[n].User == userId || _notifications[n].Actor == userId) _notifications.RemoveAt(n);
+
+                // friendships and blocks
+                for (int f = _friends.Count - 1; f >= 0; f--)
+                    if (_friends[f].From == userId || _friends[f].To == userId) _friends.RemoveAt(f);
+
+                // bookmarks owned
+                for (int b = _bookmarks.Count - 1; b >= 0; b--)
+                    if (_bookmarks[b].User == userId) _bookmarks.RemoveAt(b);
+
+                // group membership
+                for (int g = 0; g < _groups.Count; g++)
+                    if (_groups[g].Members.Remove(userId)) removed++;
+
+                _users.Remove(u);
+                _userById.Remove(userId);
+                if (!string.IsNullOrEmpty(u.Username)) _userByName.Remove(u.Username);
+
+                MarkUsers();
+                MarkPosts();
+                MarkComments();
+                MarkMessages();
+                MarkNotifications();
+                MarkFriends();
+                MarkBookmarks();
+                MarkGroups();
+                return removed + 1;
+            }
+        }
+
         public int Broadcast(string text, long actorId)
         {
             lock (_sync)

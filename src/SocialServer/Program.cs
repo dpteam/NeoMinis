@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -18,6 +18,8 @@ namespace Social
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             string configPath = null;
             bool noConsole = false;
+
+            try { Console.OutputEncoding = Encoding.UTF8; } catch { }
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -114,27 +116,27 @@ namespace Social
                     Console.WriteLine(dir == null ? "backup failed" : "backup: " + dir);
                     return dir == null ? 1 : 0;
                 }
-                else if (a.Equals("--import-deadvk", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                else if (a.Equals("--cmd", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
                 {
-                    string dbDir = args[++i];
-                    bool withImages = true;
-                    for (int j = 0; j < args.Length; j++)
-                        if (args[j].Equals("--no-images", StringComparison.OrdinalIgnoreCase)) withImages = false;
-
+                    // one-shot operator command; works while the server is stopped
+                    string command = args[++i];
                     Log.Configure(cfg);
-                    Console.WriteLine("Importing DeadVK database from " + dbDir + (withImages ? "" : " (images skipped)"));
                     try
                     {
-                        DeadVkImport.Report report = DeadVkImport.Run(cfg, dbDir, withImages);
-                        Console.WriteLine("Done: " + report.Summary());
-                        Console.WriteLine("Took " + (report.Finished - report.Started).TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture) + "s");
-                        for (int w = 0; w < report.Warnings.Count && w < 10; w++) Console.WriteLine("  ! " + report.Warnings[w]);
+                        SocialStore store = new SocialStore(cfg);
+                        store.Load();
+                        AiEngine ai = new AiEngine(cfg, store);
+                        AiRunner runner = new AiRunner(cfg, store, ai);
+                        Cli cli = new Cli(cfg, store, ai, runner);
+                        string output = cli.Execute(command);
+                        if (output.Length > 0) Console.WriteLine(output);
+                        store.SaveNow();
                         Log.Shutdown();
                         return 0;
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine("Import failed: " + ex.Message);
+                        Console.WriteLine("command failed: " + ex.Message);
                         Log.Shutdown();
                         return 1;
                     }
@@ -267,17 +269,18 @@ namespace Social
             Console.WriteLine("  --config <path>       use another config.ini (its folder is the base)");
             Console.WriteLine("  --data <path>         base directory for config/data/logs/public");
             Console.WriteLine("  --reset-admin <user>  promote a user to administrator (offline)");
-            Console.WriteLine("  --import-deadvk <dir> import a DeadVK database (users, posts, messages)");
-            Console.WriteLine("  --no-images           with --import-deadvk: skip avatars and post images");
             Console.WriteLine("  --backup              create a data snapshot and exit");
-            Console.WriteLine("  --import-deadvk <dir> import a DeadVK database (users, posts, messages...)");
+            Console.WriteLine("  --cmd \"<command>\"      run one console command and exit (server may be stopped)");
+            Console.WriteLine("                        e.g. --cmd \"user role 9 admin\"");
+            Console.WriteLine("  --import-deadvk <dir> import a DeadVK database (users, posts, messages)");
             Console.WriteLine("  --no-images           with --import-deadvk: skip avatars and post images");
             Console.WriteLine("  --selftest            run crypto/storage tests and exit");
             Console.WriteLine("  --no-console          do not attach the TUI (services, CI)");
             Console.WriteLine("  --version             print version");
             Console.WriteLine("  --help                this help");
             Console.WriteLine();
-            Console.WriteLine("TUI: [S] save [B] backup [R] reload [L] logs [Q] quit");
+            Console.WriteLine("Interactive console commands: help, status, user ..., post del ...,");
+            Console.WriteLine("recovery export, import purge-bots, ai ..., broadcast, backup, reload, quit");
         }
     }
 }

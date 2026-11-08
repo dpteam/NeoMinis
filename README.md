@@ -47,7 +47,9 @@ The **admin board** runs on its own port in the same process — by default
 (it answers 404), so the admin surface is never reachable through the reverse
 proxy unless you deliberately publish it.
 
-Console hotkeys: `S` save · `B` backup · `R` reload config · `L` last logs · `Q` quit.
+Console is a full operator CLI: type `help` at the `social>` prompt, or run one
+command offline with `SocialServer.exe --cmd "user role 9 admin"`.
+See **[docs/CLI.md](docs/CLI.md)**.
 
 ### Two boards, one process
 
@@ -99,16 +101,16 @@ src/SocialServer/
   Program.cs             CLI, crash handler, --selftest / --backup / --import-deadvk
   SocialApp.cs           owns store, sessions, stats, captcha, media, AI, web
   AppSupervisor.cs       watchdog + debounced saves + snapshots + cleanup
-  ConsoleUi.cs           TUI: ASCII banner, status line, hotkeys, no log echo
+  ConsoleUi.cs           TUI: ASCII banner, operator prompt, no log echo
   SelfTest.cs            crypto vectors, envelope tampering, JSON, captcha, storage
   Core/                  Config, Log, Crypto, Json, Models, SocialStore, Sessions,
                          Captcha, Media, StatsStore, Store (atomic IO), Util,
-                         Branding, Ai + AiRunner, DeadVkImport
+                         Branding, Ai + AiRunner, DeadVkImport, Cli
   Web/                   HttpCore (HTTP/1.1), WebServer (static/media/routing),
                          ApiRouter (auth, views, social, admin, ai)
 public/                  SPA: index.html, 404/403, assets/css, assets/js
 tools/                   firewall.ps1/.cmd, test-web.mjs, ci-test.ps1, rename-user.mjs
-docs/                    ARCHITECTURE, API, SECURITY, I18N, AI, IMPORT
+docs/                    ARCHITECTURE, API, SECURITY, I18N, AI, IMPORT, CLI
 ```
 
 Runtime folders (git-ignored): `bin/`, `data/`, `logs/`, `config.ini`.
@@ -242,10 +244,16 @@ administrator, so the admin block runs automatically there.
 
 ```cmd
 bin\SocialServer.exe --backup                     :: snapshot data/ and exit
-bin\SocialServer.exe --reset-admin NAME           :: promote an existing user to admin
+bin\SocialServer.exe --cmd "user list humans"     :: any console command, server may be stopped
+bin\SocialServer.exe --cmd "user role 9 admin"    :: promote an account
+bin\SocialServer.exe --reset-admin NAME           :: same thing, older spelling
 bin\SocialServer.exe --import-deadvk <db folder>  :: import an old DeadVK history
 node tools\rename-user.mjs old new "New Name" [password]
 ```
+
+`--cmd` accepts every command of the interactive console (`help`, `status`,
+`user …`, `post del …`, `recovery export`, `import purge-bots`, `ai …`,
+`broadcast`, `backup`, `reload`). Full reference: **[docs/CLI.md](docs/CLI.md)**.
 
 `--import-deadvk` copies users, posts, comments, likes, messages, friends,
 bookmarks, blocks, notifications, avatars and post images from the old project and
