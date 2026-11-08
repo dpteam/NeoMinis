@@ -1,0 +1,23 @@
+# runtime
+bin/
+data/
+logs/
+*.log
+*.bak
+*.tmp
+config.ini
+config.ini.bad-*
+
+# references and build junk
+refs/
+obj/
+.vs/
+*.user
+*.suo
+*.pdb
+*.cache
+
+# OS junk
+Thumbs.db
+desktop.ini
+.DS_Store

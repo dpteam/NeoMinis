@@ -1,0 +1,12 @@
+{
+  "name": "Social",
+  "short_name": "Social",
+  "description": "A small, fast, self-hosted social network.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e9edf3",
+  "theme_color": "#4a76a8",
+  "icons": [
+    { "src": "assets/img/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

@@ -1,0 +1,44 @@
+﻿<!DOCTYPE html>
+<html lang="ru" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#4a76a8">
+  <meta name="description" content="A small, fast, self-hosted social network.">
+  <title>Social</title>
+  <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="assets/css/app.css?v=1.2.0">
+  <!-- generated from config.ini [branding]; empty section = neutral palette -->
+  <link rel="stylesheet" href="brand.css">
+</head>
+<body>
+  <div id="boot" class="boot">
+    <div class="boot-inner">
+      <div class="boot-logo" id="boot-logo">S</div>
+      <div id="boot-text">Loading...</div>
+    </div>
+  </div>
+
+  <div id="app"></div>
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toasts"></div>
+
+  <noscript>
+    <div style="max-width:520px;margin:60px auto;padding:18px;background:#fff;border:1px solid #ccc;border-radius:10px;font-family:Tahoma,sans-serif">
+      <b>JavaScript is required.</b><br>This social network talks to the server through encrypted API calls, so please enable JavaScript.
+    </div>
+  </noscript>
+
+  <script src="assets/js/crypto.js?v=1.2.0"></script>
+  <script src="assets/js/i18n.js?v=1.2.0"></script>
+  <script src="assets/js/sound.js?v=1.2.0"></script>
+  <script src="assets/js/ui.js?v=1.2.0"></script>
+  <script src="assets/js/api.js?v=1.2.0"></script>
+  <script src="assets/js/app.js?v=1.2.0"></script>
+  <script src="assets/js/app.more.js?v=1.2.0"></script>
+</body>
+</html>
+
