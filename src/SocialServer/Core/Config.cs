@@ -123,6 +123,8 @@ namespace Social.Core
         public int MaxJsonDepth = 64;
         public bool AdminPrivateOnly = false;
         public bool Hsts = false;
+        // allow https images/media from other hosts (video links, link previews)
+        public bool ExternalMedia = true;
 
         // role management policy
         public bool AllowRoleChange = true;
@@ -394,6 +396,7 @@ namespace Social.Core
                     else if (key == "maxjsondepth") MaxJsonDepth = Int(val, MaxJsonDepth);
                     else if (key == "adminprivateonly") AdminPrivateOnly = Bool(val, AdminPrivateOnly);
                     else if (key == "hsts") Hsts = Bool(val, Hsts);
+                    else if (key == "externalmedia") ExternalMedia = Bool(val, ExternalMedia);
                     else if (key == "allowrolechange") AllowRoleChange = Bool(val, AllowRoleChange);
                     else if (key == "allowselfdemote") AllowSelfDemote = Bool(val, AllowSelfDemote);
                     else if (key == "protectlastadmin") ProtectLastAdmin = Bool(val, ProtectLastAdmin);

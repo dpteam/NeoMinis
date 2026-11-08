@@ -154,6 +154,7 @@ var App = (function () {
     html += tab('#/people', 'users', T('nav.people'), 'people');
     html += tab('#/groups', 'people-group', T('nav.groups'), 'groups');
     html += tab('#/notifications', 'bell', T('nav.notifications'), 'notifications', unreadN, 'badge-notif');
+    html += tab('#/bookmarks', 'bookmark', T('nav.bookmarks'), 'bookmarks');
     if (isMod) html += tab('#/admin', 'shield-halved', T('nav.admin'), 'admin');
     html += '</nav>';
     html += '<div class="top-right">';
@@ -179,6 +180,7 @@ var App = (function () {
     html += side('#/people', 'users', T('nav.people'), 'people');
     html += side('#/groups', 'people-group', T('nav.groups'), 'groups');
     html += side('#/notifications', 'bell', T('nav.notifications'), 'notifications', unreadN);
+    html += side('#/bookmarks', 'bookmark', T('nav.bookmarks'), 'bookmarks');
     html += '<div class="side-sep"></div>';
     html += side('#/profile/' + u.id, 'id-card', T('nav.profile'), 'profile');
     html += side('#/settings', 'gear', T('nav.settings'), 'settings');
@@ -645,8 +647,14 @@ var App = (function () {
       '<textarea id="composer-text" maxlength="' + (state.site.maxPostLength || 8000) + '" placeholder="' + UI.attr(T('feed.composerPlaceholder')) + '"></textarea>' +
       '</div>' +
       '<div class="composer-preview hidden" id="composer-preview"></div>' +
+      '<div class="composer-video-row hidden" id="composer-video-row">' +
+      '<div class="composer-video-input">' + UI.icon('video') +
+      '<input class="input" id="composer-video-url" placeholder="' + UI.attr(T('feed.videoPlaceholder')) + '" autocomplete="off"></div>' +
+      '<div class="composer-video-preview" id="composer-video-preview"></div>' +
+      '</div>' +
       '<div class="composer-bar">' +
       '<button type="button" class="btn btn-sm" id="composer-photo">' + UI.icon('image') + ' ' + T('feed.photo') + '</button>' +
+      '<button type="button" class="btn btn-sm" id="composer-video">' + UI.icon('video') + ' ' + T('feed.video') + '</button>' +
       '<input type="file" id="composer-file" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">' +
       '<select class="select" id="composer-visibility" style="width:auto;padding:4px 24px 4px 8px;font-size:11.5px">' +
       '<option value="public">' + T('feed.public') + '</option>' +
@@ -664,6 +672,10 @@ var App = (function () {
     var file = document.getElementById('composer-file');
     var photo = document.getElementById('composer-photo');
     var preview = document.getElementById('composer-preview');
+    var videoBtn = document.getElementById('composer-video');
+    var videoRow = document.getElementById('composer-video-row');
+    var videoInput = document.getElementById('composer-video-url');
+    var videoPreview = document.getElementById('composer-video-preview');
     var imageData = '';
 
     if (text) {
@@ -673,6 +685,15 @@ var App = (function () {
       });
     }
     if (photo && file) photo.addEventListener('click', function () { file.click(); });
+    if (videoBtn && videoRow) videoBtn.addEventListener('click', function () {
+      var open = !/(^|\s)hidden(\s|$)/.test(videoRow.className);
+      videoRow.className = open ? 'composer-video-row hidden' : 'composer-video-row';
+      if (!open && videoInput) videoInput.focus();
+    });
+    if (videoInput && videoPreview) videoInput.addEventListener('input', function () {
+      var u = videoInput.value.trim();
+      videoPreview.innerHTML = u ? videoHtml(u) : '';
+    });
     if (file) file.addEventListener('change', function () {
       var f = file.files && file.files[0];
       if (!f) return;
@@ -688,14 +709,17 @@ var App = (function () {
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var body = text ? text.value.trim() : '';
-      if (!body && !imageData) { text.focus(); return; }
+      var videoUrl = videoInput ? videoInput.value.trim() : '';
+      if (videoUrl && !/^https?:\/\//i.test(videoUrl)) { UI.toast(T('feed.videoBadUrl'), 'err'); return; }
+      if (!body && !imageData && !videoUrl) { if (text) text.focus(); return; }
       var btn = document.getElementById('composer-submit');
       setBusy(btn, true, T('feed.posting'));
       var payload = {
         body: body,
         visibility: val('composer-visibility') || 'public',
         wall: wallId || 0,
-        image: imageData || ''
+        image: imageData || '',
+        video: videoUrl
       };
       Api.request('POST', '/api/post', payload, function (err, data) {
         setBusy(btn, false, T('feed.post'));
@@ -704,6 +728,9 @@ var App = (function () {
         imageData = '';
         if (preview) { preview.className = 'composer-preview hidden'; preview.innerHTML = ''; }
         if (file) file.value = '';
+        if (videoInput) videoInput.value = '';
+        if (videoPreview) videoPreview.innerHTML = '';
+        if (videoRow) videoRow.className = 'composer-video-row hidden';
         SoundFX.play('post');
         UI.toast(T('feed.posted'), 'ok');
         if (state.route === 'feed') {
@@ -725,6 +752,7 @@ var App = (function () {
       (p.wallUser ? '<span>· ' + UI.icon('arrow-right') + ' ' + UI.esc(p.wallUser.displayName) + '</span>' : '');
     var body = UI.linkify(p.body || '').replace(/\n/g, '<br>');
     var img = UI.safeUrl(p.image);
+    var vid = videoHtml(p.video);
     var html = '<article class="post" data-post="' + p.id + '">' +
       '<div class="post-head">' + UI.avatar(author, 38) +
       '<div class="post-who"><div class="meta">' + meta + '</div></div>' +
@@ -732,15 +760,43 @@ var App = (function () {
       '</div>' +
       (body ? '<div class="post-body">' + body + '</div>' : '') +
       (img ? '<div class="post-media"><img class="post-img" src="' + UI.attr(img) + '" alt="" loading="lazy"></div>' : '') +
+      vid +
       '<div class="post-actions">' +
       '<button type="button" class="pa post-like' + (p.liked ? ' liked' : '') + '" data-id="' + p.id + '">' + UI.icon(p.liked ? 'heart' : 'heart') + ' <span>' + (p.liked ? T('feed.liked') : T('feed.like')) + '</span> <b>' + (p.likes || 0) + '</b></button>' +
       '<button type="button" class="pa post-comment-toggle" data-id="' + p.id + '">' + UI.icon('comment') + ' <span>' + T('feed.comment') + '</span> <b>' + (p.comments || 0) + '</b></button>' +
       '<button type="button" class="pa post-share" data-id="' + p.id + '">' + UI.icon('share') + ' <span>' + T('feed.share') + '</span></button>' +
+      '<button type="button" class="pa post-bookmark' + (p.bookmarked ? ' active' : '') + '" data-id="' + p.id + '" title="' + UI.attr(T('feed.bookmark')) + '">' + UI.icon('bookmark') + ' <span>' + (p.bookmarked ? T('feed.bookmarked') : T('feed.bookmark')) + '</span></button>' +
       '<a class="pa" href="#/post/' + p.id + '">' + UI.icon('up-right-from-square') + '</a>' +
       '</div>' +
       '<div class="comments hidden" data-comments="' + p.id + '"></div>' +
       '</article>';
     return html;
+  }
+
+  // ---------------------------------------------------------- post video
+
+  var YT_RE = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{6,20})/i;
+
+  function youtubeId(url) {
+    var m = YT_RE.exec(url || '');
+    return m ? m[1] : '';
+  }
+
+  function videoHtml(url) {
+    var src = UI.safeUrl(url);
+    if (!src) return '';
+    var yt = youtubeId(src);
+    if (yt) {
+      return '<div class="post-video"><a class="video-card" href="' + UI.attr(src) + '" target="_blank" rel="noopener noreferrer nofollow">' +
+        '<img src="' + UI.attr('https://i.ytimg.com/vi/' + yt + '/hqdefault.jpg') + '" alt="" loading="lazy">' +
+        '<span class="video-play">' + UI.icon('play') + '</span>' +
+        '<span class="video-label">' + UI.icon('video') + ' YouTube</span></a></div>';
+    }
+    if (/\.(mp4|m4v|webm|ogv|ogg)(\?|#|$)/i.test(src)) {
+      return '<div class="post-video"><video controls preload="metadata" src="' + UI.attr(src) + '"></video></div>';
+    }
+    return '<div class="post-video"><a class="video-link" href="' + UI.attr(src) + '" target="_blank" rel="noopener noreferrer nofollow">' +
+      UI.icon('circle-play') + '<span>' + UI.esc(src.replace(/^https?:\/\//i, '').slice(0, 90)) + '</span></a></div>';
   }
 
   function bindPosts(scope) {
@@ -761,6 +817,12 @@ var App = (function () {
       if (shares[k].getAttribute('data-bound')) continue;
       shares[k].setAttribute('data-bound', '1');
       shares[k].addEventListener('click', function () { sharePost(this.getAttribute('data-id')); });
+    }
+    var marks = (scope || document).querySelectorAll('.post-bookmark');
+    for (var bm = 0; bm < marks.length; bm++) {
+      if (marks[bm].getAttribute('data-bound')) continue;
+      marks[bm].setAttribute('data-bound', '1');
+      marks[bm].addEventListener('click', function () { toggleBookmark(this.getAttribute('data-id'), this); });
     }
     var dels = (scope || document).querySelectorAll('.post-delete');
     for (var d = 0; d < dels.length; d++) {
@@ -864,6 +926,24 @@ var App = (function () {
     SoundFX.play('click');
   }
 
+  function toggleBookmark(id, btn) {
+    Api.request('POST', '/api/bookmark', { id: Number(id) }, function (err, data) {
+      if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+      if (btn) {
+        var span = btn.querySelector('span');
+        if (data.bookmarked) { btn.className = 'pa post-bookmark active'; if (span) span.textContent = T('feed.bookmarked'); }
+        else { btn.className = 'pa post-bookmark'; if (span) span.textContent = T('feed.bookmark'); }
+      }
+      UI.toast(data.bookmarked ? T('feed.bookmarkAdded') : T('feed.bookmarkRemoved'), 'ok');
+      SoundFX.play('click');
+      // on the bookmarks page a removed post should disappear right away
+      if (!data.bookmarked && state.route === 'bookmarks') {
+        var el = document.querySelector('[data-post="' + id + '"]');
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      }
+    });
+  }
+
   // ------------------------------------------------------------------ post
 
   function postView(main, r) {
@@ -907,6 +987,75 @@ var App = (function () {
     });
   }
 
+  // ------------------------------------------------------------------ badges
+
+  function badgeCatalog() {
+    return (state.site && state.site.badges) || [];
+  }
+
+  function badgeList(csv) {
+    var ids = String(csv || '').split(',');
+    var cat = badgeCatalog();
+    var out = [];
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i].replace(/^\s+|\s+$/g, '');
+      if (!id) continue;
+      var icon = 'award';
+      for (var j = 0; j < cat.length; j++) if (cat[j].id === id) { icon = cat[j].icon; break; }
+      out.push({ id: id, icon: icon });
+    }
+    return out;
+  }
+
+  function badgesHtml(csv) {
+    var list = badgeList(csv);
+    if (!list.length) return '';
+    var html = '<div class="badge-row">';
+    for (var i = 0; i < list.length; i++) {
+      var label = T('badge.' + list[i].id);
+      html += '<span class="ach" title="' + UI.attr(label) + '">' + UI.icon(list[i].icon) +
+        '<span>' + UI.esc(label) + '</span></span>';
+    }
+    return html + '</div>';
+  }
+
+  function badgeIcons(csv) {
+    var list = badgeList(csv);
+    if (!list.length) return '';
+    var html = '<div class="badge-row compact">';
+    for (var i = 0; i < list.length; i++) {
+      html += '<span class="ach" title="' + UI.attr(T('badge.' + list[i].id)) + '">' + UI.icon(list[i].icon) + '</span>';
+    }
+    return html + '</div>';
+  }
+
+  function badgesCard(csv, showLocked) {
+    var cat = badgeCatalog();
+    if (!cat.length) return '';
+    var owned = {};
+    var list = badgeList(csv);
+    for (var i = 0; i < list.length; i++) owned[list[i].id] = true;
+    var items = '';
+    for (var j = 0; j < cat.length; j++) {
+      var id = cat[j].id;
+      var on = !!owned[id];
+      if (!on && !showLocked) continue;
+      items += '<div class="ach-item' + (on ? '' : ' locked') + '">' + UI.icon(cat[j].icon) +
+        '<div><b>' + UI.esc(T('badge.' + id)) + '</b><span>' + UI.esc(T('badge.' + id + '.desc')) + '</span></div></div>';
+    }
+    if (!items) return '';
+    return '<div class="card"><div class="card-h">' + UI.icon('trophy') + ' ' + T('profile.badges') +
+      '<span class="right tiny muted">' + list.length + ' / ' + cat.length + '</span></div>' +
+      '<div class="card-b"><div class="ach-list">' + items + '</div></div></div>';
+  }
+
+  function moodIcon(mood) {
+    if (mood === 'happy') return 'face-smile';
+    if (mood === 'sad') return 'face-frown';
+    if (mood === 'neutral') return 'face-meh';
+    return '';
+  }
+
   // ------------------------------------------------------------------ profile
 
   function profileView(main, r) {
@@ -948,6 +1097,10 @@ var App = (function () {
       if (u.birthday) info += row(T('profile.birthday'), UI.esc(u.birthday));
       if (u.gender) info += row(T('profile.gender'), UI.esc(u.gender === 'm' ? T('profile.male') : u.gender === 'f' ? T('profile.female') : T('profile.other')));
       if (u.website) info += row(T('profile.website'), '<a href="' + UI.attr(UI.safeUrl(u.website)) + '" target="_blank" rel="noopener noreferrer nofollow">' + UI.esc(u.website) + '</a>');
+      if (u.favGames) info += row(T('profile.favGames'), UI.esc(u.favGames));
+      if (u.favMovies) info += row(T('profile.favMovies'), UI.esc(u.favMovies));
+      if (u.favMusic) info += row(T('profile.favMusic'), UI.esc(u.favMusic));
+      if (u.favBooks) info += row(T('profile.favBooks'), UI.esc(u.favBooks));
       info += row(T('profile.joined'), UI.formatDate(u.created));
       if (u.bio) info += '<div style="margin-top:10px;font-size:12.5px;white-space:pre-wrap">' + UI.nl2br(u.bio) + '</div>';
 
@@ -955,7 +1108,8 @@ var App = (function () {
       html += '<div class="profile-head">' + UI.avatar(u, 96, false) +
         '<div class="profile-head-main"><h1>' + UI.esc(u.displayName) + ' ' + UI.roleBadge(u.role) + '</h1>' +
         '<div class="username">@' + UI.esc(u.username) + ' · ' + (u.online ? T('profile.online') : T('profile.offline')) + '</div>' +
-        '<div class="status">' + UI.esc(u.status || '') + '</div></div>' +
+        (u.status || u.mood ? '<div class="status">' + (u.mood ? UI.icon(moodIcon(u.mood)) + ' ' : '') + UI.esc(u.status || T('mood.' + u.mood)) + '</div>' : '') +
+        badgeIcons(u.badges) + '</div>' +
         '<div class="profile-actions">' + actions + '</div></div>';
 
       html += '<div class="profile-grid">';
@@ -965,6 +1119,7 @@ var App = (function () {
         '<div class="stat-card"><b>' + (u.posts || 0) + '</b><span>' + T('profile.posts') + '</span></div>' +
         '<div class="stat-card"><b>' + (u.likes || 0) + '</b><span>' + T('profile.likes') + '</span></div></div>' +
         '<table class="info-table">' + info + '</table></div></div>';
+      html += badgesCard(u.badges, isSelf);
       if ((data.friends || []).length) {
         html += '<div class="card"><div class="card-h">' + UI.icon('user-group') + ' ' + T('profile.friends') + ' <span class="right"><a href="#/friends?user=' + u.id + '">' + T('common.all') + '</a></span></div><div class="card-b"><div class="user-grid">';
         for (var f = 0; f < data.friends.length; f++) html += userCard(data.friends[f]);
@@ -1114,6 +1269,12 @@ var App = (function () {
     friendAction: friendAction,
     postHtml: postHtml,
     bindPosts: bindPosts,
+    badgeCatalog: badgeCatalog,
+    badgeList: badgeList,
+    badgesHtml: badgesHtml,
+    badgesCard: badgesCard,
+    videoHtml: videoHtml,
+    moodIcon: moodIcon,
     composerHtml: composerHtml,
     bindComposer: bindComposer,
     commentHtml: commentHtml,

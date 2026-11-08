@@ -332,6 +332,43 @@ async function main() {
   const badTheme = await alice.call('POST', '/api/settings', { theme: 'neon' });
   ok('bad theme rejected', badTheme.status === 400, String(badTheme.status));
 
+  // ---- video, bookmarks, interests, badges
+  const vpost = await alice.call('POST', '/api/post', {
+    body: 'watch this', video: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+  });
+  ok('post with video', vpost.status === 200 && vpost.data.post.video === 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    String(vpost.status));
+  const badVideo = await alice.call('POST', '/api/post', { body: 'x', video: 'javascript:alert(1)' });
+  ok('bad video link rejected', badVideo.status === 400, String(badVideo.status));
+
+  const mark = await bob.call('POST', '/api/bookmark', { id: postId });
+  ok('bookmark toggles on', mark.status === 200 && mark.data.bookmarked === true && mark.data.total === 1,
+    JSON.stringify(mark.data));
+  const marks = await bob.call('GET', '/api/bookmarks');
+  ok('bookmarks listed', marks.status === 200 && marks.data.posts.length === 1 && marks.data.posts[0].id === postId, '');
+  ok('bookmarked flag on post', marks.data.posts[0].bookmarked === true, '');
+  const unmark = await bob.call('POST', '/api/bookmark', { id: postId });
+  ok('bookmark toggles off', unmark.data && unmark.data.bookmarked === false, '');
+
+  const tmpPost = await alice.call('POST', '/api/post', { body: 'temporary post' });
+  const tmpId = tmpPost.data && tmpPost.data.post.id;
+  await bob.call('POST', '/api/bookmark', { id: tmpId });
+  await alice.call('POST', '/api/post/delete', { id: tmpId });
+  const afterDel = await bob.call('GET', '/api/bookmarks');
+  ok('bookmark dropped with the post', afterDel.data && afterDel.data.total === 0, JSON.stringify(afterDel.data && afterDel.data.total));
+
+  const interests = await alice.call('POST', '/api/profile', { favGames: 'Doom', favMusic: 'MIDI', mood: 'happy' });
+  ok('interests saved', interests.status === 200 && interests.data.user.favGames === 'Doom' &&
+    interests.data.user.mood === 'happy', String(interests.status));
+  const badMood = await alice.call('POST', '/api/profile', { mood: 'angry' });
+  ok('bad mood rejected', badMood.status === 400, String(badMood.status));
+
+  const prof = await alice.call('GET', '/api/profile?user=' + alice.user.id);
+  const badgeIds = String(prof.data && prof.data.user.badges || '').split(',');
+  ok('first post badge granted', prof.status === 200 && badgeIds.indexOf('first_post') >= 0,
+    JSON.stringify(prof.data && prof.data.user.badges));
+  ok('site exposes badge catalogue', Array.isArray(hs.site && hs.site.badges) && hs.site.badges.length > 0, '');
+
   // ---- admin
   const adminOnPublic = await alice.call('GET', '/api/admin/overview');
   ok('admin API hidden on the public board', adminOnPublic.status === 404, String(adminOnPublic.status));

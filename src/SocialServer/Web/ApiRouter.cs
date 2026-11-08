@@ -186,6 +186,17 @@ namespace Social.Web
             b.Name("languages").BeginArray();
             b.Str("ru"); b.Str("en"); b.Str("uk"); b.Str("lt");
             b.EndArray();
+            // achievement catalogue: id -> icon, so the SPA never hardcodes it
+            b.Name("badges").BeginArray();
+            for (int i = 0; i < Badges.All.Length; i++)
+            {
+                b.BeginObject();
+                b.Prop("id", Badges.All[i].Id);
+                b.Prop("icon", Badges.All[i].Icon);
+                b.Prop("manual", Badges.All[i].Manual);
+                b.EndObject();
+            }
+            b.EndArray();
             b.EndObject();
             return b.ToString();
         }
@@ -349,6 +360,7 @@ namespace Social.Web
             _store.MarkUserDirty(user);
             _stats.OnLogin();
             _web.ClearAuthFailures(ip);
+            GrantBadges(user);
 
             string sessionSalt = Crypto.RandomHex(Crypto.SaltBytes);
             byte[] sessionKey = Crypto.DeriveKey(verifier, sessionSalt, _cfg.KdfIterations);

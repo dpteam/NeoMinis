@@ -35,12 +35,32 @@ namespace Social.Web
             SendOk(ctx, b);
         }
 
+        // =========================================================== badges
+
+        /// <summary>
+        /// Grants every achievement the user has earned. Cheap counters, no side
+        /// effects when nothing new is unlocked.
+        /// </summary>
+        private void GrantBadges(User u)
+        {
+            if (u == null || u.Deleted) return;
+            List<string> added = Badges.Apply(_store, u);
+            if (added.Count == 0) return;
+            _store.MarkUserDirty(u);
+            for (int i = 0; i < added.Count; i++)
+            {
+                _store.Notify(u.Id, u.Id, "badge", "unlocked the \"" + added[i] + "\" badge", "#/profile/" + u.Id);
+                Log.Info("USER", "@" + u.Username + " unlocked badge " + added[i]);
+            }
+        }
+
         // ========================================================== settings
 
         private void HandleSettings(ApiCtx ctx)
         {
             if (IsMethod(ctx.Req, "GET"))
             {
+                GrantBadges(ctx.User);
                 JsonBuilder gb = new JsonBuilder(512);
                 gb.BeginObject();
                 gb.Name("user").Raw(UserView(ctx.User, ctx.User, true));
@@ -235,6 +255,7 @@ namespace Social.Web
                 if (g != null && g.Owner != ctx.User.Id)
                     _store.Notify(g.Owner, ctx.User.Id, "group", "posted in " + g.Name, "#/group/" + g.Id);
             }
+            GrantBadges(ctx.User);
 
             JsonBuilder b = new JsonBuilder(1024);
             b.BeginObject();
@@ -261,6 +282,7 @@ namespace Social.Web
             Post p = RequirePost(id);
             if (!CanViewPost(ctx.User, p)) throw new ApiException(403, "private", "This post is not available");
             bool on = _store.ToggleBookmark(ctx.User.Id, id);
+            if (on) GrantBadges(ctx.User);
             JsonBuilder b = new JsonBuilder(128);
             b.BeginObject();
             b.Prop("bookmarked", on);
@@ -298,6 +320,8 @@ namespace Social.Web
                 _stats.OnLike();
                 if (p.Author != ctx.User.Id)
                     _store.Notify(p.Author, ctx.User.Id, "like", "liked your post", "#/post/" + p.Id);
+                GrantBadges(ctx.User);
+                GrantBadges(_store.FindUser(p.Author));
             }
 
             JsonBuilder b = new JsonBuilder(128);
@@ -348,6 +372,8 @@ namespace Social.Web
                 _store.Notify(p.Author, ctx.User.Id, "comment", "commented on your post", "#/post/" + p.Id);
             if (p.Wall > 0 && p.Wall != ctx.User.Id && p.Wall != p.Author)
                 _store.Notify(p.Wall, ctx.User.Id, "comment", "commented on a post on your wall", "#/post/" + p.Id);
+            GrantBadges(ctx.User);
+            GrantBadges(_store.FindUser(p.Author));
 
             JsonBuilder b = new JsonBuilder(512);
             b.BeginObject();
@@ -622,6 +648,12 @@ namespace Social.Web
             }
             else throw new ApiException(400, "bad-action", "Unknown friend action");
 
+            if (status == "accepted" || status == "request")
+            {
+                GrantBadges(ctx.User);
+                GrantBadges(target);
+            }
+
             JsonBuilder b = new JsonBuilder(512);
             b.BeginObject();
             b.Prop("status", status);
@@ -685,6 +717,7 @@ namespace Social.Web
             _store.MarkUserDirty(ctx.User);
             _stats.OnMessage();
             NotifyMessageOnce(target.Id, ctx.User.Id, m.Id);
+            GrantBadges(ctx.User);
 
             JsonBuilder b = new JsonBuilder(512);
             b.BeginObject();

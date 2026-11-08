@@ -13,6 +13,7 @@ namespace Social.Web
                 throw new ApiException(404, "unknown-endpoint", "Unknown endpoint");
             if (sub == "overview") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminOverview(ctx); return; }
             if (sub == "users") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminUsers(ctx); return; }
+            if (sub == "badges/recalc") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminBadgesRecalc(ctx); return; }
             if (sub == "user")
             {
                 if (IsMethod(ctx.Req, "GET")) { RequireModerator(ctx.User); HandleAdminUserGet(ctx); return; }
@@ -130,6 +131,9 @@ namespace Social.Web
             b.Prop("banReason", u.BanReason);
             b.Prop("bannedUntil", u.BannedUntil == DateTime.MinValue ? "" : Util.Iso(u.BannedUntil));
             b.Prop("warnings", u.Warnings);
+            b.Prop("badges", u.Badges);
+            b.Prop("persona", u.Persona);
+            b.Prop("mood", u.Mood);
             b.Prop("deleted", u.Deleted);
             b.Prop("posts", _store.CountPosts(u.Id));
             b.Prop("friends", _store.CountFriends(u.Id));
@@ -139,6 +143,28 @@ namespace Social.Web
         }
 
         // ============================================================= users
+
+        private void HandleAdminBadgesRecalc(ApiCtx ctx)
+        {
+            List<User> users = _store.AllUsers();
+            int granted = 0;
+            for (int i = 0; i < users.Count; i++)
+            {
+                if (users[i].Deleted) continue;
+                List<string> added = Badges.Apply(_store, users[i]);
+                if (added.Count > 0)
+                {
+                    _store.MarkUserDirty(users[i]);
+                    granted += added.Count;
+                }
+            }
+            Log.Info("ADMIN", "@" + ctx.User.Username + " recalculated badges, granted " + granted);
+            JsonBuilder b = new JsonBuilder(128);
+            b.BeginObject();
+            b.Prop("granted", granted);
+            b.Prop("users", users.Count);
+            SendOk(ctx, b);
+        }
 
         private void HandleAdminUsers(ApiCtx ctx)
         {
@@ -268,6 +294,22 @@ namespace Social.Web
                     throw new ApiException(403, "role-locked", "Role changes are disabled in the configuration");
                 _store.SetRole(target.Id, "moderator");
                 Log.Info("ADMIN", "@" + ctx.User.Username + " granted moderator to @" + target.Username);
+            }
+            else if (action == "badge")
+            {
+                string badge = BodyStr(ctx, "badge", "").Trim().ToLowerInvariant();
+                if (!Badges.Known(badge)) throw new ApiException(400, "bad-badge", "Unknown badge");
+                bool on = BodyBool(ctx, "on", true);
+                bool changed = on ? Badges.Grant(target, badge) : Badges.Revoke(target, badge);
+                if (changed)
+                {
+                    _store.MarkUserDirty(target);
+                    _store.Notify(target.Id, ctx.User.Id, "badge",
+                        (on ? "was given the \"" : "lost the \"") + badge + "\" badge",
+                        "#/profile/" + target.Id);
+                    Log.Info("ADMIN", "@" + ctx.User.Username + (on ? " granted " : " revoked ") +
+                             "badge " + badge + " for @" + target.Username);
+                }
             }
             else if (action == "delete")
             {

@@ -266,7 +266,7 @@
           var g = groups[i];
           html += '<div class="user-card"><a href="#/group/' + g.id + '">' + UI.avatar({ id: g.id, displayName: g.name, avatar: g.avatar }, 52) + '</a>' +
             '<a class="name" href="#/group/' + g.id + '">' + UI.esc(g.name) + '</a>' +
-            '<div class="sub">' + T('groups.members') + ': ' + g.members + ' В· ' + (g.visibility === 'private' ? T('groups.private') : T('groups.public')) + '</div></div>';
+            '<div class="sub">' + T('groups.members') + ': ' + g.members + ' · ' + (g.visibility === 'private' ? T('groups.private') : T('groups.public')) + '</div></div>';
         }
         html += '</div>';
       }
@@ -314,7 +314,7 @@
       var html = '<div class="card"><div class="group-head">' +
         UI.avatar({ id: g.id, displayName: g.name, avatar: g.avatar }, 72, false) +
         '<div style="flex:1;min-width:0"><h1>' + UI.esc(g.name) + '</h1><div class="desc">' + UI.esc(g.description || '') + '</div>' +
-        '<div class="tiny" style="opacity:.8;margin-top:4px">' + T('groups.members') + ': ' + g.members + ' В· ' + (g.visibility === 'private' ? T('groups.private') : T('groups.public')) + '</div></div>' +
+        '<div class="tiny" style="opacity:.8;margin-top:4px">' + T('groups.members') + ': ' + g.members + ' · ' + (g.visibility === 'private' ? T('groups.private') : T('groups.public')) + '</div></div>' +
         '<button class="btn" id="group-toggle">' + (g.isMember ? (g.isOwner ? UI.icon('crown') + ' ' + T('groups.owner') : UI.icon('right-from-bracket') + ' ' + T('groups.leave')) : UI.icon('plus') + ' ' + T('groups.join')) + '</button>' +
         '</div><div class="card-b">';
       html += '<div class="feed-tabs"><a class="tab2 active" href="#/group/' + g.id + '">' + T('groups.posts') + '</a></div>';
@@ -409,7 +409,7 @@
         for (var i = 0; i < list.length; i++) {
           var n = list[i];
           var a = n.actor || {};
-          var ic = n.type === 'like' ? 'heart' : n.type === 'comment' ? 'comment' : n.type === 'friend' ? 'user-plus' : n.type === 'message' ? 'envelope' : n.type === 'admin' ? 'bullhorn' : 'bell';
+          var ic = n.type === 'like' ? 'heart' : n.type === 'comment' ? 'comment' : n.type === 'friend' ? 'user-plus' : n.type === 'message' ? 'envelope' : n.type === 'admin' ? 'bullhorn' : n.type === 'badge' ? 'trophy' : 'bell';
           html += '<a class="notif' + (n.read ? '' : ' unread') + '" href="' + UI.attr(n.link || '#/notifications') + '">' +
             UI.avatar(a, 32) + '<div class="notif-main"><span class="who">' + UI.esc(a.displayName || a.username || '?') + '</span> ' + UI.esc(n.text) +
             '<div class="when">' + UI.timeAgo(n.created) + '</div></div><span class="type">' + UI.icon(ic) + '</span></a>';
@@ -426,6 +426,51 @@
         });
       });
     });
+  };
+
+  // -------------------------------------------------------------- bookmarks
+
+  views.bookmarks = function (main) {
+    var next = 0;
+    main.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('bookmark') + ' ' + T('nav.bookmarks') +
+      '<span class="right tiny muted" id="bm-total"></span></div>' +
+      '<div class="card-b" id="bm-list"><div class="center" style="padding:22px">' + UI.spinner() + '</div></div></div>' +
+      '<div id="bm-more"></div>';
+    var list = document.getElementById('bm-list');
+    var moreBox = document.getElementById('bm-more');
+    var totalBox = document.getElementById('bm-total');
+
+    function load(more) {
+      var url = '/api/bookmarks?limit=20' + (more && next ? '&before=' + encodeURIComponent(next) : '');
+      if (more) moreBox.innerHTML = '<div class="center" style="padding:10px">' + UI.spinner() + '</div>';
+      Api.request('GET', url, null, function (err, data) {
+        if (err) {
+          list.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>';
+          moreBox.innerHTML = '';
+          return;
+        }
+        var posts = data.posts || [];
+        if (totalBox) totalBox.textContent = T('bookmarks.count', data.total || 0);
+        if (!more) list.innerHTML = '';
+        if (!posts.length) {
+          if (!more) list.innerHTML = UI.empty('bookmark', T('bookmarks.empty'), T('bookmarks.emptyHint'));
+          moreBox.innerHTML = '';
+          return;
+        }
+        var html = '';
+        for (var i = 0; i < posts.length; i++) html += App.postHtml(posts[i]);
+        list.insertAdjacentHTML('beforeend', html);
+        App.bindPosts(list);
+        next = data.next || 0;
+        moreBox.innerHTML = data.hasMore
+          ? '<button type="button" class="load-more" id="bm-load">' + T('feed.loadMore') + '</button>'
+          : '<div class="center tiny muted" style="padding:10px">' + T('feed.noMore') + '</div>';
+        var b = document.getElementById('bm-load');
+        if (b) b.addEventListener('click', function () { load(true); });
+      });
+    }
+
+    load(false);
   };
 
   // -------------------------------------------------------------- settings
@@ -475,6 +520,20 @@
         '<div class="field"><label>' + T('settings.email') + '</label><input class="input" id="s-email" type="email" value="' + UI.attr(u.email || '') + '"></div>' +
         '<button class="btn btn-primary" id="save-profile">' + UI.icon('floppy-disk') + ' ' + T('settings.save') + '</button></div>';
 
+      html += '<div class="settings-block"><h3>' + T('settings.interests') + '</h3>' +
+        '<div class="hint" style="margin-bottom:8px">' + T('settings.interestsHint') + '</div>' +
+        '<div class="field"><label>' + UI.icon('gamepad') + ' ' + T('profile.favGames') + '</label><input class="input" id="s-favgames" maxlength="200" value="' + UI.attr(u.favGames || '') + '"></div>' +
+        '<div class="field"><label>' + UI.icon('film') + ' ' + T('profile.favMovies') + '</label><input class="input" id="s-favmovies" maxlength="200" value="' + UI.attr(u.favMovies || '') + '"></div>' +
+        '<div class="field"><label>' + UI.icon('music') + ' ' + T('profile.favMusic') + '</label><input class="input" id="s-favmusic" maxlength="200" value="' + UI.attr(u.favMusic || '') + '"></div>' +
+        '<div class="field"><label>' + UI.icon('book') + ' ' + T('profile.favBooks') + '</label><input class="input" id="s-favbooks" maxlength="200" value="' + UI.attr(u.favBooks || '') + '"></div>' +
+        '<div class="field"><label>' + UI.icon('face-smile') + ' ' + T('profile.mood') + '</label><select class="select" id="s-mood">' +
+        '<option value=""' + (!u.mood ? ' selected' : '') + '>' + T('common.none') + '</option>' +
+        '<option value="happy"' + (u.mood === 'happy' ? ' selected' : '') + '>' + T('mood.happy') + '</option>' +
+        '<option value="sad"' + (u.mood === 'sad' ? ' selected' : '') + '>' + T('mood.sad') + '</option>' +
+        '<option value="neutral"' + (u.mood === 'neutral' ? ' selected' : '') + '>' + T('mood.neutral') + '</option>' +
+        '</select></div>' +
+        '<button class="btn btn-primary" id="save-interests">' + UI.icon('floppy-disk') + ' ' + T('settings.save') + '</button></div>';
+
       html += '<div class="settings-block"><h3>' + T('settings.appearance') + '</h3>' +
         '<div class="field"><label>' + T('settings.theme') + '</label><div class="theme-picker">' + themeHtml + '</div></div>' +
         '<div class="field"><label>' + T('settings.language') + '</label><select class="select" id="s-lang">' + langHtml + '</select></div>' +
@@ -494,7 +553,7 @@
         '<button class="btn" id="change-pass">' + UI.icon('key') + ' ' + T('settings.changePassword') + '</button></div>';
 
       html += '<div class="settings-block"><h3>' + T('settings.account') + '</h3>' +
-        '<div class="tiny muted" style="margin-bottom:8px">@' + UI.esc(u.username) + ' В· ' + T('profile.joined') + ' ' + UI.formatDate(u.created) + '</div>' +
+        '<div class="tiny muted" style="margin-bottom:8px">@' + UI.esc(u.username) + ' · ' + T('profile.joined') + ' ' + UI.formatDate(u.created) + '</div>' +
         '<button class="btn btn-danger" id="logout-2">' + UI.icon('right-from-bracket') + ' ' + T('settings.logout') + '</button></div>';
 
       html += '</div></div></div>';
@@ -522,9 +581,8 @@
       }
 
       // profile save
-      var sp = document.getElementById('save-profile');
-      if (sp) sp.addEventListener('click', function () {
-        sp.disabled = true;
+      function saveProfile(btn) {
+        if (btn) btn.disabled = true;
         Api.request('POST', '/api/profile', {
           displayName: App.val('s-name'),
           status: App.val('s-status'),
@@ -534,9 +592,14 @@
           birthday: App.val('s-birthday'),
           gender: App.val('s-gender'),
           website: App.val('s-website'),
-          email: App.val('s-email')
+          email: App.val('s-email'),
+          favGames: App.val('s-favgames'),
+          favMovies: App.val('s-favmovies'),
+          favMusic: App.val('s-favmusic'),
+          favBooks: App.val('s-favbooks'),
+          mood: App.val('s-mood')
         }, function (e2, d2) {
-          sp.disabled = false;
+          if (btn) btn.disabled = false;
           if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
           state.user = d2.user;
           UI.toast(T('profile.saved'), 'ok');
@@ -544,7 +607,11 @@
           App.renderShell();
           App.route();
         });
-      });
+      }
+      var sp = document.getElementById('save-profile');
+      if (sp) sp.addEventListener('click', function () { saveProfile(sp); });
+      var sib = document.getElementById('save-interests');
+      if (sib) sib.addEventListener('click', function () { saveProfile(sib); });
 
       // themes
       var tds = document.querySelectorAll('[data-theme-pick]');
@@ -748,7 +815,8 @@
 
   function adminUsers(body) {
     var q = App.qs('q') || '';
-    body.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('users') + ' ' + T('admin.users') + '</div><div class="card-b">' +
+    body.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('users') + ' ' + T('admin.users') +
+      '<span class="right"><button class="btn btn-xs" id="adm-badges-recalc">' + UI.icon('trophy') + ' ' + T('admin.badgesRecalc') + '</button></span></div><div class="card-b">' +
       '<form id="adm-user-search" style="display:flex;gap:7px;margin-bottom:10px">' +
       '<input class="input" id="adm-q" type="search" value="' + UI.attr(q) + '" placeholder="' + UI.attr(T('people.search')) + '">' +
       '<button class="btn btn-primary" type="submit">' + T('common.search') + '</button></form>' +
@@ -757,6 +825,16 @@
       e.preventDefault();
       var v = document.getElementById('adm-q').value.trim();
       App.go('#/admin/users' + (v ? '?q=' + encodeURIComponent(v) : ''));
+    });
+    var recalc = document.getElementById('adm-badges-recalc');
+    if (recalc) recalc.addEventListener('click', function () {
+      recalc.disabled = true;
+      Api.request('POST', '/api/admin/badges/recalc', {}, function (err, data) {
+        recalc.disabled = false;
+        if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+        UI.toast(T('admin.badgesRecalcDone', (data && data.granted) || 0), 'ok');
+        SoundFX.play('success');
+      });
     });
     loadAdminUsers(q, 0, false);
   }
@@ -815,13 +893,13 @@
       body += '<div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">' +
         UI.avatar(u, 48) +
         '<div style="min-width:0"><div style="font-weight:700">' + UI.esc(u.displayName) + ' ' + UI.roleBadge(u.role) + '</div>' +
-        '<div class="tiny muted">@' + UI.esc(u.username) + ' В· #' + u.id + '</div>' +
-        '<div class="tiny muted">' + T('admin.aiPosts') + ' ' + u.posts + ' В· ' + T('profile.friends') + ' ' + u.friends +
-        ' В· ' + T('admin.sessions') + ' ' + (data.sessions || 0) + '</div></div></div>';
+        '<div class="tiny muted">@' + UI.esc(u.username) + ' · #' + u.id + '</div>' +
+        '<div class="tiny muted">' + T('admin.aiPosts') + ' ' + u.posts + ' · ' + T('profile.friends') + ' ' + u.friends +
+        ' · ' + T('admin.sessions') + ' ' + (data.sessions || 0) + '</div></div></div>';
 
       if (u.banned) {
         body += '<div class="alert err">' + UI.icon('ban') + ' ' + UI.esc(u.banReason || T('admin.ban')) +
-          (u.bannedUntil ? ' В· ' + T('admin.until') + ' ' + UI.formatDate(u.bannedUntil, true) : '') + '</div>';
+          (u.bannedUntil ? ' · ' + T('admin.until') + ' ' + UI.formatDate(u.bannedUntil, true) : '') + '</div>';
       }
 
       body += '<div class="field"><label>' + T('auth.displayName') + '</label><input class="input" id="au-name" maxlength="40" value="' + UI.attr(u.displayName) + '"></div>';
@@ -873,6 +951,26 @@
         body += '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
           '<button class="btn btn-danger btn-sm" id="au-purge">' + UI.icon('trash') + ' ' + T('admin.deleteForever') + '</button>' +
           '</div><div class="hint">' + T('admin.deleteForeverHint') + '</div>';
+
+        // achievements: auto ones are granted by the server, manual ones only here
+        var cat = (state.site && state.site.badges) || [];
+        if (cat.length) {
+          var owned = {};
+          var parts = String(u.badges || '').split(',');
+          for (var pi = 0; pi < parts.length; pi++) {
+            var pid = parts[pi].replace(/^\s+|\s+$/g, '');
+            if (pid) owned[pid] = true;
+          }
+          body += '<hr><div class="field"><label>' + UI.icon('trophy') + ' ' + T('admin.badges') + '</label><div class="badge-picker">';
+          for (var bi = 0; bi < cat.length; bi++) {
+            body += '<label class="check"><input type="checkbox" class="au-badge" value="' + UI.attr(cat[bi].id) + '"' +
+              (owned[cat[bi].id] ? ' checked' : '') + '> <span>' + UI.icon(cat[bi].icon) + ' ' +
+              UI.esc(T('badge.' + cat[bi].id)) +
+              (cat[bi].manual ? ' <em class="tiny muted">' + T('admin.badgeManual') + '</em>' : '') +
+              '</span></label>';
+          }
+          body += '</div></div>';
+        }
       }
 
       var close = UI.modal({
@@ -969,6 +1067,22 @@
           });
         }, true);
       });
+
+      var badgeBoxes = box.querySelectorAll('.au-badge');
+      for (var bbi = 0; bbi < badgeBoxes.length; bbi++) {
+        badgeBoxes[bbi].addEventListener('change', function () {
+          var input = this;
+          input.disabled = true;
+          Api.request('POST', '/api/admin/user', {
+            id: Number(u.id), action: 'badge', badge: input.value, on: input.checked
+          }, function (e2) {
+            input.disabled = false;
+            if (e2) { input.checked = !input.checked; UI.toast(Api.errorText(e2), 'err'); return; }
+            UI.toast(T('admin.saved'), 'ok');
+            SoundFX.play('success');
+          });
+        });
+      }
     });
   }
 
@@ -1014,10 +1128,10 @@
           : '<span class="badge err">' + UI.esc(s.providerLabel) + '</span>') + '</span></div>' +
         '<div class="card-b">' +
         '<div class="tiny muted" style="margin-bottom:8px">' + T('admin.aiLastAction') + ': ' +
-        (s.lastAction ? UI.esc(s.lastAction) + ' В· ' + UI.timeAgo(s.lastActionAt) : T('common.none')) + '</div>' +
+        (s.lastAction ? UI.esc(s.lastAction) + ' · ' + UI.timeAgo(s.lastActionAt) : T('common.none')) + '</div>' +
         (s.lastError ? '<div class="alert err" style="margin-bottom:8px">' + UI.esc(s.lastError) + '</div>' : '') +
-        '<div class="tiny muted">' + T('admin.aiImported') + ': ' + s.imported + ' В· ' + T('admin.aiNext') + ': ' +
-        (s.nextRun ? UI.timeAgo(s.nextRun) : 'вЂ”') + ' В· ' + T('admin.aiChain') + ': ' + s.chainPosts + ' ' + T('admin.aiPosts') + '</div>' +
+        '<div class="tiny muted">' + T('admin.aiImported') + ': ' + s.imported + ' · ' + T('admin.aiNext') + ': ' +
+        (s.nextRun ? UI.timeAgo(s.nextRun) : '—') + ' · ' + T('admin.aiChain') + ': ' + s.chainPosts + ' ' + T('admin.aiPosts') + '</div>' +
         '</div></div>';
 
       html += '<div class="card"><div class="card-h">' + UI.icon('sliders') + ' ' + T('admin.aiConfig') + '</div><div class="card-b">';
@@ -1127,7 +1241,7 @@
           test.disabled = false;
           test.innerHTML = UI.icon('plug-circle-check') + ' ' + T('admin.aiTest');
           if (e2) { UI.toast(T('admin.aiTestFail') + ': ' + (e2.message || Api.errorText(e2)), 'err'); return; }
-          UI.toast(T('admin.aiTestOk') + ' В· ' + d2.latencyMs + 'ms', 'ok');
+          UI.toast(T('admin.aiTestOk') + ' · ' + d2.latencyMs + 'ms', 'ok');
           SoundFX.play('success');
         });
       });
@@ -1214,7 +1328,7 @@
         field('cfg-footer', T('admin.footer'), s.footer) +
         field('cfg-support', T('admin.supportEmail'), s.supportEmail, 'email') +
         '<div class="field"><label>' + T('admin.motd') + '</label><textarea class="textarea" id="cfg-motd" rows="3">' + UI.esc(s.motd) + '</textarea></div>' +
-        select('cfg-lang', T('settings.language'), [['ru', 'Р СѓСЃСЃРєРёР№'], ['en', 'English'], ['uk', 'РЈРєСЂР°С—РЅСЃСЊРєР°'], ['lt', 'LietuviЕі']], s.defaultLanguage) +
+        select('cfg-lang', T('settings.language'), [['ru', 'Русский'], ['en', 'English'], ['uk', 'Українська'], ['lt', 'Lietuvių']], s.defaultLanguage) +
         select('cfg-theme', T('settings.theme'), [['light', T('theme.light')], ['dark', T('theme.dark')], ['oled', T('theme.oled')]], s.defaultTheme) +
         check('cfg-registration', T('admin.registrationOpen'), s.registration) +
         check('cfg-invite', T('admin.inviteOnly'), s.inviteOnly) +
@@ -1227,6 +1341,7 @@
         check('cfg-encrypt', T('admin.encryption'), sec.encryptApi) +
         check('cfg-adminprivate', T('admin.adminPrivateOnly'), sec.adminPrivateOnly) +
         check('cfg-hsts', T('admin.hsts'), sec.hsts) +
+        check('cfg-external', T('admin.externalMedia'), sec.externalMedia) +
         '<hr>' +
         '<div class="tiny muted" style="margin-bottom:6px">' + T('admin.rolesHint') + '</div>' +
         check('cfg-rolechange', T('admin.allowRoleChange'), sec.allowRoleChange) +
@@ -1326,6 +1441,7 @@
             encryptApi: document.getElementById('cfg-encrypt').checked,
             adminPrivateOnly: document.getElementById('cfg-adminprivate').checked,
             hsts: document.getElementById('cfg-hsts').checked,
+            externalMedia: document.getElementById('cfg-external').checked,
             allowRoleChange: document.getElementById('cfg-rolechange').checked,
             allowSelfDemote: document.getElementById('cfg-selfdemote').checked,
             allowSelfDelete: document.getElementById('cfg-selfdelete').checked,
@@ -1424,7 +1540,7 @@
         r.user ? ('<a href="#/u/' + encodeURIComponent(r.user.username) + '">' + UI.esc(r.user.displayName) + '</a>') : ('#' + r.target);
       h += '<div class="notif"><span class="type">' + UI.icon('flag') + '</span><div class="notif-main">' +
         '<span class="who">#' + r.id + ' ' + UI.esc(r.type) + '</span> ' + target +
-        '<div class="tiny muted" style="margin-top:3px">' + UI.esc(r.reason) + ' В· ' + UI.timeAgo(r.created) + ' В· ' + UI.esc(r.reporter ? r.reporter.displayName : '') + '</div>' +
+        '<div class="tiny muted" style="margin-top:3px">' + UI.esc(r.reason) + ' · ' + UI.timeAgo(r.created) + ' · ' + UI.esc(r.reporter ? r.reporter.displayName : '') + '</div>' +
         (r.status === 'open' ? '<div style="margin-top:5px"><button class="btn btn-xs btn-ok adm-close-report" data-id="' + r.id + '">' + T('admin.reportClose') + '</button></div>' : '<div class="tiny muted">closed</div>') +
         '</div></div>';
     }

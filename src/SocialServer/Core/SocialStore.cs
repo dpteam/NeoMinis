@@ -617,6 +617,11 @@ namespace Social.Core
                     p.Image = "";
                 }
                 MarkPosts();
+                // nobody can see the post any more, so saved copies go too
+                bool marksChanged = false;
+                for (int b = _bookmarks.Count - 1; b >= 0; b--)
+                    if (_bookmarks[b].Post == id) { _bookmarks.RemoveAt(b); marksChanged = true; }
+                if (marksChanged) MarkBookmarks();
                 return true;
             }
         }
@@ -1659,6 +1664,39 @@ namespace Social.Core
                 int n = 0;
                 for (int i = 0; i < _posts.Count; i++)
                     if (!_posts[i].Deleted && _posts[i].Likes.Contains(userId)) n++;
+                return n;
+            }
+        }
+
+        public int CountLikesReceived(long userId)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _posts.Count; i++)
+                    if (!_posts[i].Deleted && _posts[i].Author == userId) n += _posts[i].Likes.Count;
+                return n;
+            }
+        }
+
+        public int CountCommentsBy(long userId)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _comments.Count; i++)
+                    if (!_comments[i].Deleted && _comments[i].Author == userId) n++;
+                return n;
+            }
+        }
+
+        public int CountMessagesBy(long userId)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _messages.Count; i++)
+                    if (_messages[i].From == userId) n++;
                 return n;
             }
         }

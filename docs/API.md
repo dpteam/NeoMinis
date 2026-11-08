@@ -99,27 +99,65 @@ permission, `404` missing, `409` conflict, `413` too large, `429` rate limit,
 | GET | `/api/feed` | `tab=home|global|friends`, `before`, `limit` | `{ tab, posts[], hasMore, next }` |
 | GET | `/api/wall` | `user`, `before`, `limit` | `{ user, posts[], hasMore, next, canPost }` |
 | GET | `/api/post` | `id` | `{ post, comments[] }` |
-| POST | `/api/post` | `body`, `image`, `visibility`, `wall`, `group` | `{ post }` |
+| POST | `/api/post` | `body`, `image`, `video`, `visibility`, `wall`, `group` | `{ post }` |
 | POST | `/api/post/delete` | `id` | `{ ok }` |
 | POST | `/api/like` | `id` | `{ liked, likes }` |
 | GET | `/api/comments` | `post`, `before`, `limit` | `{ comments[], hasMore, next }` |
 | POST | `/api/comment` | `post`, `body` | `{ comment, comments }` |
 | POST | `/api/comment/delete` | `id` | `{ ok }` |
+| GET | `/api/bookmarks` | `before`, `limit` | `{ posts[], hasMore, next, total }` |
+| POST | `/api/bookmark` | `id` | `{ bookmarked, total }` |
 
 `visibility`: `public` (default) · `friends` · `private`.
 `wall`: post to someone else's wall (friends only). `group`: post into a group you
-belong to (wins over `wall`).
+belong to (wins over `wall`). `video`: an `http(s)` link; YouTube links get a
+thumbnail card, `.mp4`/`.webm`/`.ogv` files play inline, everything else becomes a
+link card.
+
+Bookmarks are per user and private: `POST /api/bookmark` toggles the saved state
+of a post and the reply tells you the new state and the total saved count.
 
 ### Profiles, people, search
 
 | Method | Path | Body / query | Result |
 | --- | --- | --- | --- |
 | GET | `/api/profile` | `user` or `username` | `{ user, posts[], friends[], groups[], canPost }` |
-| POST | `/api/profile` | `displayName`, `bio`, `city`, `country`, `birthday`, `gender`, `website`, `email`, `status` | `{ user }` |
+| POST | `/api/profile` | `displayName`, `bio`, `city`, `country`, `birthday`, `gender`, `website`, `email`, `status`, `favGames`, `favMovies`, `favMusic`, `favBooks`, `mood` | `{ user }` |
 | GET | `/api/people` | `q`, `offset`, `limit` | `{ users[], total, offset, hasMore }` |
 | GET | `/api/search` | `q` (≥ 2 chars) | `{ users[], posts[] }` |
 
 `birthday` must be `YYYY-MM-DD`; `gender` is `m` / `f` / `other` / empty.
+`mood` is `happy` / `sad` / `neutral` / empty. The four `fav*` fields are free text
+(≤ 200 chars) and, like the rest of the private block, are only returned when the
+viewer is the owner, staff, a friend, or the profile is public.
+
+### Achievements
+
+`site.badges` (handshake) lists the catalogue: `{ id, icon, manual }`. Badges live
+on the user as a comma separated string (`user.badges`), the same format DeadVK
+used, so imported profiles keep theirs. Auto badges are granted by the server as
+soon as the counter is reached; manual ones only by an administrator.
+
+| Id | Icon | Rule |
+| --- | --- | --- |
+| `first_post` | `pen-nib` | 1 post |
+| `author` | `feather` | 10 posts |
+| `writer` | `book-open` | 100 posts |
+| `commenter` | `comment-dots` | 10 comments |
+| `liker` | `heart-circle-plus` | 50 likes given |
+| `lover` | `heart` | 10 likes received |
+| `social` | `user-group` | 5 friends |
+| `popular` | `fire` | 25 friends |
+| `collector` | `bookmark` | 10 bookmarks |
+| `chatter` | `comments` | 100 messages sent |
+| `veteran` | `clock-rotate-left` | account older than 365 days |
+| `verified` | `circle-check` | manual |
+| `admin_grant` | `user-shield` | manual |
+
+`GET /api/admin/user?id=` returns `badges`; `POST /api/admin/user` with
+`action=badge`, `badge=<id>`, `on=true|false` grants or revokes one.
+`POST /api/admin/badges/recalc` walks every account and grants whatever has been
+earned (useful after an import or a rule change).
 
 ### Friends
 
@@ -197,12 +235,18 @@ Administrator: additionally `user` (destructive actions), `broadcast`, `reload`,
 | POST | `/api/admin/reload` | — | `{ warnings[] }` (port/bind/root need a restart) |
 | POST | `/api/admin/backup` | — | `{ path }` |
 | POST | `/api/admin/repair` | — | storage state after a forced save |
+| GET | `/api/admin/user` | `id` | user, `sessions`, `bookmarks`, role policy flags |
+| GET | `/api/admin/settings` | — | the whole config, grouped for the Settings tab |
+| POST | `/api/admin/settings/save` | grouped config | `{ warnings[] }` (written back to `config.ini`) |
+| POST | `/api/admin/badges/recalc` | — | `{ granted, users }` |
 
 `action`: `ban` (`days` 0 = forever) · `unban` · `role` (`user|moderator|admin`) ·
-`warn` · `reset` (new recovery code) · `delete` (soft delete).
+`grant-admin` · `revoke-admin` · `grant-mod` · `badge` (`badge`, `on`) ·
+`warn` · `reset` (new recovery code) · `delete` (soft delete) · `purge` (hard delete).
 
 Guards: the last administrator cannot be banned, demoted or deleted; nobody can
-ban or delete themselves.
+ban or delete themselves; role changes respect `allowRoleChange`, `allowSelfDemote`
+and `protectLastAdmin` from the config.
 
 ---
 

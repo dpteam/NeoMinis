@@ -13,16 +13,17 @@ limits from `config.ini` and ship your own network.
 
 | Area | What you get |
 | --- | --- |
-| **Feed** | home / everything / friends-only tabs, posts with images, likes, comments, visibility (`public` / `friends` / `private`), delete with cascade |
-| **Profiles** | avatar, status, bio, city/country, birthday, gender, website, privacy level, friends wall |
+| **Feed** | home / everything / friends-only tabs, posts with images and video links (YouTube previews, inline mp4/webm), likes, comments, visibility (`public` / `friends` / `private`), delete with cascade |
+| **Profiles** | avatar, status, bio, city/country, birthday, gender, website, interests (games / films / music / books), mood, achievements, privacy level, friends wall |
 | **Friends** | requests, accept/decline, remove, block, incoming/outgoing lists |
 | **Messages** | private conversations, thread list with unread counters, polling |
 | **Groups** | public/private groups, membership, group feed, owner role |
-| **Notifications** | likes, comments, friend requests, messages, admin broadcasts, reports |
+| **Notifications** | likes, comments, friend requests, messages, badges, admin broadcasts, reports |
 | **Search** | people and public posts, plus a top-bar quick search |
-| **Bookmarks** | save any post, a dedicated list |
+| **Bookmarks** | toggle "save" on any post, a dedicated list with paging |
+| **Achievements** | 13 badges, auto-granted from activity (posts, comments, likes, friends, messages, bookmarks, age) plus manual awards; admin can grant/revoke any badge |
 | **AI citizens** | imported personas that post / comment / like on their own — Markov chain or any OpenAI-compatible endpoint (LM Studio, Ollama, OpenAI, OpenRouter). Off by default. See [docs/AI.md](docs/AI.md) |
-| **Admin** | **separate board on its own port** — dashboard, users (ban / unban / role / warn / reset / delete), reports queue, live log tail, broadcast, backup, storage repair, config reload |
+| **Admin** | **separate board on its own port** — dashboard, users (ban / unban / grant or revoke admin & moderator / warn / reset / badges / delete), reports queue, live log tail, broadcast, backup, storage repair, config reload, AI panel, and a Settings tab that writes straight back to `config.ini` |
 | **Themes** | `light` / `dark` / `oled`, instant switch, remembered per user |
 | **Sounds** | WebAudio synth (no audio files): click, post, like, comment, message, notification, friend, login, error, success, theme — with per-event toggles and volume |
 | **i18n** | Russian, English, Ukrainian, Lithuanian; auto-detect + selector |

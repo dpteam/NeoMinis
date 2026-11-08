@@ -693,7 +693,10 @@ namespace Social.Web
             resp.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
             resp.Set("Content-Security-Policy",
                 "default-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; " +
-                "object-src 'none'; img-src 'self' data: blob:; media-src 'self'; " +
+                "object-src 'none'; " +
+                (_cfg.ExternalMedia
+                    ? "img-src 'self' data: blob: https:; media-src 'self' https:; "
+                    : "img-src 'self' data: blob:; media-src 'self'; ") +
                 "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " +
                 "font-src 'self' https://cdnjs.cloudflare.com data:; " +
                 "script-src 'self'; connect-src 'self'");

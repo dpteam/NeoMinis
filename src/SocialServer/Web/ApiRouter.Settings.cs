@@ -37,6 +37,7 @@ namespace Social.Web
                 .Prop("encryptApi", _cfg.EncryptApi)
                 .Prop("adminPrivateOnly", _cfg.AdminPrivateOnly)
                 .Prop("hsts", _cfg.Hsts)
+                .Prop("externalMedia", _cfg.ExternalMedia)
                 .Prop("allowRoleChange", _cfg.AllowRoleChange)
                 .Prop("allowSelfDemote", _cfg.AllowSelfDemote)
                 .Prop("allowSelfDelete", _cfg.AllowSelfDelete)
@@ -216,6 +217,11 @@ namespace Social.Web
                 {
                     _cfg.Hsts = Json.GetBool(security, "hsts", _cfg.Hsts);
                     _cfg.SetIniValue("security", "hsts", _cfg.Hsts ? "true" : "false");
+                }
+                if (security.ContainsKey("externalMedia"))
+                {
+                    _cfg.ExternalMedia = Json.GetBool(security, "externalMedia", _cfg.ExternalMedia);
+                    _cfg.SetIniValue("security", "externalMedia", _cfg.ExternalMedia ? "true" : "false");
                 }
                 if (security.ContainsKey("allowRoleChange"))
                 {
