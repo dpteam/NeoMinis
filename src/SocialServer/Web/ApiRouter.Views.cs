@@ -51,6 +51,9 @@ namespace Social.Web
             b.Prop("friends", _store.CountFriends(u.Id));
             b.Prop("posts", _store.CountPosts(u.Id));
             b.Prop("canMessage", CanMessageUser(viewer, u));
+            b.Prop("mood", u.Mood);
+            b.Prop("legacySource", u.LegacySource);
+            if (!string.IsNullOrEmpty(u.Badges)) b.Prop("badges", u.Badges);
             if (self || staff) b.Prop("lastSeen", Util.Iso(u.LastSeen));
             else if (!u.HideOnline) b.Prop("lastSeen", Util.Iso(u.LastSeen));
             else b.Prop("lastSeen", "");
@@ -64,6 +67,11 @@ namespace Social.Web
                 b.Prop("birthday", showPrivate ? u.Birthday : "");
                 b.Prop("gender", showPrivate ? u.Gender : "");
                 b.Prop("website", showPrivate ? u.Website : "");
+                b.Prop("favGames", showPrivate ? u.FavGames : "");
+                b.Prop("favMovies", showPrivate ? u.FavMovies : "");
+                b.Prop("favMusic", showPrivate ? u.FavMusic : "");
+                b.Prop("favBooks", showPrivate ? u.FavBooks : "");
+                b.Prop("persona", showPrivate ? u.Persona : "");
                 b.Prop("created", Util.Iso(u.Created));
                 b.Prop("karma", u.Karma);
                 b.Prop("likes", _store.CountLikesGiven(u.Id));
@@ -115,6 +123,7 @@ namespace Social.Web
             b.Prop("group", p.Group);
             b.Prop("body", p.Body);
             b.Prop("image", p.Image);
+            b.Prop("video", p.Video);
             b.Prop("created", Util.Iso(p.Created));
             b.Prop("edited", p.Edited == DateTime.MinValue ? "" : Util.Iso(p.Edited));
             b.Prop("visibility", p.Visibility);
@@ -124,6 +133,8 @@ namespace Social.Web
             b.Prop("canDelete", CanDeletePost(viewer, p));
             b.Prop("canComment", viewer != null && _store.VisibleTo(viewer.Id, p));
             b.Prop("pinned", p.Pinned);
+            b.Prop("bookmarked", viewer != null && _store.IsBookmarked(viewer.Id, p.Id));
+            b.Prop("legacySource", p.LegacySource);
             if (p.Wall > 0)
             {
                 User wallUser = _store.FindUser(p.Wall);

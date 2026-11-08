@@ -193,6 +193,16 @@ namespace Social.Core
             return dot > at + 1 && dot < email.Length - 1;
         }
 
+        public static bool IsHttpUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return false;
+            string u = url.Trim();
+            if (u.Length < 8 || u.Length > 2000) return false;
+            if (u.IndexOf(' ') >= 0) return false;
+            return u.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                   u.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        }
+
         public static string HumanSize(long bytes)
         {
             if (bytes < 1024) return bytes.ToString(CultureInfo.InvariantCulture) + " B";

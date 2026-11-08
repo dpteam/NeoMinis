@@ -15,6 +15,8 @@ namespace Social
         public readonly StatsStore Stats;
         public readonly CaptchaStore Captcha;
         public readonly MediaStore Media;
+        public readonly AiEngine Ai;
+        public readonly AiRunner AiRunner;
 
         /// <summary>Public board (feed, profiles, media) — expose this one.</summary>
         public readonly WebServer WebPublic;
@@ -34,9 +36,11 @@ namespace Social
             Stats = new StatsStore(cfg);
             Captcha = new CaptchaStore(5000, 300);
             Media = new MediaStore(cfg);
-            WebPublic = new WebServer(cfg, Store, Sessions, Stats, Captcha, Media, WebRole.Public);
+            Ai = new AiEngine(cfg, Store);
+            AiRunner = new AiRunner(cfg, Store, Ai);
+            WebPublic = new WebServer(cfg, Store, Sessions, Stats, Captcha, Media, Ai, AiRunner, WebRole.Public);
             WebAdmin = cfg.AdminEnabled
-                ? new WebServer(cfg, Store, Sessions, Stats, Captcha, Media, WebRole.Admin)
+                ? new WebServer(cfg, Store, Sessions, Stats, Captcha, Media, Ai, AiRunner, WebRole.Admin)
                 : null;
         }
 
@@ -73,6 +77,7 @@ namespace Social
 
                 _supervisor = new AppSupervisor(this);
                 _supervisor.Start();
+                AiRunner.Start();
                 Log.Info("APP", Config.SiteName + " " + ApiRouter.Version + " started: public " + WebPublic.Port +
                                   (WebAdmin != null ? ", admin " + WebAdmin.Port : ", admin disabled") +
                                   " (users " + Store.CountUsers() + ", online " + Store.CountOnline(Config.OnlineWindowSec) + ")");
@@ -91,6 +96,7 @@ namespace Social
             _shuttingDown = true;
             Log.Info("APP", "shutdown requested");
             try { if (_supervisor != null) _supervisor.Stop(); } catch { }
+            try { AiRunner.Stop(); } catch { }
             try { WebPublic.Stop(); } catch { }
             try { if (WebAdmin != null) WebAdmin.Stop(); } catch { }
             try { Store.SaveNow(); } catch (Exception ex) { Log.Error("APP", "final save failed: " + ex.Message); }

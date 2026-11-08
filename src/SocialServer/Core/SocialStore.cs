@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -29,13 +29,14 @@ namespace Social.Core
         private readonly List<Notification> _notifications = new List<Notification>();
         private readonly List<Group> _groups = new List<Group>();
         private readonly List<Report> _reports = new List<Report>();
+        private readonly List<Bookmark> _bookmarks = new List<Bookmark>();
         private Meta _meta = new Meta();
 
         private readonly Dictionary<long, User> _userById = new Dictionary<long, User>();
         private readonly Dictionary<string, User> _userByName = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
 
         private bool _dirtyUsers, _dirtyPosts, _dirtyComments, _dirtyFriends, _dirtyMessages;
-        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyMeta;
+        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta;
         private bool _readOnly;
         private string _saveError = "";
         private DateTime _lastSave = DateTime.MinValue;
@@ -61,7 +62,7 @@ namespace Social.Core
                 lock (_sync)
                 {
                     return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
-                           _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyMeta;
+                           _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta;
                 }
             }
         }
@@ -104,6 +105,8 @@ namespace Social.Core
                 _groups.AddRange(LoadTable("groups.json", GroupFromDict));
                 _reports.Clear();
                 _reports.AddRange(LoadTable("reports.json", ReportFromDict));
+                _bookmarks.Clear();
+                _bookmarks.AddRange(LoadTable("bookmarks.json", BookmarkFromDict));
 
                 // sort newest first, keeping the hot queries cheap
                 _posts.Sort(delegate(Post a, Post b) { return b.Id.CompareTo(a.Id); });
@@ -114,12 +117,12 @@ namespace Social.Core
                 EnsureCounters();
                 _loaded = true;
                 _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = false;
+                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = false;
 
                 Log.Info("DATA", "loaded users=" + _users.Count + " posts=" + _posts.Count +
                                   " comments=" + _comments.Count + " friends=" + _friends.Count +
                                   " messages=" + _messages.Count + " groups=" + _groups.Count +
-                                  " reports=" + _reports.Count);
+                                  " reports=" + _reports.Count + " bookmarks=" + _bookmarks.Count);
             }
         }
 
@@ -273,6 +276,7 @@ namespace Social.Core
                     if (force || _dirtyNotifications) WriteTable("notifications.json", NotificationsToArray());
                     if (force || _dirtyGroups) WriteTable("groups.json", GroupsToArray());
                     if (force || _dirtyReports) WriteTable("reports.json", ReportsToArray());
+                    if (force || _dirtyBookmarks) WriteTable("bookmarks.json", BookmarksToArray());
 
                     _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
                     _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = false;
@@ -300,7 +304,7 @@ namespace Social.Core
         private bool HasDirtyLocked()
         {
             return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
-                   _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyMeta;
+                   _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta;
         }
 
         private void WriteTable(string file, object value)
@@ -346,6 +350,7 @@ namespace Social.Core
         private void MarkNotifications() { _dirtyNotifications = true; }
         private void MarkGroups() { _dirtyGroups = true; }
         private void MarkReports() { _dirtyReports = true; }
+        private void MarkBookmarks() { _dirtyBookmarks = true; }
 
         // ============================================================== users
 
@@ -1461,6 +1466,109 @@ namespace Social.Core
             }
         }
 
+        // =========================================================== bookmarks
+
+        public bool IsBookmarked(long userId, long postId)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _bookmarks.Count; i++)
+                    if (_bookmarks[i].User == userId && _bookmarks[i].Post == postId) return true;
+                return false;
+            }
+        }
+
+        public bool ToggleBookmark(long userId, long postId)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _bookmarks.Count; i++)
+                {
+                    if (_bookmarks[i].User != userId || _bookmarks[i].Post != postId) continue;
+                    _bookmarks.RemoveAt(i);
+                    MarkBookmarks();
+                    return false;
+                }
+                Bookmark b = new Bookmark();
+                b.User = userId;
+                b.Post = postId;
+                b.Created = DateTime.UtcNow;
+                _bookmarks.Insert(0, b);
+                MarkBookmarks();
+                return true;
+            }
+        }
+
+        public List<Post> BookmarksFor(long userId, long before, int limit)
+        {
+            List<Post> list = new List<Post>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _bookmarks.Count && list.Count < limit; i++)
+                {
+                    Bookmark b = _bookmarks[i];
+                    if (b.User != userId) continue;
+                    if (before > 0 && b.Post >= before) continue;
+                    Post p = FindPost(b.Post);
+                    if (p == null || p.Deleted) continue;
+                    list.Add(p);
+                }
+            }
+            return list;
+        }
+
+        public int CountBookmarks(long userId)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _bookmarks.Count; i++) if (_bookmarks[i].User == userId) n++;
+                return n;
+            }
+        }
+
+        // ======================================================= legacy lookup
+
+        public User FindUserByLegacy(string source, string legacyId)
+        {
+            if (string.IsNullOrEmpty(legacyId)) return null;
+            lock (_sync)
+            {
+                for (int i = 0; i < _users.Count; i++)
+                {
+                    User u = _users[i];
+                    if (u.LegacySource == source && u.LegacyId == legacyId) return u;
+                }
+                return null;
+            }
+        }
+
+        public Post FindPostByLegacy(string source, string legacyId)
+        {
+            if (string.IsNullOrEmpty(legacyId)) return null;
+            lock (_sync)
+            {
+                for (int i = 0; i < _posts.Count; i++)
+                {
+                    Post p = _posts[i];
+                    if (p.LegacySource == source && p.LegacyId == legacyId) return p;
+                }
+                return null;
+            }
+        }
+
+        public int CountImported()
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _users.Count; i++)
+                    if (!string.IsNullOrEmpty(_users[i].LegacySource)) n++;
+                return n;
+            }
+        }
+
         // ============================================================ counters
 
         public int CountFriends(long userId)
@@ -1588,6 +1696,9 @@ namespace Social.Core
             d["email"] = u.Email; d["ipHash"] = u.IpHash; d["loginCount"] = u.LoginCount;
             d["deleted"] = u.Deleted; d["lastPostAt"] = u.LastPostAt; d["lastCommentAt"] = u.LastCommentAt;
             d["lastMessageAt"] = u.LastMessageAt;
+            d["favGames"] = u.FavGames; d["favMovies"] = u.FavMovies; d["favMusic"] = u.FavMusic;
+            d["favBooks"] = u.FavBooks; d["persona"] = u.Persona; d["mood"] = u.Mood;
+            d["badges"] = u.Badges; d["legacySource"] = u.LegacySource; d["legacyId"] = u.LegacyId;
             return d;
         }
 
@@ -1630,6 +1741,15 @@ namespace Social.Core
             u.LastPostAt = Json.GetDate(d, "lastPostAt", DateTime.MinValue);
             u.LastCommentAt = Json.GetDate(d, "lastCommentAt", DateTime.MinValue);
             u.LastMessageAt = Json.GetDate(d, "lastMessageAt", DateTime.MinValue);
+            u.FavGames = Json.GetString(d, "favGames", "");
+            u.FavMovies = Json.GetString(d, "favMovies", "");
+            u.FavMusic = Json.GetString(d, "favMusic", "");
+            u.FavBooks = Json.GetString(d, "favBooks", "");
+            u.Persona = Json.GetString(d, "persona", "");
+            u.Mood = Json.GetString(d, "mood", "");
+            u.Badges = Json.GetString(d, "badges", "");
+            u.LegacySource = Json.GetString(d, "legacySource", "");
+            u.LegacyId = Json.GetString(d, "legacyId", "");
             return u;
         }
 
@@ -1641,9 +1761,11 @@ namespace Social.Core
                 Post p = _posts[i];
                 Dictionary<string, object> d = new Dictionary<string, object>();
                 d["id"] = p.Id; d["author"] = p.Author; d["wall"] = p.Wall; d["group"] = p.Group;
-                d["body"] = p.Body; d["image"] = p.Image; d["created"] = p.Created; d["edited"] = p.Edited;
+                d["body"] = p.Body; d["image"] = p.Image; d["video"] = p.Video;
+                d["created"] = p.Created; d["edited"] = p.Edited;
                 d["visibility"] = p.Visibility; d["likes"] = p.Likes; d["comments"] = p.Comments;
                 d["deleted"] = p.Deleted; d["pinned"] = p.Pinned;
+                d["legacySource"] = p.LegacySource; d["legacyId"] = p.LegacyId;
                 list.Add(d);
             }
             return list;
@@ -1664,6 +1786,9 @@ namespace Social.Core
             p.Comments = Json.GetInt(d, "comments", 0);
             p.Deleted = Json.GetBool(d, "deleted", false);
             p.Pinned = Json.GetBool(d, "pinned", false);
+            p.Video = Json.GetString(d, "video", "");
+            p.LegacySource = Json.GetString(d, "legacySource", "");
+            p.LegacyId = Json.GetString(d, "legacyId", "");
             object likes = Json.Get(d, "likes");
             List<object> arr = likes as List<object>;
             if (arr != null)
@@ -1833,6 +1958,29 @@ namespace Social.Core
             return g;
         }
 
+        private List<object> BookmarksToArray()
+        {
+            List<object> list = new List<object>(_bookmarks.Count);
+            for (int i = 0; i < _bookmarks.Count; i++)
+            {
+                Bookmark b = _bookmarks[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["user"] = b.User; d["post"] = b.Post; d["created"] = b.Created;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static Bookmark BookmarkFromDict(Dictionary<string, object> d)
+        {
+            Bookmark b = new Bookmark();
+            b.User = Json.GetLong(d, "user", 0);
+            b.Post = Json.GetLong(d, "post", 0);
+            b.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            if (b.User <= 0 || b.Post <= 0) return null;
+            return b;
+        }
+
         private List<object> ReportsToArray()
         {
             List<object> list = new List<object>(_reports.Count);
@@ -1865,3 +2013,4 @@ namespace Social.Core
         }
     }
 }
+

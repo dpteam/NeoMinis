@@ -21,6 +21,12 @@ namespace Social.Web
             if (sub == "reload") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminReload(ctx); return; }
             if (sub == "backup") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminBackup(ctx); return; }
             if (sub == "repair") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminRepair(ctx); return; }
+            if (sub == "ai") { HandleAdminAi(ctx); return; }
+            if (sub == "ai/config") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminAiConfig(ctx); return; }
+            if (sub == "ai/test") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminAiTest(ctx); return; }
+            if (sub == "ai/step") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminAiStep(ctx); return; }
+            if (sub == "ai/persona") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminAiPersona(ctx); return; }
+            if (sub == "import") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminImport(ctx); return; }
             throw new ApiException(404, "unknown-endpoint", "Unknown admin endpoint");
         }
 

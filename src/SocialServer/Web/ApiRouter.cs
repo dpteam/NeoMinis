@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -21,6 +21,8 @@ namespace Social.Web
         private readonly StatsStore _stats;
         private readonly CaptchaStore _captcha;
         private readonly MediaStore _media;
+        private readonly AiEngine _ai;
+        private readonly AiRunner _aiRunner;
         private readonly NonceCache _preAuthNonces = new NonceCache(TimeSpan.FromMinutes(10), 20000);
         private readonly Dictionary<string, ActionWindow> _actions = new Dictionary<string, ActionWindow>(StringComparer.Ordinal);
         private readonly Dictionary<string, ActionWindow> _registerRate = new Dictionary<string, ActionWindow>(StringComparer.Ordinal);
@@ -28,7 +30,7 @@ namespace Social.Web
         private static readonly DateTime StartedUtc = DateTime.UtcNow;
 
         public ApiRouter(WebServer web, Config cfg, SocialStore store, SessionManager sessions,
-                         StatsStore stats, CaptchaStore captcha, MediaStore media)
+                         StatsStore stats, CaptchaStore captcha, MediaStore media, AiEngine ai, AiRunner aiRunner)
         {
             _web = web;
             _cfg = cfg;
@@ -37,6 +39,8 @@ namespace Social.Web
             _stats = stats;
             _captcha = captcha;
             _media = media;
+            _ai = ai;
+            _aiRunner = aiRunner;
         }
 
         private sealed class ApiCtx
@@ -521,6 +525,8 @@ namespace Social.Web
             if (r == "post") { HandlePost(ctx); return; }
             if (r == "post/delete") { RequireMethod(m, "POST"); HandlePostDelete(ctx); return; }
             if (r == "like") { RequireMethod(m, "POST"); HandleLike(ctx); return; }
+            if (r == "bookmarks") { RequireMethod(m, "GET"); HandleBookmarks(ctx); return; }
+            if (r == "bookmark") { RequireMethod(m, "POST"); HandleBookmark(ctx); return; }
             if (r == "comments") { RequireMethod(m, "GET"); HandleComments(ctx); return; }
             if (r == "comment") { RequireMethod(m, "POST"); HandleComment(ctx); return; }
             if (r == "comment/delete") { RequireMethod(m, "POST"); HandleCommentDelete(ctx); return; }
@@ -786,3 +792,4 @@ namespace Social.Web
         }
     }
 }
+

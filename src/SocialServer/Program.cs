@@ -80,6 +80,31 @@ namespace Social
                     Log.Configure(cfg);
                     return ResetAdmin(cfg, args[++i]);
                 }
+                else if (a.Equals("--import-deadvk", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                {
+                    string dbDir = args[++i];
+                    bool withImages = true;
+                    for (int j = 0; j < args.Length; j++)
+                        if (args[j].Equals("--no-images", StringComparison.OrdinalIgnoreCase)) withImages = false;
+
+                    Log.Configure(cfg);
+                    Console.WriteLine("Importing DeadVK database from " + dbDir + (withImages ? "" : " (images skipped)"));
+                    try
+                    {
+                        DeadVkImport.Report report = DeadVkImport.Run(cfg, dbDir, withImages);
+                        Console.WriteLine("Done: " + report.Summary());
+                        Console.WriteLine("Took " + (report.Finished - report.Started).TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture) + "s");
+                        for (int w = 0; w < report.Warnings.Count && w < 10; w++) Console.WriteLine("  ! " + report.Warnings[w]);
+                        Log.Shutdown();
+                        return 0;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Import failed: " + ex.Message);
+                        Log.Shutdown();
+                        return 1;
+                    }
+                }
                 else if (a.Equals("--backup", StringComparison.OrdinalIgnoreCase))
                 {
                     Log.Configure(cfg);
@@ -88,6 +113,31 @@ namespace Social
                     string dir = store.CreateBackup();
                     Console.WriteLine(dir == null ? "backup failed" : "backup: " + dir);
                     return dir == null ? 1 : 0;
+                }
+                else if (a.Equals("--import-deadvk", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                {
+                    string dbDir = args[++i];
+                    bool withImages = true;
+                    for (int j = 0; j < args.Length; j++)
+                        if (args[j].Equals("--no-images", StringComparison.OrdinalIgnoreCase)) withImages = false;
+
+                    Log.Configure(cfg);
+                    Console.WriteLine("Importing DeadVK database from " + dbDir + (withImages ? "" : " (images skipped)"));
+                    try
+                    {
+                        DeadVkImport.Report report = DeadVkImport.Run(cfg, dbDir, withImages);
+                        Console.WriteLine("Done: " + report.Summary());
+                        Console.WriteLine("Took " + (report.Finished - report.Started).TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture) + "s");
+                        for (int w = 0; w < report.Warnings.Count && w < 10; w++) Console.WriteLine("  ! " + report.Warnings[w]);
+                        Log.Shutdown();
+                        return 0;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Import failed: " + ex.Message);
+                        Log.Shutdown();
+                        return 1;
+                    }
                 }
             }
 
@@ -217,7 +267,11 @@ namespace Social
             Console.WriteLine("  --config <path>       use another config.ini (its folder is the base)");
             Console.WriteLine("  --data <path>         base directory for config/data/logs/public");
             Console.WriteLine("  --reset-admin <user>  promote a user to administrator (offline)");
+            Console.WriteLine("  --import-deadvk <dir> import a DeadVK database (users, posts, messages)");
+            Console.WriteLine("  --no-images           with --import-deadvk: skip avatars and post images");
             Console.WriteLine("  --backup              create a data snapshot and exit");
+            Console.WriteLine("  --import-deadvk <dir> import a DeadVK database (users, posts, messages...)");
+            Console.WriteLine("  --no-images           with --import-deadvk: skip avatars and post images");
             Console.WriteLine("  --selftest            run crypto/storage tests and exit");
             Console.WriteLine("  --no-console          do not attach the TUI (services, CI)");
             Console.WriteLine("  --version             print version");

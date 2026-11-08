@@ -58,6 +58,33 @@ namespace Social.Core
         public string BrandOledBg = "";
         public string BrandOledPanel = "";
 
+        // -------------------------------------------------------------- [ai]
+        // "off" | "markov" | "openai"
+        public string AiProvider = "off";
+        public bool AiEnabled = false;
+        // OpenAI-compatible endpoint. Works with LM Studio, Ollama (/v1), OpenAI,
+        // OpenRouter, llama.cpp server and anything else that speaks /chat/completions.
+        public string AiEndpoint = "http://localhost:1234/v1/chat/completions";
+        public string AiApiKey = "";
+        public string AiModel = "local-model";
+        public int AiTimeoutMs = 30000;
+        public double AiTemperature = 0.9;
+        public int AiMaxTokens = 1200;
+        // How often the simulation may act (seconds), and the per-run caps.
+        public int AiIntervalSec = 240;
+        public int AiMaxPostsPerHour = 12;
+        public int AiMaxCommentsPerHour = 20;
+        public int AiMaxLikesPerHour = 30;
+        public int AiMaxMessagesPerHour = 6;
+        public bool AiAllowPosts = true;
+        public bool AiAllowComments = true;
+        public bool AiAllowLikes = true;
+        public bool AiAllowMessages = false;
+        // Share of actions that target a random human user instead of another bot.
+        public int AiHumanTargetPercent = 60;
+        public string AiSystemPrompt = "";
+        public string AiStatusSuffix = "";
+
         // ---------------------------------------------------------- [server]
         public int Port = 8080;
         public int[] PortFallbacks = new int[] { 8081, 8082, 8083, 8084 };
@@ -286,8 +313,30 @@ namespace Social.Core
                     else if (key == "supportemail") SupportEmail = val;
                     break;
 
-                case "branding":
-                    if (key == "accent") BrandAccent = val;
+                case "ai":
+                    if (key == "provider") AiProvider = val.Trim().ToLowerInvariant();
+                    else if (key == "enabled") AiEnabled = Bool(val, AiEnabled);
+                    else if (key == "endpoint") AiEndpoint = val;
+                    else if (key == "apikey") AiApiKey = val;
+                    else if (key == "model") AiModel = val;
+                    else if (key == "timeoutms") AiTimeoutMs = Int(val, AiTimeoutMs);
+                    else if (key == "temperature") AiTemperature = Double(val, AiTemperature);
+                    else if (key == "maxtokens") AiMaxTokens = Int(val, AiMaxTokens);
+                    else if (key == "intervalsec") AiIntervalSec = Int(val, AiIntervalSec);
+                    else if (key == "maxpostsperhour") AiMaxPostsPerHour = Int(val, AiMaxPostsPerHour);
+                    else if (key == "maxcommentsperhour") AiMaxCommentsPerHour = Int(val, AiMaxCommentsPerHour);
+                    else if (key == "maxlikesperhour") AiMaxLikesPerHour = Int(val, AiMaxLikesPerHour);
+                    else if (key == "maxmessagesperhour") AiMaxMessagesPerHour = Int(val, AiMaxMessagesPerHour);
+                    else if (key == "allowposts") AiAllowPosts = Bool(val, AiAllowPosts);
+                    else if (key == "allowcomments") AiAllowComments = Bool(val, AiAllowComments);
+                    else if (key == "allowlikes") AiAllowLikes = Bool(val, AiAllowLikes);
+                    else if (key == "allowmessages") AiAllowMessages = Bool(val, AiAllowMessages);
+                    else if (key == "humantargetpercent") AiHumanTargetPercent = Int(val, AiHumanTargetPercent);
+                    else if (key == "systemprompt") AiSystemPrompt = val;
+                    else if (key == "statussuffix") AiStatusSuffix = val;
+                    break;
+
+                case "branding":                    if (key == "accent") BrandAccent = val;
                     else if (key == "accenthi") BrandAccentHi = val;
                     else if (key == "accentlo") BrandAccentLo = val;
                     else if (key == "darkaccent") BrandDarkAccent = val;
@@ -434,6 +483,18 @@ namespace Social.Core
                 DefaultTheme = "light";
             if (DefaultLanguage != "ru" && DefaultLanguage != "en" && DefaultLanguage != "uk" && DefaultLanguage != "lt")
                 DefaultLanguage = "en";
+
+            if (AiProvider != "markov" && AiProvider != "openai" && AiProvider != "off")
+                AiProvider = "off";
+            if (AiTimeoutMs < 2000) AiTimeoutMs = 2000;
+            if (AiTimeoutMs > 180000) AiTimeoutMs = 180000;
+            if (AiIntervalSec < 30) AiIntervalSec = 30;
+            if (AiMaxTokens < 16) AiMaxTokens = 16;
+            if (AiMaxTokens > 2048) AiMaxTokens = 2048;
+            if (AiTemperature < 0) AiTemperature = 0;
+            if (AiTemperature > 2) AiTemperature = 2;
+            if (AiHumanTargetPercent < 0) AiHumanTargetPercent = 0;
+            if (AiHumanTargetPercent > 100) AiHumanTargetPercent = 100;
         }
 
         private void GenerateSecretsIfMissing()
@@ -524,13 +585,18 @@ namespace Social.Core
             return int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out v) ? v : def;
         }
 
-        private static bool Bool(string s, bool def)
-        {
+        private static bool Bool(string s, bool def)        {
             if (s == null) return def;
             s = s.Trim().ToLowerInvariant();
             if (s == "1" || s == "true" || s == "yes" || s == "on") return true;
             if (s == "0" || s == "false" || s == "no" || s == "off") return false;
             return def;
+        }
+
+        private static double Double(string s, double def)
+        {
+            double v;
+            return double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out v) ? v : def;
         }
 
         private static int[] IntList(string s, int[] def)

@@ -42,6 +42,17 @@ namespace Social.Core
         public DateTime LastCommentAt = DateTime.MinValue;
         public DateTime LastMessageAt = DateTime.MinValue;
 
+        // profile extras (DeadVK had games/movies/music/books, a persona and a mood)
+        public string FavGames = "";
+        public string FavMovies = "";
+        public string FavMusic = "";
+        public string FavBooks = "";
+        public string Persona = "";
+        public string Mood = "";            // happy | sad | "" (legacy mood files)
+        public string Badges = "";          // comma separated badge ids
+        public string LegacySource = "";    // e.g. "deadvk" for imported accounts
+        public string LegacyId = "";        // id in the old database
+
         public bool IsAdmin { get { return Role == "admin"; } }
         public bool IsModerator { get { return Role == "admin" || Role == "moderator"; } }
         public bool IsBannedNow { get { return Banned && (BannedUntil == DateTime.MinValue || BannedUntil > DateTime.UtcNow); } }
@@ -55,6 +66,7 @@ namespace Social.Core
         public long Group;         // 0 = normal post
         public string Body = "";
         public string Image = "";
+        public string Video = "";  // external video link (DeadVK had a video column)
         public DateTime Created = DateTime.UtcNow;
         public DateTime Edited = DateTime.MinValue;
         public string Visibility = "public";
@@ -62,6 +74,15 @@ namespace Social.Core
         public int Comments;
         public bool Deleted;
         public bool Pinned;
+        public string LegacySource = "";
+        public string LegacyId = "";
+    }
+
+    public sealed class Bookmark
+    {
+        public long User;
+        public long Post;
+        public DateTime Created = DateTime.UtcNow;
     }
 
     public sealed class Comment

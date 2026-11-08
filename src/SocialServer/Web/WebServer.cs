@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -35,6 +35,8 @@ namespace Social.Web
         private readonly StatsStore _stats;
         private readonly CaptchaStore _captcha;
         private readonly MediaStore _media;
+        private readonly AiEngine _ai;
+        private readonly AiRunner _aiRunner;
         private readonly ApiRouter _api;
 
         private readonly object _rateLock = new object();
@@ -53,7 +55,7 @@ namespace Social.Web
         private int _inflight;
 
         public WebServer(Config cfg, SocialStore store, SessionManager sessions, StatsStore stats,
-                         CaptchaStore captcha, MediaStore media, WebRole role)
+                         CaptchaStore captcha, MediaStore media, AiEngine ai, AiRunner aiRunner, WebRole role)
         {
             _cfg = cfg;
             _store = store;
@@ -61,11 +63,13 @@ namespace Social.Web
             _stats = stats;
             _captcha = captcha;
             _media = media;
+            _ai = ai;
+            _aiRunner = aiRunner;
             _role = role;
             _root = cfg.WebRoot;
             _basePath = cfg.PublicBasePath ?? "";
             _bind = role == WebRole.Admin ? (cfg.AdminBind ?? "0.0.0.0") : (cfg.Bind ?? "0.0.0.0");
-            _api = new ApiRouter(this, cfg, store, sessions, stats, captcha, media);
+            _api = new ApiRouter(this, cfg, store, sessions, stats, captcha, media, ai, aiRunner);
         }
 
         public WebRole Role { get { return _role; } }
@@ -981,3 +985,4 @@ namespace Social.Web
         }
     }
 }
+

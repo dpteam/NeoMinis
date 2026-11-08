@@ -183,11 +183,14 @@ namespace Social.Web
 
             string text = Util.CleanText(BodyStr(ctx, "body", ""), _cfg.MaxPostLength);
             string imageData = BodyStr(ctx, "image", "");
+            string video = BodyStr(ctx, "video", "").Trim();
+            if (video.Length > 0 && !Util.IsHttpUrl(video))
+                throw new ApiException(400, "bad-video", "Video link must start with http:// or https://");
             long wallId = BodyLong(ctx, "wall", 0);
             long groupId = BodyLong(ctx, "group", 0);
             string visibility = BodyStr(ctx, "visibility", "public").Trim().ToLowerInvariant();
             if (visibility != "public" && visibility != "friends" && visibility != "private") visibility = "public";
-            if (text.Length == 0 && string.IsNullOrEmpty(imageData))
+            if (text.Length == 0 && string.IsNullOrEmpty(imageData) && video.Length == 0)
                 throw new ApiException(400, "empty", "Write something first");
 
             if (groupId > 0)
@@ -219,6 +222,7 @@ namespace Social.Web
             }
 
             Post post = _store.CreatePost(ctx.User.Id, wallId, groupId, text, image, visibility);
+            post.Video = Util.SingleLine(video, 500);
             ctx.User.LastPostAt = DateTime.UtcNow;
             _store.MarkUserDirty(ctx.User);
             _stats.OnPost();
@@ -251,8 +255,37 @@ namespace Social.Web
             SendOk(ctx, b);
         }
 
-        private void HandleLike(ApiCtx ctx)
+        private void HandleBookmark(ApiCtx ctx)
         {
+            long id = BodyLong(ctx, "id", 0);
+            Post p = RequirePost(id);
+            if (!CanViewPost(ctx.User, p)) throw new ApiException(403, "private", "This post is not available");
+            bool on = _store.ToggleBookmark(ctx.User.Id, id);
+            JsonBuilder b = new JsonBuilder(128);
+            b.BeginObject();
+            b.Prop("bookmarked", on);
+            b.Prop("total", _store.CountBookmarks(ctx.User.Id));
+            SendOk(ctx, b);
+        }
+
+        private void HandleBookmarks(ApiCtx ctx)
+        {
+            int limit = LimitParam(ctx, 20, 50);
+            long before = LongQuery(ctx, "before");
+            List<Post> posts = _store.BookmarksFor(ctx.User.Id, before, limit + 1);
+            bool hasMore = posts.Count > limit;
+            if (hasMore) posts.RemoveAt(posts.Count - 1);
+
+            JsonBuilder b = new JsonBuilder(4096);
+            b.BeginObject();
+            AppendPosts(b, "posts", posts, ctx.User);
+            b.Prop("hasMore", hasMore);
+            b.Prop("next", posts.Count == 0 ? 0 : posts[posts.Count - 1].Id);
+            b.Prop("total", _store.CountBookmarks(ctx.User.Id));
+            SendOk(ctx, b);
+        }
+
+        private void HandleLike(ApiCtx ctx)        {
             long id = BodyLong(ctx, "id", 0);
             Post p = RequirePost(id);
             if (!CanViewPost(ctx.User, p)) throw new ApiException(403, "private", "This post is not available");
@@ -415,6 +448,21 @@ namespace Social.Web
             }
             if (ctx.Body.ContainsKey("status"))
                 ctx.User.Status = Util.SingleLine(BodyStr(ctx, "status", ""), _cfg.MaxStatusLength);
+            if (ctx.Body.ContainsKey("favGames"))
+                ctx.User.FavGames = Util.SingleLine(BodyStr(ctx, "favGames", ""), 200);
+            if (ctx.Body.ContainsKey("favMovies"))
+                ctx.User.FavMovies = Util.SingleLine(BodyStr(ctx, "favMovies", ""), 200);
+            if (ctx.Body.ContainsKey("favMusic"))
+                ctx.User.FavMusic = Util.SingleLine(BodyStr(ctx, "favMusic", ""), 200);
+            if (ctx.Body.ContainsKey("favBooks"))
+                ctx.User.FavBooks = Util.SingleLine(BodyStr(ctx, "favBooks", ""), 200);
+            if (ctx.Body.ContainsKey("mood"))
+            {
+                string mood = BodyStr(ctx, "mood", "").Trim().ToLowerInvariant();
+                if (mood != "" && mood != "happy" && mood != "sad" && mood != "neutral")
+                    throw new ApiException(400, "bad-mood", "Unknown mood");
+                ctx.User.Mood = mood;
+            }
             _store.MarkUserDirty(ctx.User);
 
             JsonBuilder b = new JsonBuilder(1024);
