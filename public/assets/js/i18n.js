@@ -60,7 +60,7 @@ var I18N = (function () {
       'profile.about': 'About', 'profile.wall': 'Wall', 'profile.groups': 'Groups',
       'profile.writeOnWall': 'Write on the wall', 'profile.private': 'This profile is private',
       'profile.online': 'online', 'profile.offline': 'offline', 'profile.male': 'Male',
-      'profile.female': 'Female', 'profile.other': 'Other', 'profile.since': 'Member since',
+      'profile.female': 'Female', 'profile.other': 'Robot', 'profile.since': 'Member since',
       'profile.saved': 'Profile saved', 'profile.requestSent': 'Friend request sent',
 
       'friends.title': 'Friends', 'friends.all': 'All friends', 'friends.incoming': 'Incoming requests',
@@ -222,7 +222,7 @@ var I18N = (function () {
       'profile.about': 'О себе', 'profile.wall': 'Стена', 'profile.groups': 'Группы',
       'profile.writeOnWall': 'Написать на стене', 'profile.private': 'Эта страница закрыта',
       'profile.online': 'в сети', 'profile.offline': 'не в сети', 'profile.male': 'Мужской',
-      'profile.female': 'Женский', 'profile.other': 'Другой', 'profile.since': 'На сайте с',
+      'profile.female': 'Женский', 'profile.other': 'Робот', 'profile.since': 'На сайте с',
       'profile.saved': 'Профиль сохранён', 'profile.requestSent': 'Заявка отправлена',
 
       'friends.title': 'Друзья', 'friends.all': 'Все друзья', 'friends.incoming': 'Входящие заявки',
