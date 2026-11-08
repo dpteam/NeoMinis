@@ -38,18 +38,20 @@ const users = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
 const oldKey = oldName.toLowerCase();
 const newKey = newName.toLowerCase();
 
-if (users.some(u => String(u.username).toLowerCase() === newKey)) {
-  console.error('user "' + newName + '" already exists');
-  process.exit(1);
-}
-
 const user = users.find(u => String(u.username).toLowerCase() === oldKey);
 if (!user) {
   console.error('user "' + oldName + '" not found');
   process.exit(1);
 }
 
-user.username = newKey;
+// another account already using the target name (the account itself is fine)
+if (users.some(u => u !== user && String(u.username).toLowerCase() === newKey)) {
+  console.error('user "' + newName + '" already exists');
+  process.exit(1);
+}
+
+// keep the spelling the operator asked for; lookups stay case-insensitive
+user.username = newName;
 if (displayName) user.displayName = displayName;
 
 if (password) {

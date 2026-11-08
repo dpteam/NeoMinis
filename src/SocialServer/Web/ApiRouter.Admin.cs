@@ -13,7 +13,14 @@ namespace Social.Web
                 throw new ApiException(404, "unknown-endpoint", "Unknown endpoint");
             if (sub == "overview") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminOverview(ctx); return; }
             if (sub == "users") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminUsers(ctx); return; }
-            if (sub == "user") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminUser(ctx); return; }
+            if (sub == "user")
+            {
+                if (IsMethod(ctx.Req, "GET")) { RequireModerator(ctx.User); HandleAdminUserGet(ctx); return; }
+                RequireMethod(ctx.Req.Method, "POST");
+                RequireAdmin(ctx.User);
+                HandleAdminUser(ctx);
+                return;
+            }
             if (sub == "reports") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminReports(ctx); return; }
             if (sub == "report") { RequireMethod(ctx.Req.Method, "POST"); RequireModerator(ctx.User); HandleAdminReport(ctx); return; }
             if (sub == "broadcast") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminBroadcast(ctx); return; }
@@ -27,6 +34,8 @@ namespace Social.Web
             if (sub == "ai/step") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminAiStep(ctx); return; }
             if (sub == "ai/persona") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminAiPersona(ctx); return; }
             if (sub == "import") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminImport(ctx); return; }
+            if (sub == "settings") { HandleAdminSettings(ctx); return; }
+            if (sub == "settings/save") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminSettingsSave(ctx); return; }
             throw new ApiException(404, "unknown-endpoint", "Unknown admin endpoint");
         }
 
@@ -157,6 +166,28 @@ namespace Social.Web
             SendOk(ctx, b);
         }
 
+        private void HandleAdminUserGet(ApiCtx ctx)
+        {
+            long id = LongQuery(ctx, "id");
+            if (id <= 0) throw new ApiException(400, "bad-id", "Missing user id");
+            User target = _store.FindUser(id);
+            if (target == null) throw new ApiException(404, "no-user", "User not found");
+
+            JsonBuilder b = new JsonBuilder(2048);
+            b.BeginObject();
+            b.Name("user").Raw(AdminUserJson(target, ctx.User));
+            b.Prop("sessions", _sessions.CountForUser(target.Id));
+            b.Prop("bookmarks", _store.CountBookmarks(target.Id));
+            b.Prop("canAdmin", ctx.User.Role == "admin");
+            b.Prop("isSelf", target.Id == ctx.User.Id);
+            b.Prop("admins", _store.CountAdmins());
+            b.Prop("allowRoleChange", _cfg.AllowRoleChange);
+            b.Prop("allowSelfDemote", _cfg.AllowSelfDemote);
+            b.Prop("allowSelfDelete", _cfg.AllowSelfDelete);
+            b.Prop("protectLastAdmin", _cfg.ProtectLastAdmin);
+            SendOk(ctx, b);
+        }
+
         private void HandleAdminUser(ApiCtx ctx)
         {
             long id = BodyLong(ctx, "id", 0);
@@ -184,22 +215,124 @@ namespace Social.Web
             }
             else if (action == "role")
             {
+                if (!_cfg.AllowRoleChange)
+                    throw new ApiException(403, "role-locked", "Role changes are disabled in the configuration");
+
                 string role = BodyStr(ctx, "role", "").Trim().ToLowerInvariant();
                 if (role != "user" && role != "moderator" && role != "admin")
                     throw new ApiException(400, "bad-role", "Unknown role");
-                if (target.Role == "admin" && role != "admin" && _store.CountAdmins() <= 1)
+
+                if (target.Id == ctx.User.Id && role != "admin" && !_cfg.AllowSelfDemote)
+                    throw new ApiException(400, "self-demote", "You cannot remove your own administrator rights");
+
+                if (target.Role == "admin" && role != "admin" && _cfg.ProtectLastAdmin && _store.CountAdmins() <= 1)
                     throw new ApiException(400, "last-admin", "Cannot demote the last administrator");
+
+                string before = target.Role;
                 _store.SetRole(target.Id, role);
+                _store.MarkUserDirty(target);
+
+                if (before != role)
+                {
+                    _store.Notify(target.Id, ctx.User.Id, "admin",
+                        "your role changed: " + before + " -> " + role, "#/notifications");
+                    // a demoted administrator must not keep a live admin session
+                    if (before == "admin" && role != "admin") _sessions.RemoveForUser(target.Id, null);
+                }
                 Log.Info("ADMIN", "@" + ctx.User.Username + " set role of @" + target.Username + " to " + role);
+            }
+            else if (action == "grant-admin")
+            {
+                if (!_cfg.AllowRoleChange)
+                    throw new ApiException(403, "role-locked", "Role changes are disabled in the configuration");
+                _store.SetRole(target.Id, "admin");
+                _store.Notify(target.Id, ctx.User.Id, "admin", "you are now an administrator", "#/notifications");
+                Log.Info("ADMIN", "@" + ctx.User.Username + " granted admin to @" + target.Username);
+            }
+            else if (action == "revoke-admin")
+            {
+                if (!_cfg.AllowRoleChange)
+                    throw new ApiException(403, "role-locked", "Role changes are disabled in the configuration");
+                if (target.Id == ctx.User.Id && !_cfg.AllowSelfDemote)
+                    throw new ApiException(400, "self-demote", "You cannot remove your own administrator rights");
+                if (_cfg.ProtectLastAdmin && target.Role == "admin" && _store.CountAdmins() <= 1)
+                    throw new ApiException(400, "last-admin", "Cannot demote the last administrator");
+                _store.SetRole(target.Id, "user");
+                _sessions.RemoveForUser(target.Id, null);
+                _store.Notify(target.Id, ctx.User.Id, "admin", "your administrator rights were removed", "#/notifications");
+                Log.Warn("ADMIN", "@" + ctx.User.Username + " revoked admin from @" + target.Username);
+            }
+            else if (action == "grant-mod")
+            {
+                if (!_cfg.AllowRoleChange)
+                    throw new ApiException(403, "role-locked", "Role changes are disabled in the configuration");
+                _store.SetRole(target.Id, "moderator");
+                Log.Info("ADMIN", "@" + ctx.User.Username + " granted moderator to @" + target.Username);
             }
             else if (action == "delete")
             {
-                if (target.Id == ctx.User.Id) throw new ApiException(400, "self", "You cannot delete yourself");
-                if (target.Role == "admin" && _store.CountAdmins() <= 1)
+                if (target.Id == ctx.User.Id && !_cfg.AllowSelfDelete) throw new ApiException(400, "self", "You cannot delete yourself");
+                if (target.Role == "admin" && _cfg.ProtectLastAdmin && _store.CountAdmins() <= 1)
                     throw new ApiException(400, "last-admin", "Cannot delete the last administrator");
                 _store.SoftDeleteUser(target.Id);
                 _sessions.RemoveForUser(target.Id, null);
                 Log.Warn("ADMIN", "@" + ctx.User.Username + " soft-deleted @" + target.Username);
+            }
+            else if (action == "purge")
+            {
+                if (target.Id == ctx.User.Id && !_cfg.AllowSelfDelete) throw new ApiException(400, "self", "You cannot delete yourself");
+                if (target.Role == "admin" && _cfg.ProtectLastAdmin && _store.CountAdmins() <= 1)
+                    throw new ApiException(400, "last-admin", "Cannot delete the last administrator");
+                string gone = "@" + target.Username;
+                int records = _store.HardDeleteUser(target.Id);
+                _sessions.RemoveForUser(target.Id, null);
+                Log.Warn("ADMIN", "@" + ctx.User.Username + " purged " + gone + " (" + records + " records)");
+                JsonBuilder p = new JsonBuilder(256);
+                p.BeginObject();
+                p.Prop("deleted", true);
+                p.Prop("records", records);
+                SendOk(ctx, p);
+                return;
+            }
+            else if (action == "edit")
+            {
+                if (ctx.Body.ContainsKey("displayName"))
+                    target.DisplayName = Util.DisplayName(BodyStr(ctx, "displayName", ""), target.Username, _cfg.MaxNameLength);
+                if (ctx.Body.ContainsKey("status"))
+                    target.Status = Util.SingleLine(BodyStr(ctx, "status", ""), _cfg.MaxStatusLength);
+                if (ctx.Body.ContainsKey("email"))
+                {
+                    string email = BodyStr(ctx, "email", "").Trim();
+                    if (email.Length > 0 && !Util.IsValidEmail(email))
+                        throw new ApiException(400, "bad-email", "Bad email address");
+                    target.Email = Util.SingleLine(email, 160);
+                }
+                if (ctx.Body.ContainsKey("persona"))
+                {
+                    string persona = BodyStr(ctx, "persona", "").Trim().ToLowerInvariant();
+                    if (persona.Length > 0)
+                    {
+                        bool known = false;
+                        for (int i = 0; i < AiEngine.Personas.Length; i++) if (AiEngine.Personas[i] == persona) known = true;
+                        if (!known) throw new ApiException(400, "bad-persona", "Unknown persona");
+                    }
+                    target.Persona = persona;
+                }
+                if (ctx.Body.ContainsKey("mood"))
+                {
+                    string mood = BodyStr(ctx, "mood", "").Trim().ToLowerInvariant();
+                    if (mood != "" && mood != "happy" && mood != "sad" && mood != "neutral")
+                        throw new ApiException(400, "bad-mood", "Unknown mood");
+                    target.Mood = mood;
+                }
+                if (ctx.Body.ContainsKey("hideOnline")) target.HideOnline = Json.GetBool(ctx.Body, "hideOnline", target.HideOnline);
+                if (ctx.Body.ContainsKey("privacy"))
+                {
+                    string p = BodyStr(ctx, "privacy", "").Trim().ToLowerInvariant();
+                    if (p == "public" || p == "friends" || p == "private") target.Privacy = p;
+                }
+                _store.MarkUserDirty(target);
+                Log.Info("ADMIN", "@" + ctx.User.Username + " edited @" + target.Username);
             }
             else if (action == "reset")
             {

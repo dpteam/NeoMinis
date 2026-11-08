@@ -124,6 +124,12 @@ namespace Social.Core
         public bool AdminPrivateOnly = false;
         public bool Hsts = false;
 
+        // role management policy
+        public bool AllowRoleChange = true;
+        public bool AllowSelfDemote = false;
+        public bool ProtectLastAdmin = true;
+        public bool AllowSelfDelete = false;
+
         // ---------------------------------------------------------- [limits]
         public int RequestsPerMinute = 900;
         public int RegistrationsPerHour = 20;
@@ -388,6 +394,10 @@ namespace Social.Core
                     else if (key == "maxjsondepth") MaxJsonDepth = Int(val, MaxJsonDepth);
                     else if (key == "adminprivateonly") AdminPrivateOnly = Bool(val, AdminPrivateOnly);
                     else if (key == "hsts") Hsts = Bool(val, Hsts);
+                    else if (key == "allowrolechange") AllowRoleChange = Bool(val, AllowRoleChange);
+                    else if (key == "allowselfdemote") AllowSelfDemote = Bool(val, AllowSelfDemote);
+                    else if (key == "protectlastadmin") ProtectLastAdmin = Bool(val, ProtectLastAdmin);
+                    else if (key == "allowselfdelete") AllowSelfDelete = Bool(val, AllowSelfDelete);
                     break;
 
                 case "limits":

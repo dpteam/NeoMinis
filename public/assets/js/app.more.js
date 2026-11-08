@@ -1,4 +1,4 @@
-/* =========================================================================
+﻿/* =========================================================================
    Social SPA - remaining views: friends, people, messages, groups,
    notifications, settings, admin, search. Loaded after app.js.
    ========================================================================= */
@@ -266,7 +266,7 @@
           var g = groups[i];
           html += '<div class="user-card"><a href="#/group/' + g.id + '">' + UI.avatar({ id: g.id, displayName: g.name, avatar: g.avatar }, 52) + '</a>' +
             '<a class="name" href="#/group/' + g.id + '">' + UI.esc(g.name) + '</a>' +
-            '<div class="sub">' + T('groups.members') + ': ' + g.members + ' · ' + (g.visibility === 'private' ? T('groups.private') : T('groups.public')) + '</div></div>';
+            '<div class="sub">' + T('groups.members') + ': ' + g.members + ' В· ' + (g.visibility === 'private' ? T('groups.private') : T('groups.public')) + '</div></div>';
         }
         html += '</div>';
       }
@@ -314,7 +314,7 @@
       var html = '<div class="card"><div class="group-head">' +
         UI.avatar({ id: g.id, displayName: g.name, avatar: g.avatar }, 72, false) +
         '<div style="flex:1;min-width:0"><h1>' + UI.esc(g.name) + '</h1><div class="desc">' + UI.esc(g.description || '') + '</div>' +
-        '<div class="tiny" style="opacity:.8;margin-top:4px">' + T('groups.members') + ': ' + g.members + ' · ' + (g.visibility === 'private' ? T('groups.private') : T('groups.public')) + '</div></div>' +
+        '<div class="tiny" style="opacity:.8;margin-top:4px">' + T('groups.members') + ': ' + g.members + ' В· ' + (g.visibility === 'private' ? T('groups.private') : T('groups.public')) + '</div></div>' +
         '<button class="btn" id="group-toggle">' + (g.isMember ? (g.isOwner ? UI.icon('crown') + ' ' + T('groups.owner') : UI.icon('right-from-bracket') + ' ' + T('groups.leave')) : UI.icon('plus') + ' ' + T('groups.join')) + '</button>' +
         '</div><div class="card-b">';
       html += '<div class="feed-tabs"><a class="tab2 active" href="#/group/' + g.id + '">' + T('groups.posts') + '</a></div>';
@@ -494,7 +494,7 @@
         '<button class="btn" id="change-pass">' + UI.icon('key') + ' ' + T('settings.changePassword') + '</button></div>';
 
       html += '<div class="settings-block"><h3>' + T('settings.account') + '</h3>' +
-        '<div class="tiny muted" style="margin-bottom:8px">@' + UI.esc(u.username) + ' · ' + T('profile.joined') + ' ' + UI.formatDate(u.created) + '</div>' +
+        '<div class="tiny muted" style="margin-bottom:8px">@' + UI.esc(u.username) + ' В· ' + T('profile.joined') + ' ' + UI.formatDate(u.created) + '</div>' +
         '<button class="btn btn-danger" id="logout-2">' + UI.icon('right-from-bracket') + ' ' + T('settings.logout') + '</button></div>';
 
       html += '</div></div></div>';
@@ -637,12 +637,14 @@
       adminTab('users', 'users', T('admin.users'), sub) +
       adminTab('ai', 'robot', T('admin.ai'), sub) +
       adminTab('reports', 'flag', T('admin.reports'), sub) +
+      adminTab('settings', 'sliders', T('admin.settings'), sub) +
       adminTab('logs', 'terminal', T('admin.logs'), sub) +
       '</div>';
     main.innerHTML = tabs + '<div id="admin-body">' + spinnerCard() + '</div>';
     var body = document.getElementById('admin-body');
     if (sub === 'users') adminUsers(body);
     else if (sub === 'ai') adminAi(body);
+    else if (sub === 'settings') adminSettings(body);
     else if (sub === 'reports') adminReports(body);
     else if (sub === 'logs') adminLogs(body);
     else adminOverview(body);
@@ -791,58 +793,182 @@
   }
 
   function adminUserModal(id) {
-    Api.request('GET', '/api/admin/users?limit=1&offset=0', null, function () { });
-    // the list endpoint does not have a single-user getter; use the row we know from the table
-    var row = null;
-    var rows = document.querySelectorAll('.adm-user');
-    for (var i = 0; i < rows.length; i++) if (rows[i].getAttribute('data-id') === String(id)) row = rows[i];
-    var tr = row ? row.parentNode.parentNode : null;
-    var name = tr ? tr.querySelector('.user-cell a').textContent : ('#' + id);
-    UI.modal({
-      title: T('admin.users') + ': ' + name,
-      icon: 'user-shield',
-      body: '<div class="field"><label>' + T('admin.banReason') + '</label><input class="input" id="au-reason"></div>' +
-        '<div class="field"><label>' + T('admin.days') + '</label><input class="input" id="au-days" type="number" min="0" value="7"></div>' +
-        '<div class="field"><label>' + T('admin.role') + '</label><select class="select" id="au-role"><option value="user">user</option><option value="moderator">moderator</option><option value="admin">admin</option></select></div>' +
-        '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
-        '<button class="btn btn-danger btn-sm" id="au-ban">' + T('admin.ban') + '</button>' +
-        '<button class="btn btn-ok btn-sm" id="au-unban">' + T('admin.unban') + '</button>' +
-        '<button class="btn btn-sm" id="au-role">' + T('admin.role') + '</button>' +
-        '<button class="btn btn-sm" id="au-warn">' + T('admin.warn') + '</button>' +
-        '<button class="btn btn-sm" id="au-reset">' + T('admin.reset') + '</button>' +
-        '<button class="btn btn-danger btn-sm" id="au-delete">' + T('admin.delete') + '</button>' +
-        '</div>',
-      actions: [{ label: T('common.close'), cls: 'btn-ghost' }]
-    });
-    var box = document.querySelector('.modal');
-    function send(action, extra) {
-      var payload = { id: Number(id), action: action };
-      if (extra) for (var k in extra) if (extra.hasOwnProperty(k)) payload[k] = extra[k];
-      Api.request('POST', '/api/admin/user', payload, function (err, data) {
-        if (err) { UI.toast(Api.errorText(err), 'err'); return; }
-        if (data.recoveryCode) {
+    Api.request('GET', '/api/admin/user?id=' + encodeURIComponent(id), null, function (err, data) {
+      if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+      var u = data.user || {};
+      var canAdmin = data.canAdmin !== false;
+      var personas = ['', 'friendly', 'troll', 'philosopher', 'gamer', 'musician', 'coder', 'doomer', 'hype'];
+
+      var personaOpts = '';
+      for (var i = 0; i < personas.length; i++) {
+        var p = personas[i];
+        personaOpts += '<option value="' + p + '"' + (u.persona === p ? ' selected' : '') + '>' +
+          (p ? UI.esc(p) : T('admin.aiNone')) + '</option>';
+      }
+      var moodOpts = '';
+      var moods = [['', T('admin.aiMoodNone')], ['happy', T('admin.aiHappy')], ['sad', T('admin.aiSad')], ['neutral', T('admin.aiNeutral')]];
+      for (var m = 0; m < moods.length; m++) {
+        moodOpts += '<option value="' + moods[m][0] + '"' + (u.mood === moods[m][0] ? ' selected' : '') + '>' + UI.esc(moods[m][1]) + '</option>';
+      }
+
+      var body = '';
+      body += '<div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">' +
+        UI.avatar(u, 48) +
+        '<div style="min-width:0"><div style="font-weight:700">' + UI.esc(u.displayName) + ' ' + UI.roleBadge(u.role) + '</div>' +
+        '<div class="tiny muted">@' + UI.esc(u.username) + ' В· #' + u.id + '</div>' +
+        '<div class="tiny muted">' + T('admin.aiPosts') + ' ' + u.posts + ' В· ' + T('profile.friends') + ' ' + u.friends +
+        ' В· ' + T('admin.sessions') + ' ' + (data.sessions || 0) + '</div></div></div>';
+
+      if (u.banned) {
+        body += '<div class="alert err">' + UI.icon('ban') + ' ' + UI.esc(u.banReason || T('admin.ban')) +
+          (u.bannedUntil ? ' В· ' + T('admin.until') + ' ' + UI.formatDate(u.bannedUntil, true) : '') + '</div>';
+      }
+
+      body += '<div class="field"><label>' + T('auth.displayName') + '</label><input class="input" id="au-name" maxlength="40" value="' + UI.attr(u.displayName) + '"></div>';
+      body += '<div class="field"><label>' + T('settings.status') + '</label><input class="input" id="au-status" maxlength="140" value="' + UI.attr(u.status) + '"></div>';
+      body += '<div class="field"><label>' + T('settings.email') + '</label><input class="input" id="au-email" value="' + UI.attr(u.email) + '"></div>';
+      body += '<div class="inline-fields"><div class="field"><label>' + T('admin.aiPersona') + '</label><select class="select" id="au-persona">' + personaOpts + '</select></div>' +
+        '<div class="field"><label>' + T('admin.aiMood') + '</label><select class="select" id="au-mood">' + moodOpts + '</select></div></div>';
+      body += '<button class="btn btn-primary btn-sm" id="au-save">' + UI.icon('floppy-disk') + ' ' + T('common.save') + '</button>';
+
+      if (canAdmin) {
+        body += '<hr>';
+        body += '<div class="field"><label>' + T('admin.role') + '</label><select class="select" id="au-role">' +
+          '<option value="user"' + (u.role === 'user' ? ' selected' : '') + '>user</option>' +
+          '<option value="moderator"' + (u.role === 'moderator' ? ' selected' : '') + '>moderator</option>' +
+          '<option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>admin</option></select></div>';
+
+        // quick role buttons; the policy decides which of them are legal
+        var roleLocked = data.allowRoleChange === false;
+        var selfBlocked = data.isSelf && data.allowSelfDemote === false;
+        var lastBlocked = data.protectLastAdmin !== false && data.admins <= 1;
+        var canGrantAdmin = !roleLocked && u.role !== 'admin';
+        var canRevokeAdmin = !roleLocked && u.role === 'admin' && !selfBlocked && !lastBlocked;
+        var canGrantMod = !roleLocked && u.role === 'user';
+        var canRevokeMod = !roleLocked && u.role === 'moderator';
+
+        body += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
+          '<button class="btn btn-sm' + (canGrantAdmin ? ' btn-primary' : '') + '" id="au-grant-admin"' +
+            (canGrantAdmin ? '' : ' disabled') + '>' + UI.icon('user-shield') + ' ' + T('admin.makeAdmin') + '</button>' +
+          '<button class="btn btn-sm' + (canRevokeAdmin ? ' btn-danger' : '') + '" id="au-revoke-admin"' +
+            (canRevokeAdmin ? '' : ' disabled') + '>' + UI.icon('user-slash') + ' ' + T('admin.revokeAdmin') + '</button>' +
+          '<button class="btn btn-sm" id="au-grant-mod"' + (canGrantMod ? '' : ' disabled') + '>' + UI.icon('gavel') + ' ' + T('admin.makeMod') + '</button>' +
+          '<button class="btn btn-sm" id="au-revoke-mod"' + (canRevokeMod ? '' : ' disabled') + '>' + UI.icon('gavel') + ' ' + T('admin.revokeMod') + '</button>' +
+          '</div>';
+        if (roleLocked) body += '<div class="hint">' + T('admin.roleLocked') + '</div>';
+        else if (selfBlocked) body += '<div class="hint">' + T('admin.selfDemoteBlocked') + '</div>';
+        else if (lastBlocked && u.role === 'admin') body += '<div class="hint">' + T('admin.lastAdminBlocked') + '</div>';
+
+        body += '<div class="inline-fields"><div class="field"><label>' + T('admin.banReason') + '</label><input class="input" id="au-reason"></div>' +
+          '<div class="field"><label>' + T('admin.days') + '</label><input class="input" id="au-days" type="number" min="0" value="7"></div></div>';
+        body += '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+          '<button class="btn btn-sm" id="au-role-btn"' + (selfBlocked ? ' disabled' : '') + '>' + UI.icon('user-shield') + ' ' + T('admin.setRole') + '</button>' +
+          '<button class="btn btn-sm" id="au-warn">' + UI.icon('triangle-exclamation') + ' ' + T('admin.warn') + '</button>' +
+          '<button class="btn btn-sm" id="au-reset">' + UI.icon('key') + ' ' + T('admin.reset') + '</button>' +
+          (u.banned
+            ? '<button class="btn btn-ok btn-sm" id="au-unban">' + UI.icon('unlock') + ' ' + T('admin.unban') + '</button>'
+            : '<button class="btn btn-danger btn-sm" id="au-ban">' + UI.icon('ban') + ' ' + T('admin.ban') + '</button>') +
+          '</div>';
+        body += '<hr>';
+        body += '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+          '<button class="btn btn-danger btn-sm" id="au-purge">' + UI.icon('trash') + ' ' + T('admin.deleteForever') + '</button>' +
+          '</div><div class="hint">' + T('admin.deleteForeverHint') + '</div>';
+      }
+
+      var close = UI.modal({
+        title: T('admin.editUser'),
+        icon: 'user-pen',
+        wide: true,
+        body: body,
+        actions: [{ label: T('common.close'), cls: 'btn-ghost' }]
+      });
+
+      var box = document.querySelector('.modal');
+      if (!box) return;
+
+      function send(action, extra, done) {
+        var payload = { id: Number(u.id), action: action };
+        if (extra) for (var k in extra) if (extra.hasOwnProperty(k)) payload[k] = extra[k];
+        Api.request('POST', '/api/admin/user', payload, function (e2, d2) {
+          if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+          if (done) { done(d2); return; }
+          UI.toast(T('admin.saved'), 'ok');
+          SoundFX.play('success');
+          if (close) close();
+          App.route();
+        });
+      }
+
+      box.querySelector('#au-save').addEventListener('click', function () {
+        send('edit', {
+          displayName: App.val('au-name'),
+          status: App.val('au-status'),
+          email: App.val('au-email'),
+          persona: App.val('au-persona'),
+          mood: App.val('au-mood')
+        });
+      });
+
+      if (!canAdmin) return;
+
+      var roleBtn = box.querySelector('#au-role-btn');
+      if (roleBtn) roleBtn.addEventListener('click', function () {
+        send('role', { role: App.val('au-role') });
+      });
+
+      var ga = box.querySelector('#au-grant-admin');
+      if (ga) ga.addEventListener('click', function () { send('grant-admin'); });
+
+      var ra = box.querySelector('#au-revoke-admin');
+      if (ra) ra.addEventListener('click', function () {
+        UI.confirm(T('admin.revokeAdmin'), T('admin.confirmRevokeAdmin'), T('admin.revokeAdmin'), function () {
+          send('revoke-admin');
+        }, true);
+      });
+
+      var gm = box.querySelector('#au-grant-mod');
+      if (gm) gm.addEventListener('click', function () { send('grant-mod'); });
+
+      var rm = box.querySelector('#au-revoke-mod');
+      if (rm) rm.addEventListener('click', function () { send('role', { role: 'user' }); });
+
+      var warn = box.querySelector('#au-warn');
+      if (warn) warn.addEventListener('click', function () {
+        send('warn', { reason: App.val('au-reason') });
+      });
+
+      var reset = box.querySelector('#au-reset');
+      if (reset) reset.addEventListener('click', function () {
+        send('reset', {}, function (d2) {
+          if (!d2 || !d2.recoveryCode) { UI.toast(T('admin.saved'), 'ok'); return; }
           UI.modal({
             title: T('admin.recovery'),
             icon: 'key',
-            body: '<p class="muted">' + T('admin.recoveryHint') + '</p><div class="input mono" style="text-align:center;font-size:14px;user-select:all">' + UI.esc(data.recoveryCode) + '</div>',
+            body: '<p class="muted">' + T('admin.recoveryHint') + '</p>' +
+              '<div class="input mono" style="text-align:center;font-size:14px;user-select:all">' + UI.esc(d2.recoveryCode) + '</div>',
             actions: [{ label: T('common.close'), cls: 'btn-primary' }]
           });
-        } else {
-          UI.toast(T('admin.saved'), 'ok');
-        }
-        SoundFX.play('success');
-        App.route();
+        });
       });
-    }
-    box.querySelector('#au-ban').addEventListener('click', function () {
-      send('ban', { reason: box.querySelector('#au-reason').value, days: Number(box.querySelector('#au-days').value) || 0 });
-    });
-    box.querySelector('#au-unban').addEventListener('click', function () { send('unban'); });
-    box.querySelector('#au-role').addEventListener('click', function () { send('role', { role: box.querySelector('#au-role').value }); });
-    box.querySelector('#au-warn').addEventListener('click', function () { send('warn', { reason: box.querySelector('#au-reason').value }); });
-    box.querySelector('#au-reset').addEventListener('click', function () { send('reset'); });
-    box.querySelector('#au-delete').addEventListener('click', function () {
-      UI.confirm(T('admin.delete'), T('admin.confirmDelete'), T('common.delete'), function () { send('delete'); }, true);
+
+      var ban = box.querySelector('#au-ban');
+      if (ban) ban.addEventListener('click', function () {
+        send('ban', { reason: App.val('au-reason'), days: Number(App.val('au-days')) || 0 });
+      });
+
+      var unban = box.querySelector('#au-unban');
+      if (unban) unban.addEventListener('click', function () { send('unban'); });
+
+      var purge = box.querySelector('#au-purge');
+      if (purge) purge.addEventListener('click', function () {
+        UI.confirm(T('admin.deleteForever'), T('admin.confirmPurge'), T('admin.deleteForever'), function () {
+          send('purge', {}, function (d2) {
+            UI.toast(T('admin.purged', (d2 && d2.records) || 0), 'ok');
+            if (close) close();
+            App.route();
+          });
+        }, true);
+      });
     });
   }
 
@@ -874,7 +1000,6 @@
 
       var html = '';
 
-      // ---- status
       html += '<div class="admin-grid">' +
         stat('robot', s.bots, T('admin.aiBots'), '') +
         stat('wand-magic-sparkles', s.actions, T('admin.aiActions'), '') +
@@ -889,13 +1014,12 @@
           : '<span class="badge err">' + UI.esc(s.providerLabel) + '</span>') + '</span></div>' +
         '<div class="card-b">' +
         '<div class="tiny muted" style="margin-bottom:8px">' + T('admin.aiLastAction') + ': ' +
-        (s.lastAction ? UI.esc(s.lastAction) + ' · ' + UI.timeAgo(s.lastActionAt) : T('common.none')) + '</div>' +
+        (s.lastAction ? UI.esc(s.lastAction) + ' В· ' + UI.timeAgo(s.lastActionAt) : T('common.none')) + '</div>' +
         (s.lastError ? '<div class="alert err" style="margin-bottom:8px">' + UI.esc(s.lastError) + '</div>' : '') +
-        '<div class="tiny muted">' + T('admin.aiImported') + ': ' + s.imported + ' · ' + T('admin.aiNext') + ': ' +
-        (s.nextRun ? UI.timeAgo(s.nextRun) : '—') + ' · ' + T('admin.aiChain') + ': ' + s.chainPosts + ' ' + T('admin.aiPosts') + '</div>' +
+        '<div class="tiny muted">' + T('admin.aiImported') + ': ' + s.imported + ' В· ' + T('admin.aiNext') + ': ' +
+        (s.nextRun ? UI.timeAgo(s.nextRun) : 'вЂ”') + ' В· ' + T('admin.aiChain') + ': ' + s.chainPosts + ' ' + T('admin.aiPosts') + '</div>' +
         '</div></div>';
 
-      // ---- config
       html += '<div class="card"><div class="card-h">' + UI.icon('sliders') + ' ' + T('admin.aiConfig') + '</div><div class="card-b">';
       html += '<div class="settings-grid">';
 
@@ -941,12 +1065,15 @@
         '</div>';
       html += '</div></div>';
 
-      // ---- bots
       html += '<div class="card"><div class="card-h">' + UI.icon('users-gear') + ' ' + T('admin.aiBots') +
         '<span class="right tiny muted">' + bots.length + '</span></div><div class="card-b flush">' +
         '<div class="table-wrap" style="max-height:520px"><table class="table"><thead><tr>' +
         '<th>' + T('auth.username') + '</th><th>' + T('admin.aiPersona') + '</th><th>' + T('admin.aiMood') + '</th>' +
         '<th>' + T('admin.aiStatusCol') + '</th><th></th></tr></thead><tbody>';
+      if (!bots.length) {
+        html += '<tr><td colspan="5"><div class="empty" style="padding:20px">' + UI.icon('robot') +
+          '<b>' + T('admin.aiNoBots') + '</b><span>' + T('admin.aiNoBotsHint') + '</span></div></td></tr>';
+      }
       for (var i = 0; i < bots.length; i++) {
         var b = bots[i];
         html += '<tr><td><div class="user-cell">' + UI.avatar(b, 22) +
@@ -960,7 +1087,6 @@
 
       body.innerHTML = html;
 
-      // ---- bind
       var save = document.getElementById('ai-save');
       if (save) save.addEventListener('click', function () {
         var patch = {
@@ -984,7 +1110,7 @@
         var key = App.val('ai-key');
         if (key) patch.apiKey = key;
         save.disabled = true;
-        Api.request('POST', '/api/admin/ai/config', patch, function (e2, d2) {
+        Api.request('POST', '/api/admin/ai/config', patch, function (e2) {
           save.disabled = false;
           if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
           UI.toast(T('settings.saved'), 'ok');
@@ -1001,7 +1127,7 @@
           test.disabled = false;
           test.innerHTML = UI.icon('plug-circle-check') + ' ' + T('admin.aiTest');
           if (e2) { UI.toast(T('admin.aiTestFail') + ': ' + (e2.message || Api.errorText(e2)), 'err'); return; }
-          UI.toast(T('admin.aiTestOk') + ' · ' + d2.latencyMs + 'ms', 'ok');
+          UI.toast(T('admin.aiTestOk') + ' В· ' + d2.latencyMs + 'ms', 'ok');
           SoundFX.play('success');
         });
       });
@@ -1026,19 +1152,257 @@
           var persona = body.querySelector('.ai-bot-persona[data-id="' + id + '"]');
           var mood = body.querySelector('.ai-bot-mood[data-id="' + id + '"]');
           var status = body.querySelector('.ai-bot-status[data-id="' + id + '"]');
-          this.disabled = true;
+          var btn = this;
+          btn.disabled = true;
           Api.request('POST', '/api/admin/ai/persona', {
             id: Number(id),
             persona: persona ? persona.value : '',
             mood: mood ? mood.value : '',
             status: status ? status.value : ''
           }, function (e2) {
-            this.disabled = false;
+            btn.disabled = false;
             if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
             UI.toast(T('settings.saved'), 'ok');
-          }.bind(this));
+          });
         });
       }
+    });
+  }
+
+  // -------------------------------------------------------------- settings
+
+  function adminSettings(body) {
+    Api.request('GET', '/api/admin/settings', null, function (err, data) {
+      if (err) { body.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+      var s = data.site || {};
+      var sec = data.security || {};
+      var lim = data.limits || {};
+      var srv = data.server || {};
+      var ui = data.ui || {};
+      var lg = data.logging || {};
+      var st = data.storage || {};
+
+      var field = function (id, label, value, type, extra) {
+        return '<div class="field"><label>' + UI.esc(label) + '</label>' +
+          '<input class="input" id="' + id + '" type="' + (type || 'text') + '" value="' + UI.attr(value) + '"' +
+          (extra || '') + '></div>';
+      };
+      var check = function (id, label, on) {
+        return '<label class="check" style="margin-bottom:6px"><input type="checkbox" id="' + id + '"' +
+          (on ? ' checked' : '') + '> <span>' + UI.esc(label) + '</span></label>';
+      };
+      var select = function (id, label, options, selected) {
+        var h = '<div class="field"><label>' + UI.esc(label) + '</label><select class="select" id="' + id + '">';
+        for (var i = 0; i < options.length; i++) {
+          var o = options[i];
+          h += '<option value="' + UI.attr(o[0]) + '"' + (selected === o[0] ? ' selected' : '') + '>' + UI.esc(o[1]) + '</option>';
+        }
+        return h + '</select></div>';
+      };
+
+      var html = '<div class="card"><div class="card-h">' + UI.icon('sliders') + ' ' + T('admin.settings') +
+        '<span class="right tiny muted">' + UI.esc(data.configPath || '') + '</span></div><div class="card-b">';
+      html += '<div class="settings-grid">';
+
+      // site
+      html += '<div class="settings-block"><h3>' + T('admin.settingsSite') + '</h3>' +
+        field('cfg-name', T('admin.siteName'), s.name) +
+        field('cfg-short', T('admin.shortName'), s.shortName, 'text', ' maxlength="3"') +
+        field('cfg-tagline', T('admin.tagline'), s.tagline) +
+        field('cfg-desc', T('admin.description'), s.description) +
+        field('cfg-base', T('admin.baseUrl'), s.baseUrl) +
+        field('cfg-footer', T('admin.footer'), s.footer) +
+        field('cfg-support', T('admin.supportEmail'), s.supportEmail, 'email') +
+        '<div class="field"><label>' + T('admin.motd') + '</label><textarea class="textarea" id="cfg-motd" rows="3">' + UI.esc(s.motd) + '</textarea></div>' +
+        select('cfg-lang', T('settings.language'), [['ru', 'Р СѓСЃСЃРєРёР№'], ['en', 'English'], ['uk', 'РЈРєСЂР°С—РЅСЃСЊРєР°'], ['lt', 'LietuviЕі']], s.defaultLanguage) +
+        select('cfg-theme', T('settings.theme'), [['light', T('theme.light')], ['dark', T('theme.dark')], ['oled', T('theme.oled')]], s.defaultTheme) +
+        check('cfg-registration', T('admin.registrationOpen'), s.registration) +
+        check('cfg-invite', T('admin.inviteOnly'), s.inviteOnly) +
+        check('cfg-firstadmin', T('admin.firstUserAdmin'), s.firstUserAdmin) +
+        '</div>';
+
+      // security
+      html += '<div class="settings-block"><h3>' + T('admin.settingsSecurity') + '</h3>' +
+        check('cfg-captcha', T('admin.captcha'), sec.requireCaptcha) +
+        check('cfg-encrypt', T('admin.encryption'), sec.encryptApi) +
+        check('cfg-adminprivate', T('admin.adminPrivateOnly'), sec.adminPrivateOnly) +
+        check('cfg-hsts', T('admin.hsts'), sec.hsts) +
+        '<hr>' +
+        '<div class="tiny muted" style="margin-bottom:6px">' + T('admin.rolesHint') + '</div>' +
+        check('cfg-rolechange', T('admin.allowRoleChange'), sec.allowRoleChange) +
+        check('cfg-selfdemote', T('admin.allowSelfDemote'), sec.allowSelfDemote) +
+        check('cfg-selfdelete', T('admin.allowSelfDelete'), sec.allowSelfDelete) +
+        check('cfg-lastadmin', T('admin.protectLastAdmin'), sec.protectLastAdmin) +
+        '<hr>' +
+        '<div class="inline-fields">' +
+        field('cfg-session', T('admin.sessionHours'), sec.sessionHours, 'number', ' min="1"') +
+        field('cfg-failed', T('admin.maxFailedLogins'), sec.maxFailedLoginsPerIp, 'number', ' min="3"') +
+        '</div>' +
+        field('cfg-lock', T('admin.loginLockSeconds'), sec.loginLockSeconds, 'number', ' min="10"') +
+        '</div>';
+
+      // limits
+      html += '<div class="settings-block"><h3>' + T('admin.settingsLimits') + '</h3>' +
+        '<div class="inline-fields">' +
+        field('cfg-rpm', T('admin.requestsPerMinute'), lim.requestsPerMinute, 'number', ' min="10"') +
+        field('cfg-regph', T('admin.registrationsPerHour'), lim.registrationsPerHour, 'number', ' min="1"') +
+        '</div><div class="inline-fields">' +
+        field('cfg-postspm', T('admin.postsPer10Min'), lim.postsPer10Min, 'number', ' min="1"') +
+        field('cfg-commentspm', T('admin.commentsPer10Min'), lim.commentsPer10Min, 'number', ' min="1"') +
+        '</div>' +
+        field('cfg-msgpm', T('admin.messagesPerMin'), lim.messagesPerMin, 'number', ' min="1"') +
+        '<div class="inline-fields">' +
+        field('cfg-postlen', T('admin.maxPostLength'), lim.maxPostLength, 'number', ' min="200"') +
+        field('cfg-commentlen', T('admin.maxCommentLength'), lim.maxCommentLength, 'number', ' min="100"') +
+        '</div><div class="inline-fields">' +
+        field('cfg-msglen', T('admin.maxMessageLength'), lim.maxMessageLength, 'number', ' min="100"') +
+        field('cfg-avatarkb', T('admin.maxAvatarKB'), lim.maxAvatarKB, 'number', ' min="16"') +
+        '</div>' +
+        field('cfg-imagekb', T('admin.maxPostImageKB'), lim.maxPostImageKB, 'number', ' min="64"') +
+        '</div>';
+
+      // ui + logging + storage
+      html += '<div class="settings-block"><h3>' + T('admin.settingsUi') + '</h3>' +
+        '<div class="inline-fields">' +
+        field('cfg-refresh', T('admin.refreshMs'), ui.refreshMs, 'number', ' min="1000"') +
+        field('cfg-online', T('admin.onlineWindow'), ui.onlineWindowSec, 'number', ' min="30"') +
+        '</div>' +
+        field('cfg-themes', T('admin.allowThemes'), ui.allowThemes) +
+        check('cfg-sounds', T('admin.allowSounds'), ui.allowSounds) +
+        '<hr><h3 style="margin-top:10px">' + T('admin.settingsLogging') + '</h3>' +
+        select('cfg-loglevel', T('admin.logLevel'), [['Error', 'Error'], ['Warn', 'Warn'], ['Info', 'Info'], ['Debug', 'Debug'], ['Verbose', 'Verbose']], lg.level) +
+        check('cfg-apitrace', T('admin.apiTrace'), lg.apiTrace) +
+        '<div class="inline-fields">' +
+        field('cfg-logmb', T('admin.logMaxFileMB'), lg.maxFileMB, 'number', ' min="1"') +
+        field('cfg-logdays', T('admin.logRetention'), lg.retentionDays, 'number', ' min="0"') +
+        '</div>' +
+        '<hr><h3 style="margin-top:10px">' + T('admin.settingsStorage') + '</h3>' +
+        '<div class="inline-fields">' +
+        field('cfg-backupmin', T('admin.backupInterval'), st.backupIntervalMin, 'number', ' min="0"') +
+        field('cfg-backupkeep', T('admin.backupKeep'), st.backupKeep, 'number', ' min="1"') +
+        '</div>' +
+        field('cfg-debounce', T('admin.saveDebounce'), st.saveDebounceMs, 'number', ' min="100"') +
+        check('cfg-readonly', T('admin.readOnlyOnError'), st.readOnlyOnError) +
+        '</div>';
+
+      // server (read only info + cookie + base path)
+      html += '<div class="settings-block"><h3>' + T('admin.settingsServer') + '</h3>' +
+        '<div class="tiny muted" style="margin-bottom:8px">' + T('admin.serverReadOnly') + '</div>' +
+        '<div class="info-table" style="font-size:12px;margin-bottom:10px">' +
+        '<div style="display:flex;justify-content:space-between;padding:3px 0"><span class="muted">' + T('admin.port') + '</span><b>' + srv.port + '</b></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:3px 0"><span class="muted">' + T('admin.adminPort') + '</span><b>' + srv.adminPort + '</b></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:3px 0"><span class="muted">' + T('admin.bind') + '</span><b>' + UI.esc(srv.bind) + '</b></div>' +
+        '</div>' +
+        field('cfg-basepath', T('admin.publicBasePath'), srv.publicBasePath) +
+        select('cfg-cookie', T('admin.cookieSecure'), [['auto', T('admin.cookieAuto')], ['true', T('common.on')], ['false', T('common.off')]], srv.cookieSecure) +
+        '</div>';
+
+      html += '</div>';
+
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">' +
+        '<button class="btn btn-primary" id="cfg-save">' + UI.icon('floppy-disk') + ' ' + T('common.save') + '</button>' +
+        '<button class="btn" id="cfg-reload">' + UI.icon('rotate') + ' ' + T('admin.reload') + '</button>' +
+        '<button class="btn" id="cfg-backup">' + UI.icon('box-archive') + ' ' + T('admin.backup') + '</button>' +
+        '</div>';
+      html += '</div></div>';
+
+      body.innerHTML = html;
+
+      var save = document.getElementById('cfg-save');
+      save.addEventListener('click', function () {
+        var payload = {
+          site: {
+            name: App.val('cfg-name'), shortName: App.val('cfg-short'),
+            tagline: App.val('cfg-tagline'), description: App.val('cfg-desc'),
+            baseUrl: App.val('cfg-base'), footer: App.val('cfg-footer'),
+            supportEmail: App.val('cfg-support'), motd: App.val('cfg-motd'),
+            defaultLanguage: App.val('cfg-lang'), defaultTheme: App.val('cfg-theme'),
+            registration: document.getElementById('cfg-registration').checked,
+            inviteOnly: document.getElementById('cfg-invite').checked,
+            firstUserAdmin: document.getElementById('cfg-firstadmin').checked
+          },
+          security: {
+            requireCaptcha: document.getElementById('cfg-captcha').checked,
+            encryptApi: document.getElementById('cfg-encrypt').checked,
+            adminPrivateOnly: document.getElementById('cfg-adminprivate').checked,
+            hsts: document.getElementById('cfg-hsts').checked,
+            allowRoleChange: document.getElementById('cfg-rolechange').checked,
+            allowSelfDemote: document.getElementById('cfg-selfdemote').checked,
+            allowSelfDelete: document.getElementById('cfg-selfdelete').checked,
+            protectLastAdmin: document.getElementById('cfg-lastadmin').checked,
+            sessionHours: Number(App.val('cfg-session')),
+            maxFailedLoginsPerIp: Number(App.val('cfg-failed')),
+            loginLockSeconds: Number(App.val('cfg-lock'))
+          },
+          limits: {
+            requestsPerMinute: Number(App.val('cfg-rpm')),
+            registrationsPerHour: Number(App.val('cfg-regph')),
+            postsPer10Min: Number(App.val('cfg-postspm')),
+            commentsPer10Min: Number(App.val('cfg-commentspm')),
+            messagesPerMin: Number(App.val('cfg-msgpm')),
+            maxPostLength: Number(App.val('cfg-postlen')),
+            maxCommentLength: Number(App.val('cfg-commentlen')),
+            maxMessageLength: Number(App.val('cfg-msglen')),
+            maxAvatarKB: Number(App.val('cfg-avatarkb')),
+            maxPostImageKB: Number(App.val('cfg-imagekb'))
+          },
+          ui: {
+            refreshMs: Number(App.val('cfg-refresh')),
+            onlineWindowSec: Number(App.val('cfg-online')),
+            allowThemes: App.val('cfg-themes'),
+            allowSounds: document.getElementById('cfg-sounds').checked
+          },
+          logging: {
+            level: App.val('cfg-loglevel'),
+            apiTrace: document.getElementById('cfg-apitrace').checked,
+            maxFileMB: Number(App.val('cfg-logmb')),
+            retentionDays: Number(App.val('cfg-logdays'))
+          },
+          storage: {
+            backupIntervalMin: Number(App.val('cfg-backupmin')),
+            backupKeep: Number(App.val('cfg-backupkeep')),
+            saveDebounceMs: Number(App.val('cfg-debounce')),
+            readOnlyOnError: document.getElementById('cfg-readonly').checked
+          },
+          server: {
+            publicBasePath: App.val('cfg-basepath'),
+            cookieSecure: App.val('cfg-cookie')
+          }
+        };
+        save.disabled = true;
+        Api.request('POST', '/api/admin/settings/save', payload, function (e2, d2) {
+          save.disabled = false;
+          if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+          UI.toast(T('settings.saved'), 'ok');
+          SoundFX.play('success');
+          if (d2 && d2.warnings && d2.warnings.length) {
+            UI.modal({
+              title: T('admin.settings'),
+              icon: 'circle-info',
+              body: '<ul style="margin:0;padding-left:18px;font-size:12.5px">' +
+                d2.warnings.map(function (w) { return '<li>' + UI.esc(w) + '</li>'; }).join('') + '</ul>',
+              actions: [{ label: T('common.close'), cls: 'btn-primary' }]
+            });
+          }
+          App.renderShell();
+          App.route();
+        });
+      });
+
+      document.getElementById('cfg-reload').addEventListener('click', function () {
+        Api.request('POST', '/api/admin/reload', {}, function (e2) {
+          if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+          UI.toast(T('admin.reloaded'), 'ok');
+          App.route();
+        });
+      });
+
+      document.getElementById('cfg-backup').addEventListener('click', function () {
+        Api.request('POST', '/api/admin/backup', {}, function (e2, d2) {
+          if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+          UI.toast(T('admin.backupDone') + ': ' + d2.path, 'ok');
+        });
+      });
     });
   }
 
@@ -1060,7 +1424,7 @@
         r.user ? ('<a href="#/u/' + encodeURIComponent(r.user.username) + '">' + UI.esc(r.user.displayName) + '</a>') : ('#' + r.target);
       h += '<div class="notif"><span class="type">' + UI.icon('flag') + '</span><div class="notif-main">' +
         '<span class="who">#' + r.id + ' ' + UI.esc(r.type) + '</span> ' + target +
-        '<div class="tiny muted" style="margin-top:3px">' + UI.esc(r.reason) + ' · ' + UI.timeAgo(r.created) + ' · ' + UI.esc(r.reporter ? r.reporter.displayName : '') + '</div>' +
+        '<div class="tiny muted" style="margin-top:3px">' + UI.esc(r.reason) + ' В· ' + UI.timeAgo(r.created) + ' В· ' + UI.esc(r.reporter ? r.reporter.displayName : '') + '</div>' +
         (r.status === 'open' ? '<div style="margin-top:5px"><button class="btn btn-xs btn-ok adm-close-report" data-id="' + r.id + '">' + T('admin.reportClose') + '</button></div>' : '<div class="tiny muted">closed</div>') +
         '</div></div>';
     }
