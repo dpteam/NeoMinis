@@ -245,7 +245,8 @@ namespace Social.Web
             long groupId = BodyLong(ctx, "group", 0);
             string visibility = BodyStr(ctx, "visibility", "public").Trim().ToLowerInvariant();
             if (visibility != "public" && visibility != "friends" && visibility != "private") visibility = "public";
-            if (text.Length == 0 && string.IsNullOrEmpty(imageData) && video.Length == 0)
+            if (text.Length == 0 && string.IsNullOrEmpty(imageData) && video.Length == 0 &&
+                Json.Get(ctx.Body, "poll") == null)
                 throw new ApiException(400, "empty", "Write something first");
 
             if (groupId > 0)
@@ -278,6 +279,26 @@ namespace Social.Web
 
             Post post = _store.CreatePost(ctx.User.Id, wallId, groupId, text, image, visibility);
             post.Video = Util.SingleLine(video, 500);
+
+            Dictionary<string, object> poll = Json.Get(ctx.Body, "poll") as Dictionary<string, object>;
+            if (poll != null)
+            {
+                string question = Util.SingleLine(Json.GetString(poll, "question", ""), Polls.MaxQuestionLength);
+                List<object> rawOptions = Json.Get(poll, "options") as List<object>;
+                List<string> options = new List<string>();
+                if (rawOptions != null)
+                {
+                    for (int i = 0; i < rawOptions.Count && options.Count < Polls.MaxOptions; i++)
+                    {
+                        string o = Util.SingleLine(rawOptions[i] as string ?? "", Polls.MaxOptionLength);
+                        if (o.Length > 0) options.Add(o);
+                    }
+                }
+                if (question.Length == 0) throw new ApiException(400, "bad-poll", "A poll needs a question");
+                if (options.Count < 2) throw new ApiException(400, "bad-poll", "A poll needs at least two options");
+                _store.SetPoll(post.Id, question, options);
+            }
+
             ctx.User.LastPostAt = DateTime.UtcNow;
             _store.MarkUserDirty(ctx.User);
             _stats.OnPost();
@@ -371,6 +392,24 @@ namespace Social.Web
             JsonBuilder b = new JsonBuilder(256);
             b.BeginObject();
             b.Prop("pinned", p.Pinned);
+            SendOk(ctx, b);
+        }
+
+        private void HandlePollVote(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "post", 0);
+            int option = (int)BodyLong(ctx, "option", -1);
+            Post p = RequirePost(id);
+            if (!CanViewPost(ctx.User, p)) throw new ApiException(403, "private", "This post is not available");
+            if (!Polls.Has(p)) throw new ApiException(400, "no-poll", "This post has no poll");
+            if (option < 0 || option >= Polls.Options(p).Count)
+                throw new ApiException(400, "bad-option", "Unknown poll option");
+            int mine = _store.VotePoll(p.Id, ctx.User.Id, option);
+            Log.Debug("DATA", "poll vote on #" + p.Id + " by @" + ctx.User.Username + " -> " + mine);
+
+            JsonBuilder b = new JsonBuilder(1024);
+            b.BeginObject();
+            b.Name("post").Raw(PostView(p, ctx.User));
             SendOk(ctx, b);
         }
 

@@ -642,6 +642,33 @@ namespace Social.Core
             }
         }
 
+        /// <summary>Attaches a poll to a freshly created post.</summary>
+        public void SetPoll(long id, string question, List<string> options)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Post p = FindPost(id);
+                if (p == null || p.Deleted) return;
+                Polls.Set(p, question, options);
+                MarkPosts();
+            }
+        }
+
+        /// <summary>Applies a vote; returns the option the user now backs or -1.</summary>
+        public int VotePoll(long id, long userId, int option)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Post p = FindPost(id);
+                if (p == null || p.Deleted || !Polls.Has(p)) return -1;
+                int result = Polls.Vote(p, userId, option);
+                MarkPosts();
+                return result;
+            }
+        }
+
         /// <summary>Pins a post; only one post per wall or group stays pinned.</summary>
         public bool PinPost(long id, bool pinned)
         {
@@ -2151,6 +2178,7 @@ namespace Social.Core
                 d["visibility"] = p.Visibility; d["likes"] = p.Likes; d["comments"] = p.Comments;
                 d["deleted"] = p.Deleted; d["pinned"] = p.Pinned;
                 d["legacySource"] = p.LegacySource; d["legacyId"] = p.LegacyId;
+                d["pollQuestion"] = p.PollQuestion; d["pollOptions"] = p.PollOptions; d["pollVotes"] = p.PollVotes;
                 list.Add(d);
             }
             return list;
@@ -2174,6 +2202,9 @@ namespace Social.Core
             p.Video = Json.GetString(d, "video", "");
             p.LegacySource = Json.GetString(d, "legacySource", "");
             p.LegacyId = Json.GetString(d, "legacyId", "");
+            p.PollQuestion = Json.GetString(d, "pollQuestion", "");
+            p.PollOptions = Json.GetString(d, "pollOptions", "");
+            p.PollVotes = Json.GetString(d, "pollVotes", "");
             object likes = Json.Get(d, "likes");
             List<object> arr = likes as List<object>;
             if (arr != null)

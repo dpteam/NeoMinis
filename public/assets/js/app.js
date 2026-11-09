@@ -231,13 +231,11 @@ var App = (function () {
       '<input type="search" id="top-search-input" placeholder="' + UI.attr(T('search.placeholder')) + '" autocomplete="off"></form>';
     html += '<nav class="tabs">';
     html += tab('#/feed', 'house', T('nav.feed'), 'feed');
-    html += tab('#/friends', 'user-group', T('nav.friends'), 'friends', friendReq, 'badge-friends');
-    html += tab('#/im', 'envelope', T('nav.messages'), 'im', unreadM, 'badge-msg');
-    html += tab('#/people', 'users', T('nav.people'), 'people');
-    html += tab('#/groups', 'people-group', T('nav.groups'), 'groups');
+    html += tab('#/profile/' + u.id, 'id-card', T('nav.profile'), 'profile');
     html += tab('#/notifications', 'bell', T('nav.notifications'), 'notifications', unreadN, 'badge-notif');
-    html += tab('#/bookmarks', 'bookmark', T('nav.bookmarks'), 'bookmarks');
-    if (isMod) html += tab('#/admin', 'shield-halved', T('nav.admin'), 'admin');
+    html += tab('#/settings', 'gear', T('nav.settings'), 'settings');
+    // the admin board is the only place where the extra tab is the point
+    if (isMod && site.adminBoard) html += tab('#/admin', 'shield-halved', T('nav.admin'), 'admin');
     html += '</nav>';
     html += '<div class="top-right">';
     html += '<button type="button" class="icon-btn" id="theme-toggle" title="' + UI.attr(T('settings.theme')) + '">' + UI.icon('circle-half-stroke') + '</button>';
@@ -759,9 +757,17 @@ var App = (function () {
       '<input class="input" id="composer-video-url" placeholder="' + UI.attr(T('feed.videoPlaceholder')) + '" autocomplete="off"></div>' +
       '<div class="composer-video-preview" id="composer-video-preview"></div>' +
       '</div>' +
+      '<div class="composer-poll hidden" id="composer-poll">' +
+      '<div class="poll-editor-head">' + UI.icon('square-poll-vertical') + '<span>' + T('feed.poll') + '</span>' +
+      '<button type="button" class="icon-btn" id="composer-poll-x" title="' + UI.attr(T('common.cancel')) + '">' + UI.icon('xmark') + '</button></div>' +
+      '<input class="input" id="composer-poll-q" maxlength="160" placeholder="' + UI.attr(T('feed.pollQuestion')) + '">' +
+      '<div id="composer-poll-options"></div>' +
+      '<button type="button" class="btn btn-xs" id="composer-poll-add">' + UI.icon('plus') + ' ' + T('feed.pollAddOption') + '</button>' +
+      '</div>' +
       '<div class="composer-bar">' +
       '<button type="button" class="btn btn-sm" id="composer-photo">' + UI.icon('image') + ' ' + T('feed.photo') + '</button>' +
       '<button type="button" class="btn btn-sm" id="composer-video">' + UI.icon('video') + ' ' + T('feed.video') + '</button>' +
+      '<button type="button" class="btn btn-sm" id="composer-poll-btn">' + UI.icon('square-poll-vertical') + ' ' + T('feed.poll') + '</button>' +
       '<input type="file" id="composer-file" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">' +
       '<select class="select" id="composer-visibility" style="width:auto;padding:4px 24px 4px 8px;font-size:11.5px">' +
       '<option value="public">' + T('feed.public') + '</option>' +
@@ -784,6 +790,10 @@ var App = (function () {
     var videoInput = document.getElementById('composer-video-url');
     var videoPreview = document.getElementById('composer-video-preview');
     var pop = document.getElementById('composer-mentions');
+    var pollBtn = document.getElementById('composer-poll-btn');
+    var pollBox = document.getElementById('composer-poll');
+    var pollQ = document.getElementById('composer-poll-q');
+    var pollOptions = document.getElementById('composer-poll-options');
     var imageData = '';
 
     if (text) {
@@ -802,6 +812,50 @@ var App = (function () {
       var u = videoInput.value.trim();
       videoPreview.innerHTML = u ? videoHtml(u) : '';
     });
+
+    // ------------------------------------------------------------ poll editor
+    var pollSlots = 0;
+
+    function addPollOption(value) {
+      if (!pollOptions || pollSlots >= 6) return;
+      pollSlots++;
+      var wrap = document.createElement('div');
+      wrap.className = 'poll-option-row';
+      wrap.innerHTML = '<input class="input" maxlength="80" placeholder="' + UI.attr(T('feed.pollOption')) + ' ' + pollSlots + '">' +
+        '<button type="button" class="icon-btn poll-option-x">' + UI.icon('xmark') + '</button>';
+      var input = wrap.querySelector('input');
+      if (value) input.value = value;
+      wrap.querySelector('.poll-option-x').addEventListener('click', function () {
+        if (pollOptions.querySelectorAll('.poll-option-row').length <= 2) {
+          input.value = '';
+          return;
+        }
+        wrap.parentNode.removeChild(wrap);
+        pollSlots--;
+      });
+      pollOptions.appendChild(wrap);
+    }
+
+    function resetPoll() {
+      if (!pollBox) return;
+      pollBox.className = 'composer-poll hidden';
+      if (pollQ) pollQ.value = '';
+      if (pollOptions) pollOptions.innerHTML = '';
+      pollSlots = 0;
+    }
+
+    if (pollBtn && pollBox) pollBtn.addEventListener('click', function () {
+      var open = pollBox.className.indexOf('hidden') < 0;
+      if (open) { resetPoll(); return; }
+      pollBox.className = 'composer-poll';
+      addPollOption('');
+      addPollOption('');
+      if (pollQ) pollQ.focus();
+    });
+    var pollX = document.getElementById('composer-poll-x');
+    if (pollX) pollX.addEventListener('click', resetPoll);
+    var pollAdd = document.getElementById('composer-poll-add');
+    if (pollAdd) pollAdd.addEventListener('click', function () { addPollOption(''); });
 
     // ------------------------------------------------------ @mention helper
     var mentionSeq = 0;
@@ -896,7 +950,23 @@ var App = (function () {
       var body = text ? text.value.trim() : '';
       var videoUrl = videoInput ? videoInput.value.trim() : '';
       if (videoUrl && !/^https?:\/\//i.test(videoUrl)) { UI.toast(T('feed.videoBadUrl'), 'err'); return; }
-      if (!body && !imageData && !videoUrl) { if (text) text.focus(); return; }
+
+      // poll, when the editor is open
+      var poll = null;
+      if (pollBox && pollBox.className.indexOf('hidden') < 0) {
+        var question = pollQ ? pollQ.value.trim() : '';
+        var opts = [];
+        var inputs = pollOptions ? pollOptions.querySelectorAll('input') : [];
+        for (var pi = 0; pi < inputs.length; pi++) {
+          var ov = inputs[pi].value.trim();
+          if (ov) opts.push(ov);
+        }
+        if (question.length < 2) { UI.toast(T('feed.pollNeedQuestion'), 'err'); if (pollQ) pollQ.focus(); return; }
+        if (opts.length < 2) { UI.toast(T('feed.pollNeedOptions'), 'err'); return; }
+        poll = { question: question, options: opts };
+      }
+
+      if (!body && !imageData && !videoUrl && !poll) { if (text) text.focus(); return; }
       var btn = document.getElementById('composer-submit');
       setBusy(btn, true, T('feed.posting'));
       var payload = {
@@ -905,7 +975,8 @@ var App = (function () {
         wall: wallId || 0,
         group: groupId || 0,
         image: imageData || '',
-        video: videoUrl
+        video: videoUrl,
+        poll: poll
       };
       Api.request('POST', '/api/post', payload, function (err, data) {
         setBusy(btn, false, T('feed.post'));
@@ -917,6 +988,7 @@ var App = (function () {
         if (videoInput) videoInput.value = '';
         if (videoPreview) videoPreview.innerHTML = '';
         if (videoRow) videoRow.className = 'composer-video-row hidden';
+        resetPoll();
         SoundFX.play('post');
         UI.toast(T('feed.posted'), 'ok');
         if (state.route === 'feed' && !groupId) {
@@ -941,6 +1013,7 @@ var App = (function () {
     var body = UI.linkify(p.body || '').replace(/\n/g, '<br>');
     var img = UI.safeUrl(p.image);
     var vid = videoHtml(p.video);
+    var poll = pollHtml(p.poll);
     var html = '<article class="post" data-post="' + p.id + '">' +
       '<div class="post-head">' + UI.avatar(author, 38) +
       '<div class="post-who"><div class="meta">' + meta + '</div></div>' +
@@ -953,6 +1026,7 @@ var App = (function () {
       (body ? '<div class="post-body">' + body + '</div>' : '') +
       (img ? '<div class="post-media"><img class="post-img" src="' + UI.attr(img) + '" alt="" loading="lazy"></div>' : '') +
       vid +
+      poll +
       '<div class="post-actions">' +
       '<button type="button" class="pa post-like' + (p.liked ? ' liked' : '') + '" data-id="' + p.id + '">' + UI.icon(p.liked ? 'heart' : 'heart') + ' <span>' + (p.liked ? T('feed.liked') : T('feed.like')) + '</span> <b class="likes-count" data-id="' + p.id + '" title="' + UI.attr(T('feed.likedBy')) + '">' + (p.likes || 0) + '</b></button>' +
       '<button type="button" class="pa post-comment-toggle" data-id="' + p.id + '">' + UI.icon('comment') + ' <span>' + T('feed.comment') + '</span> <b>' + (p.comments || 0) + '</b></button>' +
@@ -963,6 +1037,61 @@ var App = (function () {
       '<div class="comments hidden" data-comments="' + p.id + '"></div>' +
       '</article>';
     return html;
+  }
+
+  // ---------------------------------------------------------- post video
+
+  function pollHtml(poll) {
+    if (!poll || !poll.options || !poll.options.length) return '';
+    var voted = typeof poll.myVote === 'number' && poll.myVote >= 0;
+    var html = '<div class="poll" data-post-poll="1">' +
+      '<div class="poll-q">' + UI.icon('square-poll-vertical') + ' ' + UI.esc(poll.question || '') + '</div>';
+    for (var i = 0; i < poll.options.length; i++) {
+      var o = poll.options[i];
+      html += '<button type="button" class="poll-opt' + (o.mine ? ' mine' : '') + (voted ? ' voted' : '') +
+        '" data-option="' + i + '">' +
+        '<span class="poll-bar" style="width:' + (voted ? (o.percent || 0) : 0) + '%"></span>' +
+        '<span class="poll-text">' + UI.esc(o.text) + '</span>' +
+        (voted ? '<span class="poll-pct">' + (o.percent || 0) + '%</span>' : '') +
+        '</button>';
+    }
+    html += '<div class="poll-foot">' + (voted ? UI.icon('check') + ' ' + T('feed.pollVoted') + ' · ' : '') +
+      T('feed.pollVotes', poll.total || 0) + (voted ? ' · <span class="poll-hint">' + T('feed.pollChange') + '</span>' : '') +
+      '</div></div>';
+    return html;
+  }
+
+  function bindPolls(scope) {
+    var opts = (scope || document).querySelectorAll('.poll-opt');
+    for (var i = 0; i < opts.length; i++) {
+      if (opts[i].getAttribute('data-bound')) continue;
+      opts[i].setAttribute('data-bound', '1');
+      opts[i].addEventListener('click', function () {
+        var pollBox = this;
+        while (pollBox && !pollBox.getAttribute('data-post-poll')) pollBox = pollBox.parentNode;
+        var article = pollBox;
+        while (article && !article.getAttribute('data-post')) article = article.parentNode;
+        if (!article) return;
+        votePoll(article.getAttribute('data-post'), Number(this.getAttribute('data-option')), pollBox);
+      });
+    }
+  }
+
+  function votePoll(postId, option, box) {
+    var buttons = box.querySelectorAll('.poll-opt');
+    for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;
+    Api.request('POST', '/api/poll', { post: Number(postId), option: option }, function (err, data) {
+      for (var k = 0; k < buttons.length; k++) buttons[k].disabled = false;
+      if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+      var p = data && data.post;
+      if (!p || !p.poll) return;
+      var fresh = document.createElement('div');
+      fresh.innerHTML = pollHtml(p.poll);
+      var replacement = fresh.firstChild;
+      box.parentNode.replaceChild(replacement, box);
+      bindPolls(replacement.parentNode);
+      SoundFX.play('click');
+    });
   }
 
   // ------------------------------------------------------------ post tools
@@ -1180,6 +1309,7 @@ var App = (function () {
       edits[ed].setAttribute('data-bound', '1');
       edits[ed].addEventListener('click', function () { editPost(this.getAttribute('data-id')); });
     }
+    bindPolls(scope);
     var dels = (scope || document).querySelectorAll('.post-delete');
     for (var d = 0; d < dels.length; d++) {
       if (dels[d].getAttribute('data-bound')) continue;

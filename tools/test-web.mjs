@@ -303,6 +303,28 @@ async function main() {
   const tagMissing = await alice.call('GET', '/api/tag?tag=');
   ok('empty tag rejected', tagMissing.status === 400, String(tagMissing.status));
 
+  // ---- polls
+  const pollPost = await alice.call('POST', '/api/post', {
+    body: 'choose one', poll: { question: 'Coffee or tea?', options: ['Coffee', 'Tea'] }
+  });
+  ok('poll post created', pollPost.status === 200 && pollPost.data.post.poll &&
+    pollPost.data.post.poll.options.length === 2, String(pollPost.status));
+  const pollId = pollPost.data && pollPost.data.post.id;
+  const vote = await bob.call('POST', '/api/poll', { post: pollId, option: 1 });
+  ok('poll vote counted', vote.status === 200 && vote.data.post.poll.total === 1 &&
+    vote.data.post.poll.myVote === 1 && vote.data.post.poll.options[1].percent === 100,
+    JSON.stringify(vote.data && vote.data.post.poll));
+  const changeVote = await bob.call('POST', '/api/poll', { post: pollId, option: 0 });
+  ok('poll vote changes', changeVote.data.post.poll.myVote === 0 && changeVote.data.post.poll.total === 1, '');
+  const unvote = await bob.call('POST', '/api/poll', { post: pollId, option: 0 });
+  ok('poll vote withdrawn', unvote.data.post.poll.myVote === -1 && unvote.data.post.poll.total === 0, '');
+  const badVote = await bob.call('POST', '/api/poll', { post: pollId, option: 9 });
+  ok('bad poll option rejected', badVote.status === 400, String(badVote.status));
+  const badPoll = await alice.call('POST', '/api/post', { body: 'x', poll: { question: 'q', options: ['only one'] } });
+  ok('poll needs two options', badPoll.status === 400, String(badPoll.status));
+  const plainVote = await bob.call('POST', '/api/poll', { post: postId, option: 0 });
+  ok('voting without a poll rejected', plainVote.status === 400, String(plainVote.status));
+
   // ---- live notifications and per-type mutes
   const baseNotif = await alice.call('GET', '/api/notifications?limit=1');
   const lastId = baseNotif.data.notifications.length ? baseNotif.data.notifications[0].id : 0;

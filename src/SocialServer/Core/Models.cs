@@ -77,6 +77,11 @@ namespace Social.Core
         public bool Pinned;
         public string LegacySource = "";
         public string LegacyId = "";
+
+        // poll attached to the post (see Core/Polls.cs)
+        public string PollQuestion = "";
+        public string PollOptions = "";   // one option per line
+        public string PollVotes = "";     // one line per option, voter ids comma separated
     }
 
     public sealed class Bookmark

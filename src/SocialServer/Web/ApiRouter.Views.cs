@@ -138,6 +138,31 @@ namespace Social.Web
             b.Prop("pinned", p.Pinned);
             b.Prop("bookmarked", viewer != null && _store.IsBookmarked(viewer.Id, p.Id));
             b.Prop("legacySource", p.LegacySource);
+            if (Polls.Has(p))
+            {
+                List<string> options = Polls.Options(p);
+                List<List<long>> votes = Polls.Votes(p);
+                int mine = viewer == null ? -1 : Polls.IndexOfVote(p, viewer.Id);
+                int total = Polls.Total(p);
+                b.Name("poll").BeginObject()
+                    .Prop("question", p.PollQuestion)
+                    .Prop("total", total)
+                    .Prop("myVote", mine);
+                b.Name("options").BeginArray();
+                for (int i = 0; i < options.Count; i++)
+                {
+                    int count = i < votes.Count ? votes[i].Count : 0;
+                    int percent = total == 0 ? 0 : (int)Math.Round(count * 100.0 / total);
+                    b.BeginObject()
+                        .Prop("text", options[i])
+                        .Prop("votes", count)
+                        .Prop("percent", percent)
+                        .Prop("mine", i == mine)
+                        .EndObject();
+                }
+                b.EndArray();
+                b.EndObject();
+            }
             if (p.Wall > 0)
             {
                 User wallUser = _store.FindUser(p.Wall);

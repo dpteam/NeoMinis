@@ -99,7 +99,7 @@ permission, `404` missing, `409` conflict, `413` too large, `429` rate limit,
 | GET | `/api/feed` | `tab=home|global|friends`, `before`, `limit` | `{ tab, posts[], hasMore, next }` |
 | GET | `/api/wall` | `user`, `before`, `limit` | `{ user, posts[], hasMore, next, canPost }` |
 | GET | `/api/post` | `id` | `{ post, comments[] }` |
-| POST | `/api/post` | `body`, `image`, `video`, `visibility`, `wall`, `group` | `{ post }` |
+| POST | `/api/post` | `body`, `image`, `video`, `poll`, `visibility`, `wall`, `group` | `{ post }` |
 | POST | `/api/post/delete` | `id` | `{ ok }` |
 | POST | `/api/post/edit` | `id`, `body`, `video`, `visibility`, `imageAction` (`keep|remove|replace`), `image` | `{ post }` |
 | POST | `/api/post/pin` | `id`, `on` | `{ pinned }` |
@@ -110,6 +110,7 @@ permission, `404` missing, `409` conflict, `413` too large, `429` rate limit,
 | GET | `/api/bookmarks` | `before`, `limit` | `{ posts[], hasMore, next, total }` |
 | POST | `/api/bookmark` | `id` | `{ bookmarked, total }` |
 | GET | `/api/likes` | `post`, `limit` | `{ users[], total }` |
+| POST | `/api/poll` | `post`, `option` | `{ post }` (with the fresh poll state) |
 | GET | `/api/photos` | `user`, `before`, `limit` | `{ user, photos[{ id, image, created, likes, comments }], hasMore, next }` |
 
 `visibility`: `public` (default) · `friends` · `private`.
@@ -124,6 +125,12 @@ of a post and the reply tells you the new state and the total saved count.
 `POST /api/post/edit` is limited to the author and the staff. When
 `limits.editWindowMin` is greater than zero, an ordinary user can only edit a post
 inside that window (moderators are never limited). Editing sets `post.edited`.
+
+`poll` in `/api/post` is `{ question, options[] }`: 2–6 options, 80 chars each,
+160 for the question. A poll alone is a valid post. Votes are single choice and
+private-safe: `POST /api/poll` with `post` and `option` sets or changes the vote,
+clicking the same option again withdraws it (`myVote` becomes `-1`). Every post
+with a poll carries `poll: { question, total, myVote, options[{ text, votes, percent, mine }] }`.
 
 `POST /api/post/pin` pins a post to the top of a wall or group feed; the post
 author, the wall owner, the group owner and the staff may pin. Only one post per
