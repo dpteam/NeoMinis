@@ -174,7 +174,8 @@ namespace Social.Web
             b.Prop("notifyWaitSec", _cfg.NotifyWaitSec);
             b.Prop("maxPostLength", _cfg.MaxPostLength);
             b.Prop("maxCommentLength", _cfg.MaxCommentLength);
-            b.Prop("maxMessageLength", _cfg.MaxMessageLength);
+            b.Prop("maxMessageLength", _cfg.MaxMessageLength)
+                .Prop("maxMessageImageKB", _cfg.MaxMessageImageKB);
             b.Prop("maxStatusLength", _cfg.MaxStatusLength);
             b.Prop("maxBioLength", _cfg.MaxBioLength);
             b.Prop("maxNameLength", _cfg.MaxNameLength);
@@ -559,6 +560,8 @@ namespace Social.Web
             if (r == "messages/send") { RequireMethod(m, "POST"); HandleMessageSend(ctx); return; }
             if (r == "messages/read") { RequireMethod(m, "POST"); HandleMessageRead(ctx); return; }
             if (r == "messages/delete") { RequireMethod(m, "POST"); HandleMessageDelete(ctx); return; }
+            if (r == "messages/wait") { RequireMethod(m, "GET"); HandleMessagesWait(ctx); return; }
+            if (r == "messages/typing") { RequireMethod(m, "POST"); HandleMessageTyping(ctx); return; }
             if (r == "notifications") { RequireMethod(m, "GET"); HandleNotifications(ctx); return; }
             if (r == "notifications/read") { RequireMethod(m, "POST"); HandleNotificationsRead(ctx); return; }
             if (r == "notifications/wait") { RequireMethod(m, "GET"); HandleNotificationsWait(ctx); return; }

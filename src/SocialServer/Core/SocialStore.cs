@@ -1150,6 +1150,11 @@ namespace Social.Core
 
         public Message CreateMessage(long from, long to, string body)
         {
+            return CreateMessage(from, to, body, "", 0);
+        }
+
+        public Message CreateMessage(long from, long to, string body, string image, long replyTo)
+        {
             lock (_sync)
             {
                 EnsureWritable();
@@ -1158,10 +1163,72 @@ namespace Social.Core
                 m.From = from;
                 m.To = to;
                 m.Body = body ?? "";
+                m.Image = image ?? "";
+                m.ReplyTo = replyTo;
                 m.Created = DateTime.UtcNow;
                 _messages.Insert(0, m);
                 MarkMessages();
                 return m;
+            }
+        }
+
+        public Message FindMessage(long id)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _messages.Count; i++) if (_messages[i].Id == id) return _messages[i];
+                return null;
+            }
+        }
+
+        /// <summary>Messages of a conversation with an id greater than <paramref name="after"/>.</summary>
+        public List<Message> MessagesAfter(long viewer, long other, long after, int limit)
+        {
+            List<Message> list = new List<Message>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _messages.Count && list.Count < limit; i++)
+                {
+                    Message m = _messages[i];
+                    if (m.Id <= after) continue;
+                    if (!((m.From == viewer && m.To == other) || (m.From == other && m.To == viewer))) continue;
+                    if (m.From == viewer && m.DeletedByFrom) continue;
+                    if (m.To == viewer && m.DeletedByTo) continue;
+                    list.Add(m);
+                }
+            }
+            return list;
+        }
+
+        /// <summary>Newest message id of a conversation, 0 when empty.</summary>
+        public long LastMessageId(long viewer, long other)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _messages.Count; i++)
+                {
+                    Message m = _messages[i];
+                    if (!((m.From == viewer && m.To == other) || (m.From == other && m.To == viewer))) continue;
+                    if (m.From == viewer && m.DeletedByFrom) continue;
+                    if (m.To == viewer && m.DeletedByTo) continue;
+                    return m.Id;
+                }
+                return 0;
+            }
+        }
+
+        /// <summary>True when the newest message the viewer sent has been read.</summary>
+        public bool LastMineRead(long viewer, long other)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _messages.Count; i++)
+                {
+                    Message m = _messages[i];
+                    if (m.From != viewer || m.To != other || m.DeletedByFrom) continue;
+                    return m.Read;
+                }
+                return false;
             }
         }
 
@@ -2183,6 +2250,7 @@ namespace Social.Core
                 Message m = _messages[i];
                 Dictionary<string, object> d = new Dictionary<string, object>();
                 d["id"] = m.Id; d["from"] = m.From; d["to"] = m.To; d["body"] = m.Body;
+                d["image"] = m.Image; d["replyTo"] = m.ReplyTo;
                 d["created"] = m.Created; d["read"] = m.Read;
                 d["deletedByFrom"] = m.DeletedByFrom; d["deletedByTo"] = m.DeletedByTo;
                 list.Add(d);
@@ -2197,6 +2265,8 @@ namespace Social.Core
             m.From = Json.GetLong(d, "from", 0);
             m.To = Json.GetLong(d, "to", 0);
             m.Body = Json.GetString(d, "body", "");
+            m.Image = Json.GetString(d, "image", "");
+            m.ReplyTo = Json.GetLong(d, "replyTo", 0);
             m.Created = Json.GetDate(d, "created", DateTime.UtcNow);
             m.Read = Json.GetBool(d, "read", false);
             m.DeletedByFrom = Json.GetBool(d, "deletedByFrom", false);

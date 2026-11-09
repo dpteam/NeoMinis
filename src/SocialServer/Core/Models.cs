@@ -111,6 +111,8 @@ namespace Social.Core
         public long From;
         public long To;
         public string Body = "";
+        public string Image = "";      // optional picture / animated GIF, /media/messages/...
+        public long ReplyTo;           // id of the quoted message, 0 = none
         public DateTime Created = DateTime.UtcNow;
         public bool Read;
         public bool DeletedByFrom;

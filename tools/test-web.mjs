@@ -336,6 +336,28 @@ async function main() {
   const conv = await alice.call('GET', '/api/messages?with=' + bob.user.id);
   ok('conversation read', conv.data && conv.data.messages.length === 1, '');
 
+  // ---- messenger: attachments, quotes, typing, live delivery, read receipts
+  const quotedId = conv.data.messages[0].id;
+  const imgMsg = await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: '', image: PNG });
+  ok('message picture saved', imgMsg.status === 200 && String(imgMsg.data.message.image).indexOf('/media/messages/') === 0,
+    String(imgMsg.status) + ' ' + (imgMsg.data && imgMsg.data.message.image));
+  const replyMsg = await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: 'quote me', replyTo: quotedId });
+  ok('reply is quoted', replyMsg.status === 200 && replyMsg.data.message.replyTo &&
+    replyMsg.data.message.replyTo.id === quotedId, JSON.stringify(replyMsg.data && replyMsg.data.message.replyTo));
+  const badReply = await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: 'x', replyTo: 999999 });
+  ok('foreign quote rejected', badReply.status === 400, String(badReply.status));
+
+  await bob.call('POST', '/api/messages/typing', { to: alice.user.id });
+  const typingWait = await alice.call('GET', '/api/messages/wait?with=' + bob.user.id + '&after=0&timeout=3');
+  ok('typing is visible', typingWait.status === 200 && typingWait.data.typing === true, JSON.stringify(typingWait.data && typingWait.data.typing));
+
+  const beforeWait = await alice.call('GET', '/api/messages?with=' + bob.user.id + '&limit=50');
+  const lastSeen = beforeWait.data.messages.length ? beforeWait.data.messages[beforeWait.data.messages.length - 1].id : 0;
+  const liveWait = await alice.call('GET', '/api/messages/wait?with=' + bob.user.id + '&after=' + lastSeen + '&timeout=1');
+  ok('live wait answers', liveWait.status === 200 && typeof liveWait.data.latest === 'number', String(liveWait.status));
+  const readState = await bob.call('GET', '/api/messages/wait?with=' + alice.user.id + '&after=0&timeout=1');
+  ok('read receipt reported', readState.status === 200 && readState.data.read === true, JSON.stringify(readState.data && readState.data.read));
+
   const group = await alice.call('POST', '/api/group/create', { name: 'Test Group ' + stamp, description: 'x', visibility: 'public' });
   ok('group created', group.status === 200 && group.data.group.id > 0, String(group.status));
   const gid = group.data && group.data.group.id;

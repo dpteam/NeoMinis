@@ -30,7 +30,10 @@ namespace Social.Core
             string ext = Sniff(data);
             if (ext == null) { error = "unsupported-image"; return null; }
 
-            string sub = kind == "avatar" ? "avatars" : kind == "group" ? "groups" : "posts";
+            string sub = kind == "avatar" ? "avatars"
+                : kind == "group" ? "groups"
+                : kind == "message" ? "messages"
+                : "posts";
             string dir = Path.Combine(_cfg.MediaDir, sub);
             Directory.CreateDirectory(dir);
 

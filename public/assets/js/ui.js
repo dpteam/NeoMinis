@@ -52,7 +52,6 @@ var UI = (function () {
   }
 
   function timeAgo(iso) {
-    if (!iso) return '';
     var t = Date.parse(iso);
     if (isNaN(t)) return '';
     var diff = Math.max(0, Math.floor((Date.now() - t) / 1000));
@@ -78,6 +77,14 @@ var UI = (function () {
   }
 
   function pad(n) { return n < 10 ? '0' + n : String(n); }
+
+  /// HH:MM for chat bubbles, empty for junk input.
+  function formatTime(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
 
   function initials(name) {
     var s = String(name || '?').trim();
@@ -343,7 +350,7 @@ var UI = (function () {
 
   return {
     $: $, $$: $$, esc: esc, attr: attr, nl2br: nl2br, linkify: linkify,
-    safeUrl: safeUrl, timeAgo: timeAgo, formatDate: formatDate, initials: initials,
+    safeUrl: safeUrl, timeAgo: timeAgo, formatDate: formatDate, formatTime: formatTime, initials: initials,
     avatar: avatar, icon: icon, userLink: userLink, roleBadge: roleBadge, presence: presence,
     spinner: spinner, empty: empty, toast: toast, modal: modal, confirm: confirmBox,
     imageModal: imageModal, getTheme: getTheme, applyTheme: applyTheme, cycleTheme: cycleTheme,

@@ -134,16 +134,82 @@
 
   // -------------------------------------------------------------- messages
 
+  var EMOJI = ['😀', '😄', '😁', '😆', '😅', '😂', '🙂', '😉', '😊', '😍', '😘', '😗', '😎', '🤔', '😐', '😴',
+    '😢', '😭', '😤', '😡', '🤯', '😱', '🤗', '🤫', '🙄', '😬', '🤐', '😷', '🤒', '🥳', '🥺', '😇',
+    '👍', '👎', '👌', '✌️', '🤞', '🤝', '👏', '🙌', '🙏', '💪', '👀', '🧠', '❤️', '🧡', '💛', '💚',
+    '💙', '💜', '🖤', '💔', '💯', '🔥', '✨', '🎉', '🎁', '☕', '🍕', '🍺', '🌙', '☀️', '⚡', '💤',
+    '🐱', '🐶', '🦊', '🐻', '🐼', '🦄', '🌈', '⭐', '🚀', '💻', '🎮', '🎧', '📷', '📌', '✅', '❌'];
+
+  var IMG_RE = /^(https?:\/\/[^\s]+\.(?:png|jpe?g|gif|webp|avif))(\?\S*)?$/i;
+  var VID_RE = /^(https?:\/\/[^\s]+\.(?:mp4|webm|ogv))(\?\S*)?$/i;
+
+  function msgPreview(m) {
+    var body = String((m && m.body) || '').replace(/\s+/g, ' ').trim();
+    if (body) return body.substring(0, 60);
+    if (m && m.image) return T('messages.photo');
+    return '';
+  }
+
+  function dayLabel(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var now = new Date();
+    var start = function (x) { return new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(); };
+    var diff = Math.round((start(now) - start(d)) / 86400000);
+    if (diff === 0) return T('messages.today');
+    if (diff === 1) return T('messages.yesterday');
+    return UI.formatDate(iso);
+  }
+
+  function msgBodyHtml(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return '';
+    if (IMG_RE.test(raw)) {
+      return '<img class="msg-img" src="' + UI.attr(raw) + '" alt="" loading="lazy">';
+    }
+    if (VID_RE.test(raw)) {
+      return '<video class="msg-video" controls preload="metadata" src="' + UI.attr(raw) + '"></video>';
+    }
+    return UI.linkify(text).replace(/\n/g, '<br>');
+  }
+
+  function bubbleHtml(m, other) {
+    var mine = !!m.mine;
+    var u = mine ? state.user : other;
+    var quote = '';
+    if (m.replyTo) {
+      var q = m.replyTo;
+      var qname = q.mine ? T('common.you') : UI.esc(other.displayName || other.username);
+      quote = '<div class="msg-quote"><b>' + qname + '</b><span>' +
+        UI.esc(q.body || (q.image ? T('messages.photo') : '')) + '</span></div>';
+    }
+    var img = UI.safeUrl(m.image);
+    var tick = mine ? '<span class="tick' + (m.read ? ' read' : '') + '" title="' + UI.attr(m.read ? T('messages.read') : T('messages.sent')) + '">' +
+      UI.icon(m.read ? 'check-double' : 'check') + '</span>' : '';
+    return '<div class="bubble-row' + (mine ? ' mine' : '') + '" data-id="' + m.id + '">' + UI.avatar(u, 26) +
+      '<div class="bubble">' + quote +
+      (img ? '<img class="msg-img" src="' + UI.attr(img) + '" alt="" loading="lazy">' : '') +
+      (m.body ? '<div class="msg-text">' + msgBodyHtml(m.body) + '</div>' : '') +
+      '<div class="msg-foot"><span class="time">' + UI.formatTime(m.created) + '</span>' + tick +
+      '<button type="button" class="msg-act msg-reply" data-id="' + m.id + '" title="' + UI.attr(T('messages.reply')) + '">' + UI.icon('reply') + '</button>' +
+      (mine ? '<button type="button" class="msg-act msg-del" data-id="' + m.id + '" title="' + UI.attr(T('common.delete')) + '">' + UI.icon('xmark') + '</button>' : '') +
+      '</div></div></div>';
+  }
+
   views.im = function (main, r) {
     var withId = Number(r.parts[1] || 0);
     if (state.im.timer) { clearInterval(state.im.timer); state.im.timer = null; }
     state.im.withId = withId;
+    state.im.last = 0;
+    state.im.replyTo = 0;
+    state.im.image = '';
+    state.im.typingSent = 0;
     main.innerHTML = '<div class="card"><div class="card-b center" style="padding:26px">' + UI.spinner() + '</div></div>';
     Api.request('GET', '/api/messages/threads', null, function (err, data) {
       if (err) { main.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
       var threads = data.threads || [];
       var html = '<div class="card"><div class="card-h">' + UI.icon('envelope') + ' ' + T('messages.title') +
-        '<span class="right"><a href="#/people">' + T('profile.message') + '</a></span></div>';
+        '<span class="right"><a href="#/people">' + UI.icon('user-plus') + ' ' + T('profile.message') + '</a></span></div>';
       html += '<div class="msg-layout"><div class="threads" id="threads">';
       if (!threads.length) html += '<div class="empty" style="padding:24px 10px">' + UI.icon('inbox') + '<b>' + T('messages.noThreads') + '</b></div>';
       for (var i = 0; i < threads.length; i++) html += threadHtml(threads[i], withId);
@@ -152,26 +218,54 @@
       else html += '<div class="chat-empty">' + UI.spinner() + '</div>';
       html += '</div></div></div>';
       main.innerHTML = html;
-      var ts = main.querySelectorAll('.thread');
-      for (var j = 0; j < ts.length; j++) {
-        ts[j].addEventListener('click', function () { App.go('#/im/' + this.getAttribute('data-user')); });
-      }
+      bindThreads(main);
       if (withId) loadConversation(withId, false);
+      // cheap safety net; the live loop does the real work
       state.im.timer = setInterval(function () {
         if (App.state.route !== 'im' || !state.im.withId) return;
         if (document.hidden) return;
-        loadConversation(state.im.withId, true);
-      }, 5000);
+        if (!(state.site && state.site.liveNotifications)) loadConversation(state.im.withId, true);
+        refreshThreads();
+      }, 8000);
     });
   };
+
+  function bindThreads(scope) {
+    var ts = (scope || document).querySelectorAll('.thread');
+    for (var j = 0; j < ts.length; j++) {
+      if (ts[j].getAttribute('data-bound')) continue;
+      ts[j].setAttribute('data-bound', '1');
+      ts[j].addEventListener('click', function () { App.go('#/im/' + this.getAttribute('data-user')); });
+    }
+  }
 
   function threadHtml(t, activeId) {
     var o = t.other || {};
     var last = t.last || {};
+    var preview = t.typing ? T('messages.typingShort') : msgPreview(last);
+    var icon = !last.body && last.image ? UI.icon('image') + ' ' : '';
     return '<div class="thread' + (Number(activeId) === Number(o.id) ? ' active' : '') + '" data-user="' + o.id + '">' +
       UI.avatar(o, 34) + '<div class="thread-main"><div class="name">' + UI.esc(o.displayName) + '</div>' +
-      '<div class="last">' + UI.esc((last.body || '').substring(0, 60)) + '</div></div>' +
-      (t.unread ? '<span class="unread">' + t.unread + '</span>' : '') + '</div>';
+      '<div class="last' + (t.typing ? ' typing' : '') + '">' + icon + UI.esc(preview) + '</div></div>' +
+      '<div class="thread-side"><span class="thread-time">' + (last.created ? UI.timeAgo(last.created) : '') + '</span>' +
+      (t.unread ? '<span class="unread">' + (t.unread > 99 ? '99+' : t.unread) + '</span>' : '') + '</div></div>';
+  }
+
+  function chatComposerHtml() {
+    return '<form class="chat-form" id="chat-form">' +
+      '<div class="chat-reply hidden" id="chat-reply"><div class="chat-reply-body"><b id="chat-reply-name"></b><span id="chat-reply-text"></span></div>' +
+      '<button type="button" class="icon-btn" id="chat-reply-x">' + UI.icon('xmark') + '</button></div>' +
+      '<div class="chat-attach hidden" id="chat-attach"><img id="chat-attach-img" alt="">' +
+      '<button type="button" class="icon-btn" id="chat-attach-x">' + UI.icon('xmark') + '</button></div>' +
+      '<div class="chat-row">' +
+      '<button type="button" class="chat-btn" id="chat-file-btn" title="' + UI.attr(T('messages.attach')) + '">' + UI.icon('image') + '</button>' +
+      '<input type="file" id="chat-file" class="hidden" accept="image/png,image/jpeg,image/gif,image/webp">' +
+      '<button type="button" class="chat-btn" id="chat-emoji-btn" title="' + UI.attr(T('messages.emoji')) + '">' + UI.icon('face-smile') + '</button>' +
+      '<textarea id="chat-text" rows="1" maxlength="' + (state.site.maxMessageLength || 4000) + '" placeholder="' + UI.attr(T('messages.placeholder')) + '"></textarea>' +
+      '<button class="chat-send" type="submit" id="chat-send" title="' + UI.attr(T('common.send')) + '">' + UI.icon('paper-plane') + '</button>' +
+      '</div>' +
+      '<div class="emoji-pop hidden" id="chat-emoji"></div>' +
+      '</form>';
   }
 
   function loadConversation(withId, silent) {
@@ -183,55 +277,328 @@
       var messages = data.messages || [];
       var lastId = messages.length ? messages[messages.length - 1].id : 0;
       if (silent && chat.getAttribute('data-last') === String(lastId) && document.getElementById('chat-form')) return;
+
       var oldText = document.getElementById('chat-text');
       var typed = oldText ? oldText.value : '';
       var hadFocus = oldText && document.activeElement === oldText;
-      var body = '<div class="chat-head">' + UI.avatar(other, 32) +
-        '<div><div class="name">' + UI.esc(other.displayName) + '</div><div class="tiny muted">@' + UI.esc(other.username) + '</div></div>' +
-        '<a class="btn btn-sm right" href="#/profile/' + other.id + '">' + T('nav.profile') + '</a></div>';
-      body += '<div class="chat-body" id="chat-body">';
-      if (!messages.length) body += '<div class="chat-empty">' + T('messages.empty') + '</div>';
-      for (var i = 0; i < messages.length; i++) body += bubbleHtml(messages[i], other);
-      body += '</div>';
-      body += '<form class="chat-form" id="chat-form">' +
-        '<textarea id="chat-text" maxlength="' + (state.site.maxMessageLength || 4000) + '" placeholder="' + UI.attr(T('messages.placeholder')) + '"></textarea>' +
-        '<button class="btn btn-primary" type="submit">' + UI.icon('paper-plane') + '</button></form>';
       var oldBody = document.getElementById('chat-body');
       var atBottom = true;
       if (oldBody) atBottom = (oldBody.scrollHeight - oldBody.scrollTop - oldBody.clientHeight) < 60;
+
+      var body = '<div class="chat-head">' + UI.avatar(other, 34) +
+        '<div class="chat-head-main"><div class="name">' + UI.esc(other.displayName) + '</div>' +
+        '<div class="tiny muted" id="chat-presence">' + (other.online ? T('profile.online') : '@' + UI.esc(other.username)) + '</div></div>' +
+        '<a class="btn btn-sm right" href="#/profile/' + other.id + '">' + T('nav.profile') + '</a></div>';
+      body += '<div class="chat-body" id="chat-body">';
+      if (data.hasMore) body += '<div class="center" style="padding:6px"><button type="button" class="btn btn-xs" id="chat-older">' + T('messages.loadOlder') + '</button></div>';
+      if (!messages.length) body += '<div class="chat-empty">' + T('messages.empty') + '</div>';
+      var lastDay = '';
+      for (var i = 0; i < messages.length; i++) {
+        var day = dayLabel(messages[i].created);
+        if (day && day !== lastDay) { body += '<div class="chat-day">' + UI.esc(day) + '</div>'; lastDay = day; }
+        body += bubbleHtml(messages[i], other);
+      }
+      body += '</div>';
+      body += chatComposerHtml();
       chat.innerHTML = body;
       chat.setAttribute('data-last', lastId);
+      state.im.last = lastId;
+      state.im.other = other;
+
       var newBody = document.getElementById('chat-body');
       if (newBody && (atBottom || !silent)) newBody.scrollTop = newBody.scrollHeight;
       var newText = document.getElementById('chat-text');
       if (newText && typed) newText.value = typed;
       if (newText && hadFocus) { try { newText.focus(); } catch (e) { } }
-      var form = document.getElementById('chat-form');
-      form.addEventListener('submit', function (e) {
-        e.preventDefault();
-        var ta = document.getElementById('chat-text');
-        var text = ta.value.trim();
-        if (!text) return;
-        ta.disabled = true;
-        Api.request('POST', '/api/messages/send', { to: withId, body: text }, function (err2, data2) {
-          ta.disabled = false;
-          if (err2) { UI.toast(Api.errorText(err2), 'err'); return; }
-          ta.value = '';
-          SoundFX.play('message');
-          loadConversation(withId, true);
-          refreshThreads();
-        });
-      });
+      if (newText) autoGrow(newText);
+
+      bindChat(withId, other);
       if (!silent) refreshThreads();
+      startMessageLoop(withId);
     });
   }
 
-  function bubbleHtml(m, other) {
-    var mine = m.mine;
-    var u = mine ? state.user : other;
-    return '<div class="bubble-row' + (mine ? ' mine' : '') + '">' + UI.avatar(u, 26) +
-      '<div class="bubble">' + UI.linkify(m.body || '').replace(/\n/g, '<br>') +
-      '<span class="time">' + UI.timeAgo(m.created) + '</span></div></div>';
+  function autoGrow(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(140, ta.scrollHeight) + 'px';
+  }
+
+  function bindChat(withId, other) {
+    var form = document.getElementById('chat-form');
+    if (!form) return;
+    var ta = document.getElementById('chat-text');
+    var file = document.getElementById('chat-file');
+    var attach = document.getElementById('chat-attach');
+    var attachImg = document.getElementById('chat-attach-img');
+    var emojiPop = document.getElementById('chat-emoji');
+    var replyBar = document.getElementById('chat-reply');
+    var replyName = document.getElementById('chat-reply-name');
+    var replyText = document.getElementById('chat-reply-text');
+    var sendBtn = document.getElementById('chat-send');
+    state.im.image = '';
+
+    // older messages
+    var older = document.getElementById('chat-older');
+    if (older) older.addEventListener('click', function () {
+      var body = document.getElementById('chat-body');
+      if (!body || !state.im.last) return;
+      older.disabled = true;
+      Api.request('GET', '/api/messages?with=' + withId + '&limit=40&before=' + state.im.last, null, function (e2, d2) {
+        if (e2) { older.disabled = false; UI.toast(Api.errorText(e2), 'err'); return; }
+        var older2 = (d2.messages || []).slice().reverse();
+        var html = '';
+        for (var i = 0; i < older2.length; i++) html += bubbleHtml(older2[i], other);
+        var keep = body.scrollHeight;
+        body.insertAdjacentHTML('afterbegin', html);
+        body.scrollTop = body.scrollHeight - keep;
+        older.disabled = false;
+        if (!d2.hasMore && older.parentNode) older.parentNode.removeChild(older);
+        bindBubbles(body);
+      });
+    });
+
+    // emoji picker
+    var emojiHtml = '';
+    for (var i = 0; i < EMOJI.length; i++) {
+      emojiHtml += '<button type="button" class="emoji-item" data-emoji="' + EMOJI[i] + '">' + EMOJI[i] + '</button>';
+    }
+    emojiPop.innerHTML = emojiHtml;
+
+    document.getElementById('chat-emoji-btn').addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = emojiPop.className.indexOf('hidden') < 0;
+      emojiPop.className = open ? 'emoji-pop hidden' : 'emoji-pop';
+    });
+    var items = emojiPop.querySelectorAll('.emoji-item');
+    for (var k = 0; k < items.length; k++) {
+      items[k].addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        insertAtCursor(ta, this.getAttribute('data-emoji'));
+        emojiPop.className = 'emoji-pop hidden';
+      });
+    }
+
+    // attachments
+    document.getElementById('chat-file-btn').addEventListener('click', function () { file.click(); });
+    file.addEventListener('change', function () {
+      var f = file.files && file.files[0];
+      if (!f) return;
+      UI.fileToDataUrl(f, (state.site.maxMessageImageKB || 2048) * 1024, function (err, dataUrl) {
+        if (err) {
+          UI.toast(err === 'too-large' ? T('messages.imageTooBig', state.site.maxMessageImageKB || 2048) : T('errors.generic'), 'err');
+          file.value = '';
+          return;
+        }
+        state.im.image = dataUrl;
+        attachImg.src = dataUrl;
+        attach.className = 'chat-attach';
+        ta.focus();
+      });
+    });
+    document.getElementById('chat-attach-x').addEventListener('click', function () {
+      state.im.image = '';
+      file.value = '';
+      attach.className = 'chat-attach hidden';
+      attachImg.removeAttribute('src');
+    });
+
+    // reply bar
+    function clearReply() {
+      state.im.replyTo = 0;
+      replyBar.className = 'chat-reply hidden';
+    }
+    document.getElementById('chat-reply-x').addEventListener('click', clearReply);
+
+    // typing + enter to send
+    ta.addEventListener('input', function () {
+      autoGrow(ta);
+      var now = Date.now();
+      if (now - (state.im.typingSent || 0) > 3000) {
+        state.im.typingSent = now;
+        Api.request('POST', '/api/messages/typing', { to: withId }, function () { });
+      }
+    });
+    ta.addEventListener('keydown', function (e) {
+      var key = e.keyCode || e.which;
+      if (key === 13 && !e.shiftKey) {
+        e.preventDefault();
+        submit();
+      }
+    });
+
+    function submit() {
+      var text = ta.value.trim();
+      if (!text && !state.im.image) { ta.focus(); return; }
+      sendBtn.disabled = true;
+      Api.request('POST', '/api/messages/send', {
+        to: withId,
+        body: text,
+        image: state.im.image || '',
+        replyTo: state.im.replyTo || 0
+      }, function (err, data) {
+        sendBtn.disabled = false;
+        if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+        ta.value = '';
+        autoGrow(ta);
+        state.im.image = '';
+        file.value = '';
+        attach.className = 'chat-attach hidden';
+        clearReply();
+        appendMessages([data.message], other, true);
+        SoundFX.play('message');
+        refreshThreads();
+      });
+    }
+
+    form.addEventListener('submit', function (e) { e.preventDefault(); submit(); });
+    bindBubbles(document.getElementById('chat-body'));
+  }
+
+  function insertAtCursor(ta, text) {
+    if (!ta) return;
+    var start = ta.selectionStart || 0;
+    var end = ta.selectionEnd || 0;
+    ta.value = ta.value.substring(0, start) + text + ta.value.substring(end);
+    var pos = start + text.length;
+    try { ta.setSelectionRange(pos, pos); } catch (e) { }
+    ta.focus();
+    autoGrow(ta);
+  }
+
+  function appendMessages(list, other, mineNow) {
+    var body = document.getElementById('chat-body');
+    if (!body || !list || !list.length) return;
+    var atBottom = (body.scrollHeight - body.scrollTop - body.clientHeight) < 90;
+    var existing = {};
+    var nodes = body.querySelectorAll('.bubble-row');
+    for (var e = 0; e < nodes.length; e++) existing[nodes[e].getAttribute('data-id')] = 1;
+    var html = '';
+    var lastDay = '';
+    var prev = body.querySelectorAll('.chat-day');
+    if (prev.length) lastDay = prev[prev.length - 1].textContent;
+    for (var i = 0; i < list.length; i++) {
+      if (existing[String(list[i].id)]) continue;
+      var day = dayLabel(list[i].created);
+      if (day && day !== lastDay) { html += '<div class="chat-day">' + UI.esc(day) + '</div>'; lastDay = day; }
+      html += bubbleHtml(list[i], other);
+    }
+    if (!html) return;
+    body.insertAdjacentHTML('beforeend', html);
+    if (state.im.last < list[list.length - 1].id) state.im.last = list[list.length - 1].id;
+    var chat = document.getElementById('chat');
+    if (chat) chat.setAttribute('data-last', String(state.im.last));
+    if (atBottom || mineNow) body.scrollTop = body.scrollHeight;
+    bindBubbles(body);
+  }
+
+  function bindBubbles(scope) {
+    var replies = (scope || document).querySelectorAll('.msg-reply');
+    for (var r = 0; r < replies.length; r++) {
+      if (replies[r].getAttribute('data-bound')) continue;
+      replies[r].setAttribute('data-bound', '1');
+      replies[r].addEventListener('click', function (e) {
+        e.preventDefault();
+        var row = this;
+        while (row && row.className.indexOf('bubble-row') < 0) row = row.parentNode;
+        if (!row) return;
+        var textEl = row.querySelector('.msg-text');
+        var imgEl = row.querySelector('.msg-img');
+        var preview = textEl ? textEl.textContent : (imgEl ? T('messages.photo') : '');
+        state.im.replyTo = Number(row.getAttribute('data-id'));
+        var bar = document.getElementById('chat-reply');
+        var name = document.getElementById('chat-reply-name');
+        var txt = document.getElementById('chat-reply-text');
+        var mine = row.className.indexOf('mine') >= 0;
+        var o = state.im.other || {};
+        if (name) name.textContent = mine ? T('common.you') : (o.displayName || o.username || '');
+        if (txt) txt.textContent = String(preview).substring(0, 80);
+        if (bar) bar.className = 'chat-reply';
+        var ta = document.getElementById('chat-text');
+        if (ta) ta.focus();
+      });
+    }
+
+    var dels = (scope || document).querySelectorAll('.msg-del');
+    for (var i = 0; i < dels.length; i++) {
+      if (dels[i].getAttribute('data-bound')) continue;
+      dels[i].setAttribute('data-bound', '1');
+      dels[i].addEventListener('click', function (e) {
+        e.preventDefault();
+        var id = this.getAttribute('data-id');
+        var row = this;
+        while (row && row.className.indexOf('bubble-row') < 0) row = row.parentNode;
+        UI.confirm(T('common.delete'), T('messages.deleteConfirm'), T('common.delete'), function () {
+          Api.request('POST', '/api/messages/delete', { id: Number(id) }, function (err) {
+            if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+            if (row && row.parentNode) row.parentNode.removeChild(row);
+            refreshThreads();
+          });
+        }, true);
+      });
+    }
+    // clicking a quote scrolls to the quoted message
+    var quotes = (scope || document).querySelectorAll('.msg-quote');
+    for (var q = 0; q < quotes.length; q++) {
+      if (quotes[q].getAttribute('data-bound')) continue;
+      quotes[q].setAttribute('data-bound', '1');
+      quotes[q].addEventListener('click', function () {
+        var row = this;
+        while (row && row.className.indexOf('bubble-row') < 0) row = row.parentNode;
+        var id = row ? row.getAttribute('data-id') : '';
+        var text = this.querySelector('span');
+        if (!text) return;
+        var target = null;
+        var rows = document.querySelectorAll('.bubble-row');
+        for (var i = 0; i < rows.length; i++) {
+          if (rows[i] !== row && rows[i].querySelector('.msg-text, .msg-img') &&
+              rows[i].innerText.indexOf(text.textContent) >= 0) { target = rows[i]; break; }
+        }
+        if (target && target.scrollIntoView) { try { target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { } }
+      });
+    }
+  }
+
+  function setPresence(typing) {
+    var el = document.getElementById('chat-presence');
+    if (!el) return;
+    el.innerHTML = typing ? '<span class="typing-dots"><i></i><i></i><i></i></span> ' + T('messages.typing') : '';
+    if (!typing) {
+      var o = state.im.other || {};
+      el.textContent = o.online ? T('profile.online') : '@' + (o.username || '');
+    }
+  }
+
+  function markTicks(read) {
+    if (!read) return;
+    var ticks = document.querySelectorAll('.bubble-row.mine .tick');
+    for (var i = 0; i < ticks.length; i++) ticks[i].className = 'tick read';
+  }
+
+  /// Long poll the open conversation: new messages, typing and read receipts.
+  function startMessageLoop(withId) {
+    if (!(state.site && state.site.liveNotifications)) return;
+    var stop = false;
+
+    function pump() {
+      if (stop) return;
+      if (App.state.route !== 'im' || state.im.withId !== withId) { stop = true; return; }
+      if (document.hidden) { setTimeout(pump, 2500); return; }
+      var after = state.im.last || 0;
+      Api.request('GET', '/api/messages/wait?with=' + withId + '&after=' + after, null, function (err, data) {
+        if (App.state.route !== 'im' || state.im.withId !== withId) { stop = true; return; }
+        if (err) { setTimeout(pump, 4000); return; }
+        if (data.messages && data.messages.length) {
+          appendMessages(data.messages, state.im.other || {}, false);
+          SoundFX.play('message');
+          refreshThreads();
+        }
+        setPresence(!!data.typing);
+        markTicks(!!data.read);
+        if (typeof data.unread === 'number') App.setBadge('badge-msg', data.unread);
+        pump();
+      });
+    }
+    pump();
   }
 
   function refreshThreads() {
@@ -243,10 +610,8 @@
       var h = '';
       for (var i = 0; i < threads.length; i++) h += threadHtml(threads[i], state.im.withId);
       box.innerHTML = h || '<div class="empty" style="padding:24px 10px">' + UI.icon('inbox') + '<b>' + T('messages.noThreads') + '</b></div>';
-      var ts = box.querySelectorAll('.thread');
-      for (var j = 0; j < ts.length; j++) {
-        ts[j].addEventListener('click', function () { App.go('#/im/' + this.getAttribute('data-user')); });
-      }
+      bindThreads(box);
+      if (typeof data.unread === 'number') App.setBadge('badge-msg', data.unread);
     });
   }
 
@@ -1666,6 +2031,7 @@
         field('cfg-avatarkb', T('admin.maxAvatarKB'), lim.maxAvatarKB, 'number', ' min="16"') +
         '</div>' +
         field('cfg-imagekb', T('admin.maxPostImageKB'), lim.maxPostImageKB, 'number', ' min="64"') +
+        field('cfg-msgimagekb', T('admin.maxMessageImageKB'), lim.maxMessageImageKB, 'number', ' min="64"') +
         field('cfg-editwin', T('admin.editWindow'), lim.editWindowMin, 'number', ' min="0"') +
         '</div>';
 
@@ -1755,6 +2121,7 @@
             maxPostLength: Number(App.val('cfg-postlen')),
             maxCommentLength: Number(App.val('cfg-commentlen')),
             maxMessageLength: Number(App.val('cfg-msglen')),
+            maxMessageImageKB: Number(App.val('cfg-msgimagekb')),
             maxAvatarKB: Number(App.val('cfg-avatarkb')),
             maxPostImageKB: Number(App.val('cfg-imagekb')),
             editWindowMin: Number(App.val('cfg-editwin'))

@@ -16,7 +16,7 @@ limits from `config.ini` and ship your own network.
 | **Feed** | home / everything / friends-only tabs, posts with images and video links (YouTube previews, inline mp4/webm), likes (with a "who liked" list), comments, edit and pin your own posts, visibility (`public` / `friends` / `private`), delete with cascade |
 | **Profiles** | avatar, status, bio, city/country, birthday, gender, website, interests (games / films / music / books), mood, achievements, photo gallery, privacy level, friends wall |
 | **Friends** | requests, accept/decline, remove, block, incoming/outgoing lists |
-| **Messages** | private conversations, thread list with unread counters, polling |
+| **Messages** | private conversations with live delivery (long poll), typing indicator, read receipts, replies with quotes, picture/GIF attachments, inline image and video links, emoji picker, Enter to send, per-side delete, thread list with unread counters |
 | **Groups** | public/private groups, membership, group feed, owner role, editable name/description/picture and member management (kick) |
 | **Notifications** | likes, comments, friend requests, messages, mentions, badges, admin broadcasts, reports — delivered **live** over a long poll (instant toast, sound, tab title counter, optional desktop notification), with per-type switches in Settings and All / Unread / Mentions filters |
 | **Search** | people and public posts, plus a top-bar quick search |

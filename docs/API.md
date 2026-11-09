@@ -189,11 +189,25 @@ earned (useful after an import or a rule change).
 | --- | --- | --- | --- |
 | GET | `/api/messages/threads` | — | `{ threads[], unread }` |
 | GET | `/api/messages` | `with`, `before`, `limit` | `{ other, messages[], hasMore, next }` |
-| POST | `/api/messages/send` | `to`, `body` | `{ message }` |
+| POST | `/api/messages/send` | `to`, `body`, `image`, `replyTo` | `{ message }` |
+| GET | `/api/messages/wait` | `with`, `after`, `timeout` | `{ messages[], latest, typing, read, unread, live }` |
+| POST | `/api/messages/typing` | `to` | `{ ok }` |
 | POST | `/api/messages/read` | `with` | `{ unread }` |
 | POST | `/api/messages/delete` | `id` | `{ ok }` (per-side delete) |
 
 Reading a conversation marks it read. Blocked users cannot exchange messages.
+
+`image` is a data URL (png/jpeg/gif/webp, up to `limits.maxMessageImageKB`) stored
+under `/media/messages/`; animated GIFs keep animating in the chat. `replyTo` is
+the id of a message from the same conversation and comes back as a `replyTo`
+object (`id`, `from`, `body`, `image`, `mine`).
+
+`/api/messages/wait` is the chat long poll: it holds the request (max 25s,
+`ui.notifyWaitSec` by default) and answers as soon as a message newer than
+`after` arrives, the peer starts or stops typing, or the read state of our last
+message changes. `read` is the read receipt for our newest message; `typing`
+comes from an in-memory registry (a few seconds, never persisted). When
+`ui.liveNotifications=false` it answers immediately and the SPA polls instead.
 
 ### Notifications
 

@@ -885,9 +885,27 @@ namespace Social.Web
             if (!Allow(ctx.User.Id, "message", _cfg.MessagesPerMin, 60))
                 throw new ApiException(429, "slow-down", "You are sending messages too fast");
             string text = Util.CleanText(BodyStr(ctx, "body", ""), _cfg.MaxMessageLength);
-            if (text.Length == 0) throw new ApiException(400, "empty", "Write something first");
+            string imageData = BodyStr(ctx, "image", "");
+            long replyTo = BodyLong(ctx, "replyTo", 0);
+            if (text.Length == 0 && string.IsNullOrEmpty(imageData))
+                throw new ApiException(400, "empty", "Write something first");
 
-            Message m = _store.CreateMessage(ctx.User.Id, target.Id, text);
+            string image = "";
+            if (!string.IsNullOrEmpty(imageData))
+            {
+                string err;
+                image = _media.SaveDataUrl(imageData, "message", _cfg.MaxMessageImageKB, out err);
+                if (image == null) throw new ApiException(400, err, "Image could not be saved");
+            }
+            if (replyTo > 0)
+            {
+                Message quoted = _store.FindMessage(replyTo);
+                if (quoted == null || (quoted.From != ctx.User.Id && quoted.To != ctx.User.Id))
+                    throw new ApiException(400, "bad-reply", "The quoted message is not part of this conversation");
+            }
+
+            Message m = _store.CreateMessage(ctx.User.Id, target.Id, text, image, replyTo);
+            TypingRegistry.Clear(ctx.User.Id, target.Id);
             ctx.User.LastMessageAt = DateTime.UtcNow;
             _store.MarkUserDirty(ctx.User);
             _stats.OnMessage();
@@ -917,16 +935,94 @@ namespace Social.Web
         {
             long with = BodyLong(ctx, "with", 0);
             _store.MarkThreadRead(ctx.User.Id, with);
+            TypingRegistry.Clear(ctx.User.Id, with);
             JsonBuilder b = new JsonBuilder(128);
             b.BeginObject();
             b.Prop("unread", _store.UnreadMessages(ctx.User.Id));
             SendOk(ctx, b);
         }
 
+        private void HandleMessageTyping(ApiCtx ctx)
+        {
+            long to = BodyLong(ctx, "to", 0);
+            User target = RequireUser(to);
+            if (target.Id == ctx.User.Id) throw new ApiException(400, "self", "That is you");
+            TypingRegistry.Touch(ctx.User.Id, target.Id);
+            JsonBuilder b = new JsonBuilder(64);
+            b.BeginObject();
+            b.Prop("ok", true);
+            SendOk(ctx, b);
+        }
+
+        /// <summary>
+        /// Long poll for one conversation: answers as soon as a message newer than
+        /// `after` arrives, the peer starts or stops typing, or the read state of
+        /// our last message changes. Everything else is a short wait.
+        /// </summary>
+        private void HandleMessagesWait(ApiCtx ctx)
+        {
+            long with = LongQuery(ctx, "with");
+            User other = RequireUser(with);
+            if (_store.IsBlocked(other.Id, ctx.User.Id) || _store.IsBlocked(ctx.User.Id, other.Id))
+                throw new ApiException(403, "blocked", "This conversation is blocked");
+
+            long after = LongQuery(ctx, "after");
+            int timeout = _cfg.NotifyWaitSec;
+            string raw = GetQuery(ctx.Query, "timeout");
+            if (!string.IsNullOrEmpty(raw))
+            {
+                int parsed;
+                if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed)) timeout = parsed;
+            }
+            if (timeout < 1) timeout = 1;
+            if (timeout > 25) timeout = 25;
+            if (!_cfg.LiveNotifications) timeout = 1;
+
+            bool typingAtStart = TypingRegistry.IsTyping(other.Id, ctx.User.Id);
+            bool readAtStart = _store.LastMineRead(ctx.User.Id, other.Id);
+            DateTime until = DateTime.UtcNow.AddSeconds(timeout);
+            List<Message> fresh = new List<Message>();
+
+            while (true)
+            {
+                if (_store.LastMessageId(ctx.User.Id, other.Id) > after)
+                {
+                    fresh = _store.MessagesAfter(ctx.User.Id, other.Id, after, 50);
+                    if (fresh.Count > 0) break;
+                }
+                bool typing = TypingRegistry.IsTyping(other.Id, ctx.User.Id);
+                bool read = _store.LastMineRead(ctx.User.Id, other.Id);
+                if (typing != typingAtStart || read != readAtStart) break;
+                if (DateTime.UtcNow >= until) break;
+                Thread.Sleep(300);
+            }
+
+            // newest first from the store, oldest first for the client
+            if (fresh.Count > 1) fresh.Reverse();
+            if (fresh.Count > 0) _store.MarkThreadRead(ctx.User.Id, other.Id);
+
+            JsonBuilder b = new JsonBuilder(4096);
+            b.BeginObject();
+            b.Name("messages").BeginArray();
+            for (int i = 0; i < fresh.Count; i++) b.Raw(MessageView(fresh[i], ctx.User));
+            b.EndArray();
+            b.Prop("latest", _store.LastMessageId(ctx.User.Id, other.Id));
+            b.Prop("typing", TypingRegistry.IsTyping(other.Id, ctx.User.Id));
+            b.Prop("read", _store.LastMineRead(ctx.User.Id, other.Id));
+            b.Prop("unread", _store.UnreadMessages(ctx.User.Id));
+            b.Prop("live", _cfg.LiveNotifications);
+            SendOk(ctx, b);
+        }
+
         private void HandleMessageDelete(ApiCtx ctx)
         {
             long id = BodyLong(ctx, "id", 0);
+            Message m = _store.FindMessage(id);
+            if (m == null) throw new ApiException(404, "no-message", "Message not found");
+            string image = m.Image;
             if (!_store.DeleteMessage(id, ctx.User.Id)) throw new ApiException(404, "no-message", "Message not found");
+            // the picture only goes away once both sides dropped the message
+            if (!string.IsNullOrEmpty(image) && m.DeletedByFrom && m.DeletedByTo) _media.Delete(image);
             JsonBuilder b = new JsonBuilder(64);
             b.BeginObject();
             SendOk(ctx, b);

@@ -144,6 +144,7 @@ namespace Social.Core
         public int MaxPostLength = 8000;
         public int MaxCommentLength = 2000;
         public int MaxMessageLength = 4000;
+        public int MaxMessageImageKB = 2048;
         public int MaxStatusLength = 140;
         public int MaxBioLength = 2000;
         public int MaxNameLength = 40;
@@ -421,6 +422,7 @@ namespace Social.Core
                     else if (key == "editwindowmin") EditWindowMin = Int(val, EditWindowMin);
                     else if (key == "maxcommentlength") MaxCommentLength = Int(val, MaxCommentLength);
                     else if (key == "maxmessagelength") MaxMessageLength = Int(val, MaxMessageLength);
+                    else if (key == "maxmessageimagekb") MaxMessageImageKB = Int(val, MaxMessageImageKB);
                     else if (key == "maxstatuslength") MaxStatusLength = Int(val, MaxStatusLength);
                     else if (key == "maxbiolength") MaxBioLength = Int(val, MaxBioLength);
                     else if (key == "maxnamelength") MaxNameLength = Int(val, MaxNameLength);

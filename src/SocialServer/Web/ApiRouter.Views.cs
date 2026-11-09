@@ -172,9 +172,24 @@ namespace Social.Web
             b.Prop("from", m.From);
             b.Prop("to", m.To);
             b.Prop("body", m.Body);
+            b.Prop("image", m.Image);
             b.Prop("created", Util.Iso(m.Created));
             b.Prop("read", m.Read);
             b.Prop("mine", viewer != null && m.From == viewer.Id);
+            if (m.ReplyTo > 0)
+            {
+                Message q = _store.FindMessage(m.ReplyTo);
+                if (q != null)
+                {
+                    b.Name("replyTo").BeginObject()
+                        .Prop("id", q.Id)
+                        .Prop("from", q.From)
+                        .Prop("body", Util.SingleLine(q.Body, 120))
+                        .Prop("image", q.Image)
+                        .Prop("mine", viewer != null && q.From == viewer.Id)
+                        .EndObject();
+                }
+            }
             b.EndObject();
             return b.ToString();
         }
@@ -226,6 +241,7 @@ namespace Social.Web
             b.Name("other").Raw(UserSummary(t.Other));
             b.Name("last").Raw(MessageView(t.Last, viewer));
             b.Prop("unread", t.Unread);
+            b.Prop("typing", viewer != null && TypingRegistry.IsTyping(t.Other == null ? 0 : t.Other.Id, viewer.Id));
             b.EndObject();
             return b.ToString();
         }

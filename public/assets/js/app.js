@@ -1661,6 +1661,7 @@ var App = (function () {
     desktopNotify: desktopNotify,
     applyUnread: applyUnread,
     setUnreadLocal: setUnreadLocal,
+    setBadge: setBadge,
     stopTimers: stopTimers
   };
 
