@@ -57,6 +57,8 @@ namespace Social.Web
                 .Prop("maxCommentLength", _cfg.MaxCommentLength)
                 .Prop("maxMessageLength", _cfg.MaxMessageLength)
                 .Prop("maxMessageImageKB", _cfg.MaxMessageImageKB)
+                .Prop("maxVoiceKB", _cfg.MaxVoiceKB)
+                .Prop("maxVoiceSec", _cfg.MaxVoiceSec)
                 .Prop("maxAvatarKB", _cfg.MaxAvatarKB)
                 .Prop("maxPostImageKB", _cfg.MaxPostImageKB)
                 .Prop("editWindowMin", _cfg.EditWindowMin)
@@ -282,6 +284,8 @@ namespace Social.Web
                 ApplyLimit(limits, "maxCommentLength", _cfg.MaxCommentLength, 100, delegate(int v) { _cfg.MaxCommentLength = v; });
                 ApplyLimit(limits, "maxMessageLength", _cfg.MaxMessageLength, 100, delegate(int v) { _cfg.MaxMessageLength = v; });
                 ApplyLimit(limits, "maxMessageImageKB", _cfg.MaxMessageImageKB, 64, delegate(int v) { _cfg.MaxMessageImageKB = v; });
+                ApplyLimit(limits, "maxVoiceKB", _cfg.MaxVoiceKB, 64, delegate(int v) { _cfg.MaxVoiceKB = v; });
+                ApplyLimit(limits, "maxVoiceSec", _cfg.MaxVoiceSec, 5, delegate(int v) { _cfg.MaxVoiceSec = v; });
                 ApplyLimit(limits, "maxAvatarKB", _cfg.MaxAvatarKB, 16, delegate(int v) { _cfg.MaxAvatarKB = v; });
                 ApplyLimit(limits, "maxPostImageKB", _cfg.MaxPostImageKB, 64, delegate(int v) { _cfg.MaxPostImageKB = v; });
                 ApplyLimit(limits, "editWindowMin", _cfg.EditWindowMin, 0, delegate(int v) { _cfg.EditWindowMin = v; });

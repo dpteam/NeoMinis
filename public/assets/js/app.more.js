@@ -146,8 +146,16 @@
   function msgPreview(m) {
     var body = String((m && m.body) || '').replace(/\s+/g, ' ').trim();
     if (body) return body.substring(0, 60);
+    if (m && m.audio) return T('messages.voice');
     if (m && m.image) return T('messages.photo');
     return '';
+  }
+
+  function fmtSec(sec) {
+    var s = Math.max(0, Math.round(Number(sec) || 0));
+    var m = Math.floor(s / 60);
+    var r = s % 60;
+    return m + ':' + (r < 10 ? '0' + r : r);
   }
 
   function dayLabel(iso) {
@@ -184,11 +192,15 @@
         UI.esc(q.body || (q.image ? T('messages.photo') : '')) + '</span></div>';
     }
     var img = UI.safeUrl(m.image);
+    var voice = UI.safeUrl(m.audio);
     var tick = mine ? '<span class="tick' + (m.read ? ' read' : '') + '" title="' + UI.attr(m.read ? T('messages.read') : T('messages.sent')) + '">' +
       UI.icon(m.read ? 'check-double' : 'check') + '</span>' : '';
     return '<div class="bubble-row' + (mine ? ' mine' : '') + '" data-id="' + m.id + '">' + UI.avatar(u, 26) +
       '<div class="bubble">' + quote +
       (img ? '<img class="msg-img" src="' + UI.attr(img) + '" alt="" loading="lazy">' : '') +
+      (voice ? '<div class="msg-voice">' + UI.icon('microphone') +
+        '<audio controls preload="metadata" src="' + UI.attr(voice) + '"></audio>' +
+        (m.audioSec ? '<span class="msg-voice-sec">' + fmtSec(m.audioSec) + '</span>' : '') + '</div>' : '') +
       (m.body ? '<div class="msg-text">' + msgBodyHtml(m.body) + '</div>' : '') +
       '<div class="msg-foot"><span class="time">' + UI.formatTime(m.created) + '</span>' + tick +
       '<button type="button" class="msg-act msg-reply" data-id="' + m.id + '" title="' + UI.attr(T('messages.reply')) + '">' + UI.icon('reply') + '</button>' +
@@ -199,6 +211,7 @@
   views.im = function (main, r) {
     var withId = Number(r.parts[1] || 0);
     if (state.im.timer) { clearInterval(state.im.timer); state.im.timer = null; }
+    if (state.im.stopRec) { try { state.im.stopRec(); } catch (e) { } state.im.stopRec = null; }
     state.im.withId = withId;
     state.im.last = 0;
     state.im.replyTo = 0;
@@ -257,7 +270,16 @@
       '<button type="button" class="icon-btn" id="chat-reply-x">' + UI.icon('xmark') + '</button></div>' +
       '<div class="chat-attach hidden" id="chat-attach"><img id="chat-attach-img" alt="">' +
       '<button type="button" class="icon-btn" id="chat-attach-x">' + UI.icon('xmark') + '</button></div>' +
+      '<div class="chat-voice hidden" id="chat-voice"><div class="chat-voice-main">' + UI.icon('microphone') +
+      '<audio id="chat-voice-audio" controls preload="metadata"></audio><span id="chat-voice-sec"></span></div>' +
+      '<button type="button" class="icon-btn" id="chat-voice-x">' + UI.icon('xmark') + '</button></div>' +
+      '<div class="chat-rec hidden" id="chat-rec"><span class="rec-dot"></span>' +
+      '<span class="rec-time" id="chat-rec-time">0:00</span>' +
+      '<span class="rec-hint">' + T('messages.recording') + '</span>' +
+      '<button type="button" class="btn btn-sm btn-danger" id="chat-rec-stop">' + UI.icon('stop') + ' ' + T('messages.stop') + '</button>' +
+      '<button type="button" class="icon-btn" id="chat-rec-cancel">' + UI.icon('xmark') + '</button></div>' +
       '<div class="chat-row">' +
+      '<button type="button" class="chat-btn" id="chat-mic-btn" title="' + UI.attr(T('messages.record')) + '">' + UI.icon('microphone') + '</button>' +
       '<button type="button" class="chat-btn" id="chat-file-btn" title="' + UI.attr(T('messages.attach')) + '">' + UI.icon('image') + '</button>' +
       '<input type="file" id="chat-file" class="hidden" accept="image/png,image/jpeg,image/gif,image/webp">' +
       '<button type="button" class="chat-btn" id="chat-emoji-btn" title="' + UI.attr(T('messages.emoji')) + '">' + UI.icon('face-smile') + '</button>' +
@@ -426,14 +448,136 @@
       }
     });
 
+    // ---------------------------------------------------------- voice notes
+    var micBtn = document.getElementById('chat-mic-btn');
+    var recRow = document.getElementById('chat-rec');
+    var recTime = document.getElementById('chat-rec-time');
+    var recStop = document.getElementById('chat-rec-stop');
+    var recCancel = document.getElementById('chat-rec-cancel');
+    var voiceRow = document.getElementById('chat-voice');
+    var voiceAudio = document.getElementById('chat-voice-audio');
+    var voiceSecEl = document.getElementById('chat-voice-sec');
+    var rec = null;          // { recorder, stream, chunks, startedAt, timer, cancelled }
+    state.im.voice = null;
+
+    function recSupported() {
+      return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+    }
+
+    function recStopTracks() {
+      if (!rec || !rec.stream) return;
+      var tracks = rec.stream.getTracks ? rec.stream.getTracks() : [];
+      for (var i = 0; i < tracks.length; i++) { try { tracks[i].stop(); } catch (e) { } }
+    }
+
+    function recReset() {
+      if (rec && rec.timer) clearInterval(rec.timer);
+      recStopTracks();
+      rec = null;
+      if (recRow) recRow.className = 'chat-rec hidden';
+      if (micBtn) micBtn.className = 'chat-btn';
+      if (recTime) recTime.textContent = '0:00';
+    }
+
+    function clearVoice() {
+      state.im.voice = null;
+      if (voiceRow) voiceRow.className = 'chat-voice hidden';
+      if (voiceAudio) voiceAudio.removeAttribute('src');
+      if (voiceSecEl) voiceSecEl.textContent = '';
+    }
+
+    function showVoice(dataUrl, sec) {
+      state.im.voice = { data: dataUrl, sec: sec };
+      if (voiceAudio) voiceAudio.src = dataUrl;
+      if (voiceSecEl) voiceSecEl.textContent = fmtSec(sec);
+      if (voiceRow) voiceRow.className = 'chat-voice';
+    }
+
+    function pickMime() {
+      var candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+      if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+      for (var i = 0; i < candidates.length; i++) {
+        try { if (MediaRecorder.isTypeSupported(candidates[i])) return candidates[i]; } catch (e) { }
+      }
+      return '';
+    }
+
+    if (micBtn) micBtn.addEventListener('click', function () {
+      if (rec) return;
+      if (!recSupported()) { UI.toast(T('messages.micUnsupported'), 'err'); return; }
+      if (state.im.voice) clearVoice();
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+        var mime = pickMime();
+        var recorder;
+        try { recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); }
+        catch (e) { recStopTracks(); UI.toast(T('messages.micFailed'), 'err'); return; }
+
+        rec = { recorder: recorder, stream: stream, chunks: [], startedAt: Date.now(), timer: null, cancelled: false };
+        recorder.ondataavailable = function (e) { if (e.data && e.data.size) rec.chunks.push(e.data); };
+        recorder.onstop = function () {
+          var seconds = Math.round((Date.now() - rec.startedAt) / 1000);
+          var cancelled = rec.cancelled;
+          var chunks = rec.chunks.slice();
+          var type = recorder.mimeType || 'audio/webm';
+          recReset();
+          if (cancelled || !chunks.length) return;
+          if (seconds > (state.site.maxVoiceSec || 300)) {
+            UI.toast(T('messages.voiceTooLong', state.site.maxVoiceSec || 300), 'err');
+            return;
+          }
+          var blob = new Blob(chunks, { type: type });
+          if (blob.size > (state.site.maxVoiceKB || 4096) * 1024) {
+            UI.toast(T('messages.voiceTooBig', state.site.maxVoiceKB || 4096), 'err');
+            return;
+          }
+          var reader = new FileReader();
+          reader.onload = function () {
+            var dataUrl = String(reader.result || '');
+            // normalize the mime so the server sniffs the container, not the codec
+            dataUrl = dataUrl.replace(/^data:audio\/[^;,]*/, 'data:audio/webm');
+            showVoice(dataUrl, Math.max(1, seconds));
+          };
+          reader.readAsDataURL(blob);
+        };
+        recorder.start();
+        if (micBtn) micBtn.className = 'chat-btn rec';
+        if (recRow) recRow.className = 'chat-rec';
+        if (recTime) recTime.textContent = '0:00';
+        var limit = state.site.maxVoiceSec || 300;
+        rec.timer = setInterval(function () {
+          if (!rec) return;
+          var s = Math.floor((Date.now() - rec.startedAt) / 1000);
+          if (recTime) recTime.textContent = fmtSec(s);
+          if (s >= limit) { try { rec.recorder.stop(); } catch (e) { } }
+        }, 500);
+      }).catch(function () {
+        UI.toast(T('messages.micDenied'), 'err');
+      });
+    });
+
+    if (recStop) recStop.addEventListener('click', function () {
+      if (!rec) return;
+      try { rec.recorder.stop(); } catch (e) { recReset(); }
+    });
+    if (recCancel) recCancel.addEventListener('click', function () {
+      if (!rec) return;
+      rec.cancelled = true;
+      try { rec.recorder.stop(); } catch (e) { recReset(); }
+    });
+    var voiceX = document.getElementById('chat-voice-x');
+    if (voiceX) voiceX.addEventListener('click', clearVoice);
+
     function submit() {
       var text = ta.value.trim();
-      if (!text && !state.im.image) { ta.focus(); return; }
+      var voice = state.im.voice;
+      if (!text && !state.im.image && !voice) { ta.focus(); return; }
       sendBtn.disabled = true;
       Api.request('POST', '/api/messages/send', {
         to: withId,
         body: text,
         image: state.im.image || '',
+        audio: voice ? voice.data : '',
+        audioSec: voice ? voice.sec : 0,
         replyTo: state.im.replyTo || 0
       }, function (err, data) {
         sendBtn.disabled = false;
@@ -443,6 +587,7 @@
         state.im.image = '';
         file.value = '';
         attach.className = 'chat-attach hidden';
+        clearVoice();
         clearReply();
         appendMessages([data.message], other, true);
         SoundFX.play('message');
@@ -452,6 +597,7 @@
 
     form.addEventListener('submit', function (e) { e.preventDefault(); submit(); });
     bindBubbles(document.getElementById('chat-body'));
+    state.im.stopRec = recReset;
   }
 
   function insertAtCursor(ta, text) {
@@ -2032,6 +2178,10 @@
         '</div>' +
         field('cfg-imagekb', T('admin.maxPostImageKB'), lim.maxPostImageKB, 'number', ' min="64"') +
         field('cfg-msgimagekb', T('admin.maxMessageImageKB'), lim.maxMessageImageKB, 'number', ' min="64"') +
+        '<div class="inline-fields">' +
+        field('cfg-voicekb', T('admin.maxVoiceKB'), lim.maxVoiceKB, 'number', ' min="64"') +
+        field('cfg-voicesec', T('admin.maxVoiceSec'), lim.maxVoiceSec, 'number', ' min="5"') +
+        '</div>' +
         field('cfg-editwin', T('admin.editWindow'), lim.editWindowMin, 'number', ' min="0"') +
         '</div>';
 
@@ -2122,6 +2272,8 @@
             maxCommentLength: Number(App.val('cfg-commentlen')),
             maxMessageLength: Number(App.val('cfg-msglen')),
             maxMessageImageKB: Number(App.val('cfg-msgimagekb')),
+            maxVoiceKB: Number(App.val('cfg-voicekb')),
+            maxVoiceSec: Number(App.val('cfg-voicesec')),
             maxAvatarKB: Number(App.val('cfg-avatarkb')),
             maxPostImageKB: Number(App.val('cfg-imagekb')),
             editWindowMin: Number(App.val('cfg-editwin'))

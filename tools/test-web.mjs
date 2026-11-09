@@ -369,6 +369,27 @@ async function main() {
   const badReply = await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: 'x', replyTo: 999999 });
   ok('foreign quote rejected', badReply.status === 400, String(badReply.status));
 
+  // a minimal 0.1s 8kHz mono WAV, enough for the container sniffing
+  const wavSamples = 800;
+  const wavBuf = Buffer.alloc(44 + wavSamples * 2);
+  wavBuf.write('RIFF', 0); wavBuf.writeUInt32LE(36 + wavSamples * 2, 4); wavBuf.write('WAVE', 8);
+  wavBuf.write('fmt ', 12); wavBuf.writeUInt32LE(16, 16); wavBuf.writeUInt16LE(1, 20);
+  wavBuf.writeUInt16LE(1, 22); wavBuf.writeUInt32LE(8000, 24); wavBuf.writeUInt32LE(16000, 28);
+  wavBuf.writeUInt16LE(2, 32); wavBuf.writeUInt16LE(16, 34);
+  wavBuf.write('data', 36); wavBuf.writeUInt32LE(wavSamples * 2, 40);
+  const WAV = 'data:audio/wav;base64,' + wavBuf.toString('base64');
+
+  const voiceMsg = await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: '', audio: WAV, audioSec: 3 });
+  ok('voice message saved', voiceMsg.status === 200 && voiceMsg.data.message.audio &&
+    voiceMsg.data.message.audio.indexOf('/media/messages/') === 0 && voiceMsg.data.message.audioSec === 3,
+    String(voiceMsg.status) + ' ' + (voiceMsg.data && voiceMsg.data.message.audio));
+  const tooLong = await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: '', audio: WAV, audioSec: 99999 });
+  ok('overlong voice rejected', tooLong.status === 400, String(tooLong.status));
+  const badAudio = await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: '', audio: PNG });
+  ok('non-audio payload rejected', badAudio.status === 400, String(badAudio.status));
+  const voiceList = await alice.call('GET', '/api/messages?with=' + bob.user.id);
+  ok('voice message in the thread', voiceList.data && voiceList.data.messages.some(m => m.audio), '');
+
   await bob.call('POST', '/api/messages/typing', { to: alice.user.id });
   const typingWait = await alice.call('GET', '/api/messages/wait?with=' + bob.user.id + '&after=0&timeout=3');
   ok('typing is visible', typingWait.status === 200 && typingWait.data.typing === true, JSON.stringify(typingWait.data && typingWait.data.typing));

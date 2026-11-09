@@ -117,6 +117,8 @@ namespace Social.Core
         public long To;
         public string Body = "";
         public string Image = "";      // optional picture / animated GIF, /media/messages/...
+        public string Audio = "";      // optional voice message, /media/messages/...
+        public int AudioSec;           // duration of the voice message in seconds
         public long ReplyTo;           // id of the quoted message, 0 = none
         public DateTime Created = DateTime.UtcNow;
         public bool Read;

@@ -483,6 +483,12 @@ namespace Social.Web
             m[".map"] = "application/json; charset=utf-8";
             m[".xml"] = "application/xml; charset=utf-8";
             m[".webmanifest"] = "application/manifest+json";
+            m[".webm"] = "audio/webm";
+            m[".ogg"] = "audio/ogg";
+            m[".oga"] = "audio/ogg";
+            m[".mp3"] = "audio/mpeg";
+            m[".m4a"] = "audio/mp4";
+            m[".wav"] = "audio/wav";
             return m;
         }
 
@@ -690,7 +696,7 @@ namespace Social.Web
             resp.Set("X-Frame-Options", "DENY");
             resp.Set("Referrer-Policy", "strict-origin-when-cross-origin");
             resp.Set("Cross-Origin-Resource-Policy", "same-origin");
-            resp.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+            resp.Set("Permissions-Policy", "camera=(), microphone=(self), geolocation=(), payment=(), usb=()");
             resp.Set("Content-Security-Policy",
                 "default-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; " +
                 "object-src 'none'; " +

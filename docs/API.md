@@ -196,7 +196,7 @@ earned (useful after an import or a rule change).
 | --- | --- | --- | --- |
 | GET | `/api/messages/threads` | — | `{ threads[], unread }` |
 | GET | `/api/messages` | `with`, `before`, `limit` | `{ other, messages[], hasMore, next }` |
-| POST | `/api/messages/send` | `to`, `body`, `image`, `replyTo` | `{ message }` |
+| POST | `/api/messages/send` | `to`, `body`, `image`, `audio`, `audioSec`, `replyTo` | `{ message }` |
 | GET | `/api/messages/wait` | `with`, `after`, `timeout` | `{ messages[], latest, typing, read, unread, live }` |
 | POST | `/api/messages/typing` | `to` | `{ ok }` |
 | POST | `/api/messages/read` | `with` | `{ unread }` |
@@ -208,6 +208,12 @@ Reading a conversation marks it read. Blocked users cannot exchange messages.
 under `/media/messages/`; animated GIFs keep animating in the chat. `replyTo` is
 the id of a message from the same conversation and comes back as a `replyTo`
 object (`id`, `from`, `body`, `image`, `mine`).
+
+`audio` is a voice message: a data URL of a webm/ogg/mp4/wav recording (the server
+sniffs the container, not the codec), at most `limits.maxVoiceKB` and
+`limits.maxVoiceSec` seconds (`audioSec` carries the duration, 0 is tolerated and
+clamped to 1). The file lands in `/media/messages/` and the message comes back with
+`audio` and `audioSec`.
 
 `/api/messages/wait` is the chat long poll: it holds the request (max 25s,
 `ui.notifyWaitSec` by default) and answers as soon as a message newer than

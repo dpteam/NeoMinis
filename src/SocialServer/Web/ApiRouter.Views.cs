@@ -198,6 +198,8 @@ namespace Social.Web
             b.Prop("to", m.To);
             b.Prop("body", m.Body);
             b.Prop("image", m.Image);
+            b.Prop("audio", m.Audio);
+            b.Prop("audioSec", m.AudioSec);
             b.Prop("created", Util.Iso(m.Created));
             b.Prop("read", m.Read);
             b.Prop("mine", viewer != null && m.From == viewer.Id);

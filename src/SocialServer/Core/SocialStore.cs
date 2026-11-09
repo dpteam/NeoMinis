@@ -1182,6 +1182,11 @@ namespace Social.Core
 
         public Message CreateMessage(long from, long to, string body, string image, long replyTo)
         {
+            return CreateMessage(from, to, body, image, "", 0, replyTo);
+        }
+
+        public Message CreateMessage(long from, long to, string body, string image, string audio, int audioSec, long replyTo)
+        {
             lock (_sync)
             {
                 EnsureWritable();
@@ -1191,6 +1196,8 @@ namespace Social.Core
                 m.To = to;
                 m.Body = body ?? "";
                 m.Image = image ?? "";
+                m.Audio = audio ?? "";
+                m.AudioSec = audioSec;
                 m.ReplyTo = replyTo;
                 m.Created = DateTime.UtcNow;
                 _messages.Insert(0, m);
@@ -2282,6 +2289,7 @@ namespace Social.Core
                 Dictionary<string, object> d = new Dictionary<string, object>();
                 d["id"] = m.Id; d["from"] = m.From; d["to"] = m.To; d["body"] = m.Body;
                 d["image"] = m.Image; d["replyTo"] = m.ReplyTo;
+                d["audio"] = m.Audio; d["audioSec"] = m.AudioSec;
                 d["created"] = m.Created; d["read"] = m.Read;
                 d["deletedByFrom"] = m.DeletedByFrom; d["deletedByTo"] = m.DeletedByTo;
                 list.Add(d);
@@ -2297,6 +2305,8 @@ namespace Social.Core
             m.To = Json.GetLong(d, "to", 0);
             m.Body = Json.GetString(d, "body", "");
             m.Image = Json.GetString(d, "image", "");
+            m.Audio = Json.GetString(d, "audio", "");
+            m.AudioSec = Json.GetInt(d, "audioSec", 0);
             m.ReplyTo = Json.GetLong(d, "replyTo", 0);
             m.Created = Json.GetDate(d, "created", DateTime.UtcNow);
             m.Read = Json.GetBool(d, "read", false);

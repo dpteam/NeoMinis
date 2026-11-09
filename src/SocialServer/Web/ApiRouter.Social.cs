@@ -925,8 +925,10 @@ namespace Social.Web
                 throw new ApiException(429, "slow-down", "You are sending messages too fast");
             string text = Util.CleanText(BodyStr(ctx, "body", ""), _cfg.MaxMessageLength);
             string imageData = BodyStr(ctx, "image", "");
+            string audioData = BodyStr(ctx, "audio", "");
+            int audioSec = (int)BodyLong(ctx, "audioSec", 0);
             long replyTo = BodyLong(ctx, "replyTo", 0);
-            if (text.Length == 0 && string.IsNullOrEmpty(imageData))
+            if (text.Length == 0 && string.IsNullOrEmpty(imageData) && string.IsNullOrEmpty(audioData))
                 throw new ApiException(400, "empty", "Write something first");
 
             string image = "";
@@ -936,6 +938,18 @@ namespace Social.Web
                 image = _media.SaveDataUrl(imageData, "message", _cfg.MaxMessageImageKB, out err);
                 if (image == null) throw new ApiException(400, err, "Image could not be saved");
             }
+
+            string audio = "";
+            if (!string.IsNullOrEmpty(audioData))
+            {
+                if (audioSec < 0) audioSec = 0;
+                if (audioSec > _cfg.MaxVoiceSec)
+                    throw new ApiException(400, "voice-too-long", "Voice message is too long");
+                string err;
+                audio = _media.SaveDataUrl(audioData, "voice", _cfg.MaxVoiceKB, out err);
+                if (audio == null) throw new ApiException(400, err, "Voice message could not be saved");
+                if (audioSec == 0) audioSec = 1;
+            }
             if (replyTo > 0)
             {
                 Message quoted = _store.FindMessage(replyTo);
@@ -943,7 +957,7 @@ namespace Social.Web
                     throw new ApiException(400, "bad-reply", "The quoted message is not part of this conversation");
             }
 
-            Message m = _store.CreateMessage(ctx.User.Id, target.Id, text, image, replyTo);
+            Message m = _store.CreateMessage(ctx.User.Id, target.Id, text, image, audio, audioSec, replyTo);
             TypingRegistry.Clear(ctx.User.Id, target.Id);
             ctx.User.LastMessageAt = DateTime.UtcNow;
             _store.MarkUserDirty(ctx.User);
@@ -1059,9 +1073,11 @@ namespace Social.Web
             Message m = _store.FindMessage(id);
             if (m == null) throw new ApiException(404, "no-message", "Message not found");
             string image = m.Image;
+            string audio = m.Audio;
             if (!_store.DeleteMessage(id, ctx.User.Id)) throw new ApiException(404, "no-message", "Message not found");
-            // the picture only goes away once both sides dropped the message
+            // the file only goes away once both sides dropped the message
             if (!string.IsNullOrEmpty(image) && m.DeletedByFrom && m.DeletedByTo) _media.Delete(image);
+            if (!string.IsNullOrEmpty(audio) && m.DeletedByFrom && m.DeletedByTo) _media.Delete(audio);
             JsonBuilder b = new JsonBuilder(64);
             b.BeginObject();
             SendOk(ctx, b);
