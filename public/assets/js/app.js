@@ -105,7 +105,8 @@ var App = (function () {
 
   function startBadgePoll() {
     if (state.site && state.site.liveNotifications) return;
-    setInterval(function () {
+    if (state.badgeTimer) return;
+    state.badgeTimer = setInterval(function () {
       if (!state.authed || document.hidden) return;
       Api.request('GET', '/api/me', null, function (err, data) {
         if (err) return;
@@ -114,6 +115,10 @@ var App = (function () {
         updateBadges();
       });
     }, 20000);
+  }
+
+  function stopBadgePoll() {
+    if (state.badgeTimer) { clearInterval(state.badgeTimer); state.badgeTimer = null; }
   }
 
   function updateBadges() {
@@ -170,13 +175,20 @@ var App = (function () {
   }
 
   /// Long-poll the server for fresh notifications and announce them instantly.
+  /// Every start bumps a token; a stale loop exits on its next callback instead of
+  /// piling up another long poll (which is what used to make the tab feel heavy).
   function startNotifyStream() {
     var n = state.notify;
     if (n.started || !state.authed) return;
     if (!(state.site && state.site.liveNotifications)) return;
     n.started = true;
+    n.token = (n.token || 0) + 1;
+    var token = n.token;
+
+    function alive() { return state.authed && n.token === token; }
 
     Api.request('GET', '/api/notifications?limit=1', null, function (err, data) {
+      if (!alive()) return;
       if (err) { n.started = false; setTimeout(startNotifyStream, 5000); return; }
       var list = (data && data.notifications) || [];
       n.last = list.length ? list[0].id : 0;
@@ -185,10 +197,11 @@ var App = (function () {
     });
 
     function pump() {
-      if (!state.authed) { n.started = false; return; }
+      if (!alive()) return;
       Api.request('GET', '/api/notifications/wait?after=' + n.last, null, function (err, data) {
-        if (!state.authed) { n.started = false; return; }
+        if (!alive()) return;
         if (err) { setTimeout(pump, 5000); return; }
+        if (data && data.busy) { setTimeout(pump, 3000); return; }
         var fresh = (data && data.notifications) || [];
         if (data && data.latest && data.latest > n.last) n.last = data.latest;
         if (fresh.length) {
@@ -206,6 +219,12 @@ var App = (function () {
         pump();
       });
     }
+  }
+
+  function stopNotifyStream() {
+    var n = state.notify;
+    n.started = false;
+    n.token = (n.token || 0) + 1;
   }
 
   // ------------------------------------------------------------------ shell
@@ -423,6 +442,9 @@ var App = (function () {
   function stopTimers() {
     if (state.im && state.im.timer) { clearInterval(state.im.timer); state.im.timer = null; }
     if (state.adminLogs && state.adminLogs.timer) { clearInterval(state.adminLogs.timer); state.adminLogs.timer = null; }
+    // stop a running voice recording and invalidate the chat long poll
+    if (state.im && state.im.stopRec) { try { state.im.stopRec(); } catch (e) { } }
+    if (state.im) state.im.loopToken = (state.im.loopToken || 0) + 1;
   }
 
   // ------------------------------------------------------------------ auth
@@ -619,8 +641,9 @@ var App = (function () {
     applyUserPrefs();
     renderShell();
     go('#/feed');
-    state.notify.started = false;
+    stopNotifyStream();
     startNotifyStream();
+    startBadgePoll();
     updateTitle((state.me && state.me.unreadNotifications) || 0);
     SoundFX.play('login');
     if (isRegister && data.recoveryCode) {
@@ -645,7 +668,9 @@ var App = (function () {
       state.authed = false;
       state.me = null;
       state.user = null;
-      state.notify.started = false;
+      stopTimers();
+      stopNotifyStream();
+      stopBadgePoll();
       state.notify.last = 0;
       updateTitle(0);
       SoundFX.play('logout');
@@ -1749,6 +1774,9 @@ var App = (function () {
       state.authed = false;
       state.me = null;
       state.user = null;
+      stopTimers();
+      stopNotifyStream();
+      stopBadgePoll();
       renderAuth('login');
       UI.toast(T('errors.session'), 'err');
     };

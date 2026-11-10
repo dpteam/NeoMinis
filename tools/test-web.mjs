@@ -528,6 +528,8 @@ async function main() {
     const adminBase = ADMIN_BASE || BASE;
     const overview = await admin.call('GET', '/api/admin/overview');
     ok('admin overview', overview.status === 200 && overview.data.counts.users >= 2, String(overview.status));
+    ok('overview has runtime diagnostics', typeof overview.data.activeWaits === 'number' &&
+      typeof overview.data.threadsFree === 'number' && typeof overview.data.memoryMB === 'number', '');
     const bobAdmin = new Client('bob-admin', adminBase);
     const bobLogin = await bobAdmin.login(ub, 'bob-password-1');
     const forbidden = bobLogin.status === 200 ? await bobAdmin.call('GET', '/api/admin/overview') : null;

@@ -723,16 +723,23 @@
   /// Long poll the open conversation: new messages, typing and read receipts.
   function startMessageLoop(withId) {
     if (!(state.site && state.site.liveNotifications)) return;
-    var stop = false;
+    // one loop per conversation, and any older loop dies on its next callback
+    state.im.loopToken = (state.im.loopToken || 0) + 1;
+    var token = state.im.loopToken;
+
+    function alive() {
+      return App.state.route === 'im' && state.im.withId === withId &&
+        state.im.loopToken === token;
+    }
 
     function pump() {
-      if (stop) return;
-      if (App.state.route !== 'im' || state.im.withId !== withId) { stop = true; return; }
+      if (!alive()) return;
       if (document.hidden) { setTimeout(pump, 2500); return; }
       var after = state.im.last || 0;
       Api.request('GET', '/api/messages/wait?with=' + withId + '&after=' + after, null, function (err, data) {
-        if (App.state.route !== 'im' || state.im.withId !== withId) { stop = true; return; }
+        if (!alive()) return;
         if (err) { setTimeout(pump, 4000); return; }
+        if (data && data.busy) { setTimeout(pump, 3000); return; }
         if (data.messages && data.messages.length) {
           appendMessages(data.messages, state.im.other || {}, false);
           SoundFX.play('message');
@@ -1546,6 +1553,9 @@
         '<div style="display:flex;justify-content:space-between;padding:4px 0"><span class="muted">' + T('admin.uptime') + '</span><b>' + Math.floor((data.uptimeSec || 0) / 60) + 'm</b></div>' +
         '<div style="display:flex;justify-content:space-between;padding:4px 0"><span class="muted">' + T('admin.peak') + '</span><b>' + data.peakOnline + '</b></div>' +
         '<div style="display:flex;justify-content:space-between;padding:4px 0"><span class="muted">' + T('admin.apiRequests') + '</span><b>' + data.apiRequests + ' / ' + data.apiErrors + '</b></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0"><span class="muted">' + T('admin.activeWaits') + '</span><b>' + (data.activeWaits || 0) + '</b></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0"><span class="muted">' + T('admin.threadsFree') + '</span><b>' + (data.threadsFree || 0) + '</b></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0"><span class="muted">' + T('admin.memory') + '</span><b>' + (data.memoryMB || 0) + ' MB</b></div>' +
         (data.storageReadOnly ? '<div class="alert err" style="margin-top:8px">' + T('admin.readOnly') + ': ' + UI.esc(data.saveError || '') + '</div>' : '') +
         '</div></div></div>';
       html += '<div class="card"><div class="card-h">' + UI.icon('user-plus') + ' ' + T('admin.recentUsers') + '</div><div class="card-b flush"><div class="table-wrap"><table class="table"><thead><tr><th>#</th><th>' + T('auth.username') + '</th><th>' + T('admin.role') + '</th><th>' + T('profile.joined') + '</th><th></th></tr></thead><tbody>';

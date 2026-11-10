@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Threading;
 using Social.Core;
 
 namespace Social.Web
@@ -75,6 +76,11 @@ namespace Social.Web
             b.Prop("uniqueToday", _stats.UniqueToday());
             b.Prop("apiRequests", _stats.ApiRequests);
             b.Prop("apiErrors", _stats.ApiErrors);
+            b.Prop("activeWaits", ActiveWaits);
+            int workerFree, ioFree;
+            ThreadPool.GetAvailableThreads(out workerFree, out ioFree);
+            b.Prop("threadsFree", workerFree);
+            b.Prop("memoryMB", GC.GetTotalMemory(false) / (1024 * 1024));
 
             b.Name("recentUsers").BeginArray();
             for (int i = 0; i < recent.Count; i++) b.Raw(AdminUserJson(recent[i], ctx.User));

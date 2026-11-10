@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using System.Threading;
 using Social.Core;
 
 namespace Social.Web
@@ -13,6 +14,26 @@ namespace Social.Web
     public sealed partial class ApiRouter
     {
         public const string Version = "1.0.0";
+
+        // Long polls park a thread until something happens. Cap how many may do
+        // that at once so a pile of open tabs can never starve the thread pool;
+        // the overflow answers immediately with busy=true and the client retries.
+        private const int MaxActiveWaits = 48;
+        private static int _activeWaits;
+        public static int ActiveWaits { get { return _activeWaits; } }
+
+        private bool EnterWait()
+        {
+            int n = Interlocked.Increment(ref _activeWaits);
+            if (n > MaxActiveWaits)
+            {
+                Interlocked.Decrement(ref _activeWaits);
+                return false;
+            }
+            return true;
+        }
+
+        private void ExitWait() { Interlocked.Decrement(ref _activeWaits); }
 
         private readonly WebServer _web;
         private readonly Config _cfg;

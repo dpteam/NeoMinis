@@ -1031,23 +1031,50 @@ namespace Social.Web
             if (timeout > 25) timeout = 25;
             if (!_cfg.LiveNotifications) timeout = 1;
 
-            bool typingAtStart = TypingRegistry.IsTyping(other.Id, ctx.User.Id);
-            bool readAtStart = _store.LastMineRead(ctx.User.Id, other.Id);
-            DateTime until = DateTime.UtcNow.AddSeconds(timeout);
-            List<Message> fresh = new List<Message>();
-
-            while (true)
+            if (!EnterWait())
             {
-                if (_store.LastMessageId(ctx.User.Id, other.Id) > after)
+                // too many parked waits right now: answer at once and let the
+                // client back off, instead of queueing another blocked thread
+                JsonBuilder bb = new JsonBuilder(256);
+                bb.BeginObject();
+                bb.Name("messages").BeginArray().EndArray();
+                bb.Prop("latest", _store.LastMessageId(ctx.User.Id, other.Id));
+                bb.Prop("typing", false);
+                bb.Prop("read", _store.LastMineRead(ctx.User.Id, other.Id));
+                bb.Prop("unread", _store.UnreadMessages(ctx.User.Id));
+                bb.Prop("live", _cfg.LiveNotifications);
+                bb.Prop("busy", true);
+                SendOk(ctx, bb);
+                return;
+            }
+
+            bool typingAtStart;
+            bool readAtStart;
+            List<Message> fresh;
+            try
+            {
+                typingAtStart = TypingRegistry.IsTyping(other.Id, ctx.User.Id);
+                readAtStart = _store.LastMineRead(ctx.User.Id, other.Id);
+                DateTime until = DateTime.UtcNow.AddSeconds(timeout);
+                fresh = new List<Message>();
+
+                while (true)
                 {
-                    fresh = _store.MessagesAfter(ctx.User.Id, other.Id, after, 50);
-                    if (fresh.Count > 0) break;
+                    if (_store.LastMessageId(ctx.User.Id, other.Id) > after)
+                    {
+                        fresh = _store.MessagesAfter(ctx.User.Id, other.Id, after, 50);
+                        if (fresh.Count > 0) break;
+                    }
+                    bool typing = TypingRegistry.IsTyping(other.Id, ctx.User.Id);
+                    bool read = _store.LastMineRead(ctx.User.Id, other.Id);
+                    if (typing != typingAtStart || read != readAtStart) break;
+                    if (DateTime.UtcNow >= until) break;
+                    Thread.Sleep(300);
                 }
-                bool typing = TypingRegistry.IsTyping(other.Id, ctx.User.Id);
-                bool read = _store.LastMineRead(ctx.User.Id, other.Id);
-                if (typing != typingAtStart || read != readAtStart) break;
-                if (DateTime.UtcNow >= until) break;
-                Thread.Sleep(300);
+            }
+            finally
+            {
+                ExitWait();
             }
 
             // newest first from the store, oldest first for the client
@@ -1136,19 +1163,39 @@ namespace Social.Web
             if (timeout > 25) timeout = 25;
             if (!_cfg.LiveNotifications) timeout = 1;
 
-            DateTime until = DateTime.UtcNow.AddSeconds(timeout);
-            List<Notification> fresh = new List<Notification>();
-            while (true)
+            if (!EnterWait())
             {
-                if (_store.LatestNotificationId(ctx.User.Id) > after)
+                JsonBuilder bb = new JsonBuilder(256);
+                bb.BeginObject();
+                bb.Name("notifications").BeginArray().EndArray();
+                bb.Prop("unread", _store.UnreadNotifications(ctx.User.Id));
+                bb.Prop("latest", _store.LatestNotificationId(ctx.User.Id));
+                bb.Prop("live", _cfg.LiveNotifications);
+                bb.Prop("busy", true);
+                SendOk(ctx, bb);
+                return;
+            }
+
+            List<Notification> fresh = new List<Notification>();
+            try
+            {
+                DateTime until = DateTime.UtcNow.AddSeconds(timeout);
+                while (true)
                 {
-                    List<Notification> all = _store.NotificationsFor(ctx.User.Id, 0, 20);
-                    for (int i = 0; i < all.Count; i++) if (all[i].Id > after) fresh.Add(all[i]);
-                    if (fresh.Count > 0) break;
+                    if (_store.LatestNotificationId(ctx.User.Id) > after)
+                    {
+                        List<Notification> all = _store.NotificationsFor(ctx.User.Id, 0, 20);
+                        for (int i = 0; i < all.Count; i++) if (all[i].Id > after) fresh.Add(all[i]);
+                        if (fresh.Count > 0) break;
+                    }
+                    if (DateTime.UtcNow >= until) break;
+                    // short sleeps keep shutdown responsive while staying cheap
+                    Thread.Sleep(350);
                 }
-                if (DateTime.UtcNow >= until) break;
-                // short sleeps keep shutdown responsive while staying cheap
-                Thread.Sleep(350);
+            }
+            finally
+            {
+                ExitWait();
             }
 
             JsonBuilder b = new JsonBuilder(4096);

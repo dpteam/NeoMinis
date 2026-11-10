@@ -236,6 +236,11 @@ default `ui.notifyWaitSec`). The SPA keeps a single loop open so likes, comments
 and mentions pop up instantly. When `ui.liveNotifications=false` the endpoint
 answers immediately and the SPA goes back to plain polling.
 
+Long polls park a thread, so the server caps how many may wait at once (48
+across notifications and chats). Above the cap a request answers at once with
+`"busy": true`; the SPA backs off for a few seconds and retries. Admin -> Overview
+shows the current number of parked waits, free worker threads and process memory.
+
 `notifyMute` in `/api/settings` is the list of notification types the user does
 not want: `like`, `comment`, `friend`, `message`, `wall`, `group`, `mention`,
 `badge`. `admin` and `system` can never be muted.
