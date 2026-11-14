@@ -214,7 +214,12 @@ namespace Social.Web
                 .Prop("giftsEnabled", _cfg.GiftsEnabled)
                 .Prop("gamesEnabled", GamesAvailable())
                 .Prop("maxGameKB", _cfg.MaxGameKB)
-                .Prop("maxGameFiles", _cfg.MaxGameFiles);
+                .Prop("maxGameFiles", _cfg.MaxGameFiles)
+                .Prop("storiesEnabled", _cfg.StoriesEnabled)
+                .Prop("storyHours", _cfg.StoryHours)
+                .Prop("maxStoryKB", _cfg.MaxStoryKB)
+                .Prop("maxStoryVideoKB", _cfg.MaxStoryVideoKB)
+                .Prop("maxStoryCaption", _cfg.MaxStoryCaption);
             b.Prop("maxStatusLength", _cfg.MaxStatusLength);
             b.Prop("maxBioLength", _cfg.MaxBioLength);
             b.Prop("maxNameLength", _cfg.MaxNameLength);
@@ -722,6 +727,12 @@ namespace Social.Web
             if (r == "album/delete") { RequireMethod(m, "POST"); HandleAlbumDelete(ctx); return; }
             if (r == "album/assign") { RequireMethod(m, "POST"); HandleAlbumAssign(ctx); return; }
             if (r == "album/unfiled") { RequireMethod(m, "GET"); HandleAlbumUnfiled(ctx); return; }
+            if (r == "stories") { RequireMethod(m, "GET"); HandleStories(ctx); return; }
+            if (r == "story") { RequireMethod(m, "GET"); HandleStory(ctx); return; }
+            if (r == "story/viewers") { RequireMethod(m, "GET"); HandleStoryViewers(ctx); return; }
+            if (r == "story/add") { RequireMethod(m, "POST"); HandleStoryAdd(ctx); return; }
+            if (r == "story/seen") { RequireMethod(m, "POST"); HandleStorySeen(ctx); return; }
+            if (r == "story/delete") { RequireMethod(m, "POST"); HandleStoryDelete(ctx); return; }
             if (r == "tag") { RequireMethod(m, "GET"); HandleTag(ctx); return; }
             if (r == "tags") { RequireMethod(m, "GET"); HandleTags(ctx); return; }
             if (r == "report") { RequireMethod(m, "POST"); HandleReport(ctx); return; }

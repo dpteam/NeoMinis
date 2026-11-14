@@ -37,13 +37,14 @@ namespace Social.Core
         private readonly List<CallRecord> _calls = new List<CallRecord>();
         private readonly List<Gift> _gifts = new List<Gift>();
         private readonly List<Album> _albums = new List<Album>();
+        private readonly List<Story> _stories = new List<Story>();
         private Meta _meta = new Meta();
 
         private readonly Dictionary<long, User> _userById = new Dictionary<long, User>();
         private readonly Dictionary<string, User> _userByName = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
 
         private bool _dirtyUsers, _dirtyPosts, _dirtyComments, _dirtyFriends, _dirtyMessages;
-        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts, _dirtyAlbums;
+        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts, _dirtyAlbums, _dirtyStories;
         private bool _readOnly;
         private string _saveError = "";
         private DateTime _lastSave = DateTime.MinValue;
@@ -70,7 +71,7 @@ namespace Social.Core
                 {
                     return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
                            _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
-                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls || _dirtyGifts || _dirtyAlbums;
+                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls || _dirtyGifts || _dirtyAlbums || _dirtyStories;
                 }
             }
         }
@@ -132,6 +133,8 @@ namespace Social.Core
                 _gifts.AddRange(LoadTable("gifts.json", GiftFromDict));
                 _albums.Clear();
                 _albums.AddRange(LoadTable("albums.json", AlbumFromDict));
+                _stories.Clear();
+                _stories.AddRange(LoadTable("stories.json", StoryFromDict));
 
                 // sort newest first, keeping the hot queries cheap
                 _posts.Sort(delegate(Post a, Post b) { return b.Id.CompareTo(a.Id); });
@@ -142,7 +145,7 @@ namespace Social.Core
                 EnsureCounters();
                 _loaded = true;
                 _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = false;
+                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = _dirtyStories = false;
 
                 Log.Info("DATA", "loaded users=" + _users.Count + " posts=" + _posts.Count +
                                   " comments=" + _comments.Count + " friends=" + _friends.Count +
@@ -176,6 +179,7 @@ namespace Social.Core
                 m.NextCallId = Json.GetLong(d, "nextCallId", 1);
                 m.NextGiftId = Json.GetLong(d, "nextGiftId", 1);
                 m.NextAlbumId = Json.GetLong(d, "nextAlbumId", 1);
+                m.NextStoryId = Json.GetLong(d, "nextStoryId", 1);
                 m.TotalRegistrations = Json.GetLong(d, "totalRegistrations", 0);
                 m.LastBackup = Json.GetDate(d, "lastBackup", DateTime.MinValue);
                 m.InstallId = Json.GetString(d, "installId", "");
@@ -221,6 +225,9 @@ namespace Social.Core
             long maxAlbum = 0;
             for (int i = 0; i < _albums.Count; i++) if (_albums[i].Id > maxAlbum) maxAlbum = _albums[i].Id;
             if (_meta.NextAlbumId <= maxAlbum) _meta.NextAlbumId = maxAlbum + 1;
+            long maxStory = 0;
+            for (int i = 0; i < _stories.Count; i++) if (_stories[i].Id > maxStory) maxStory = _stories[i].Id;
+            if (_meta.NextStoryId <= maxStory) _meta.NextStoryId = maxStory + 1;
         }
 
         private string ReadJson(string path)
@@ -330,9 +337,10 @@ namespace Social.Core
                     if (force || _dirtyCalls) WriteTable("calls.json", CallsToArray());
                     if (force || _dirtyGifts) WriteTable("gifts.json", GiftsToArray());
                     if (force || _dirtyAlbums) WriteTable("albums.json", AlbumsToArray());
+                    if (force || _dirtyStories) WriteTable("stories.json", StoriesToArray());
 
                     _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = false;
+                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = _dirtyStories = false;
                     _lastSave = DateTime.UtcNow;
                     _saveError = "";
                     if (_readOnly)
@@ -412,6 +420,7 @@ namespace Social.Core
         private void MarkCalls() { _dirtyCalls = true; }
         private void MarkGifts() { _dirtyGifts = true; }
         private void MarkAlbums() { _dirtyAlbums = true; }
+        private void MarkStories() { _dirtyStories = true; }
 
         // ============================================================== users
 
@@ -2967,6 +2976,189 @@ namespace Social.Core
             return r;
         }
 
+        // ============================================================= stories
+
+        /// <summary>Live stories of one author, oldest first (that is the play order).</summary>
+        public List<Story> StoriesOf(long author, bool includeExpired)
+        {
+            List<Story> list = new List<Story>();
+            DateTime now = DateTime.UtcNow;
+            lock (_sync)
+            {
+                for (int i = 0; i < _stories.Count; i++)
+                {
+                    Story s = _stories[i];
+                    if (s.Author != author) continue;
+                    if (!includeExpired && s.Expires <= now) continue;
+                    list.Add(s);
+                }
+            }
+            list.Sort(delegate(Story a, Story b) { return a.Id.CompareTo(b.Id); });
+            return list;
+        }
+
+        /// <summary>Authors who have at least one live story right now.</summary>
+        public List<long> StoryAuthors()
+        {
+            List<long> authors = new List<long>();
+            DateTime now = DateTime.UtcNow;
+            lock (_sync)
+            {
+                for (int i = 0; i < _stories.Count; i++)
+                {
+                    Story s = _stories[i];
+                    if (s.Expires <= now) continue;
+                    if (!authors.Contains(s.Author)) authors.Add(s.Author);
+                }
+            }
+            return authors;
+        }
+
+        public Story FindStory(long id)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _stories.Count; i++) if (_stories[i].Id == id) return _stories[i];
+                return null;
+            }
+        }
+
+        /// <summary>How many stories the author posted in the last 24 hours.</summary>
+        public int CountStoriesToday(long author)
+        {
+            DateTime since = DateTime.UtcNow.AddHours(-24);
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _stories.Count; i++)
+                    if (_stories[i].Author == author && _stories[i].Created >= since) n++;
+                return n;
+            }
+        }
+
+        public Story AddStory(long author, string image, string video, string caption, int hours)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Story s = new Story();
+                s.Id = _meta.NextStoryId++;
+                s.Author = author;
+                s.Image = image ?? "";
+                s.Video = video ?? "";
+                s.Caption = caption ?? "";
+                s.Created = DateTime.UtcNow;
+                s.Expires = s.Created.AddHours(hours);
+                _stories.Add(s);
+                MarkStories();
+                _dirtyMeta = true;
+                return s;
+            }
+        }
+
+        /// <summary>Records that the viewer saw the story; a repeat view changes nothing.</summary>
+        public bool MarkStorySeen(long id, long viewer)
+        {
+            lock (_sync)
+            {
+                Story s = FindStory(id);
+                if (s == null || viewer <= 0) return false;
+                if (s.Author == viewer || s.Viewers.Contains(viewer)) return false;
+                s.Viewers.Add(viewer);
+                MarkStories();
+                return true;
+            }
+        }
+
+        /// <summary>Removes a story; returns the file urls so the caller can delete them.</summary>
+        public List<string> RemoveStory(long id, long owner)
+        {
+            List<string> urls = new List<string>();
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _stories.Count; i++)
+                {
+                    Story s = _stories[i];
+                    if (s.Id != id || s.Author != owner) continue;
+                    if (!string.IsNullOrEmpty(s.Image)) urls.Add(s.Image);
+                    if (!string.IsNullOrEmpty(s.Video)) urls.Add(s.Video);
+                    _stories.RemoveAt(i);
+                    MarkStories();
+                    break;
+                }
+            }
+            return urls;
+        }
+
+        /// <summary>
+        /// Drops everything that expired and hands back the files to delete. Called
+        /// by the supervisor, so a story really does go away on time.
+        /// </summary>
+        public List<string> PurgeExpiredStories()
+        {
+            List<string> urls = new List<string>();
+            DateTime now = DateTime.UtcNow;
+            lock (_sync)
+            {
+                for (int i = _stories.Count - 1; i >= 0; i--)
+                {
+                    Story s = _stories[i];
+                    if (s.Expires > now) continue;
+                    if (!string.IsNullOrEmpty(s.Image)) urls.Add(s.Image);
+                    if (!string.IsNullOrEmpty(s.Video)) urls.Add(s.Video);
+                    _stories.RemoveAt(i);
+                }
+                if (urls.Count > 0) MarkStories();
+            }
+            return urls;
+        }
+
+        public int CountLiveStories()
+        {
+            DateTime now = DateTime.UtcNow;
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _stories.Count; i++) if (_stories[i].Expires > now) n++;
+                return n;
+            }
+        }
+
+        private List<object> StoriesToArray()
+        {
+            List<object> list = new List<object>(_stories.Count);
+            for (int i = 0; i < _stories.Count; i++)
+            {
+                Story s = _stories[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = s.Id; d["author"] = s.Author;
+                d["image"] = s.Image; d["video"] = s.Video; d["caption"] = s.Caption;
+                d["created"] = s.Created; d["expires"] = s.Expires;
+                List<object> viewers = new List<object>(s.Viewers.Count);
+                for (int k = 0; k < s.Viewers.Count; k++) viewers.Add(s.Viewers[k]);
+                d["viewers"] = viewers;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static Story StoryFromDict(Dictionary<string, object> d)
+        {
+            Story s = new Story();
+            s.Id = Json.GetLong(d, "id", 0);
+            s.Author = Json.GetLong(d, "author", 0);
+            s.Image = Json.GetString(d, "image", "");
+            s.Video = Json.GetString(d, "video", "");
+            s.Caption = Json.GetString(d, "caption", "");
+            s.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            s.Expires = Json.GetDate(d, "expires", s.Created.AddHours(24));
+            ReadIds(d, "viewers", s.Viewers);
+            if (s.Id <= 0 || s.Author <= 0) return null;
+            if (string.IsNullOrEmpty(s.Image) && string.IsNullOrEmpty(s.Video)) return null;
+            return s;
+        }
+
         // =============================================================== gifts
 
         public Gift AddGift(long from, long to, string kind, string message, bool anonymous)
@@ -3380,6 +3572,10 @@ namespace Social.Core
                 for (int a = _albums.Count - 1; a >= 0; a--)
                     if (_albums[a].Owner == userId) _albums.RemoveAt(a);
 
+                // stories go with the account
+                for (int s = _stories.Count - 1; s >= 0; s--)
+                    if (_stories[s].Author == userId) _stories.RemoveAt(s);
+
                 _users.Remove(u);
                 _userById.Remove(userId);
                 if (!string.IsNullOrEmpty(u.Username)) _userByName.Remove(u.Username);
@@ -3393,6 +3589,7 @@ namespace Social.Core
                 MarkBookmarks();
                 MarkGroups();
                 MarkAlbums();
+                MarkStories();
                 return removed + 1;
             }
         }
@@ -3657,6 +3854,7 @@ namespace Social.Core
             d["nextCallId"] = m.NextCallId;
             d["nextGiftId"] = m.NextGiftId;
             d["nextAlbumId"] = m.NextAlbumId;
+            d["nextStoryId"] = m.NextStoryId;
             d["totalRegistrations"] = m.TotalRegistrations;
             d["lastBackup"] = m.LastBackup;
             d["installId"] = m.InstallId;

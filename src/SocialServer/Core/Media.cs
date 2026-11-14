@@ -28,13 +28,19 @@ namespace Social.Core
             if (data.Length > (long)maxKb * 1024L) { error = "image-too-large"; return null; }
 
             bool audio = kind == "voice";
-            string ext = audio ? SniffAudio(data) : Sniff(data);
-            if (ext == null) { error = audio ? "unsupported-audio" : "unsupported-image"; return null; }
+            bool video = kind == "storyvideo";
+            string ext = audio ? SniffAudio(data) : video ? SniffVideo(data) : Sniff(data);
+            if (ext == null)
+            {
+                error = audio ? "unsupported-audio" : video ? "unsupported-video" : "unsupported-image";
+                return null;
+            }
 
             string sub = kind == "avatar" ? "avatars"
                 : kind == "group" ? "groups"
                 : kind == "message" ? "messages"
                 : kind == "voice" ? "messages"
+                : kind == "story" || kind == "storyvideo" ? "stories"
                 : "posts";
             string dir = Path.Combine(_cfg.MediaDir, sub);
             Directory.CreateDirectory(dir);
@@ -92,6 +98,22 @@ namespace Social.Core
             if (data[0] == 0xFF && (data[1] == 0xFB || data[1] == 0xF3 || data[1] == 0xF2 || data[1] == 0xFA)) return ".mp3";
             // ISO base media (m4a / mp4 audio)
             if (data[4] == 'f' && data[5] == 't' && data[6] == 'y' && data[7] == 'p') return ".m4a";
+            return null;
+        }
+
+        /// <summary>
+        /// Container sniffing for story clips. Only the two formats every browser
+        /// can play back are accepted, and the extension decides the served type.
+        /// </summary>
+        public static string SniffVideo(byte[] data)
+        {
+            if (data == null || data.Length < 12) return null;
+            // EBML header: webm / matroska
+            if (data[0] == 0x1A && data[1] == 0x45 && data[2] == 0xDF && data[3] == 0xA3) return ".webm";
+            // ISO base media: ftyp at offset 4 covers mp4 and m4v
+            if (data[4] == 'f' && data[5] == 't' && data[6] == 'y' && data[7] == 'p') return ".mp4";
+            // Ogg container
+            if (data[0] == 'O' && data[1] == 'g' && data[2] == 'g' && data[3] == 'S') return ".ogv";
             return null;
         }
 

@@ -71,6 +71,11 @@ namespace Social.Web
                 .Prop("maxGiftMessage", _cfg.MaxGiftMessage)
                 .Prop("maxGameKB", _cfg.MaxGameKB)
                 .Prop("maxGameFiles", _cfg.MaxGameFiles)
+                .Prop("storyHours", _cfg.StoryHours)
+                .Prop("maxStoryKB", _cfg.MaxStoryKB)
+                .Prop("maxStoryVideoKB", _cfg.MaxStoryVideoKB)
+                .Prop("storyPerDay", _cfg.StoryPerDay)
+                .Prop("maxStoryCaption", _cfg.MaxStoryCaption)
                 .Prop("maxAvatarKB", _cfg.MaxAvatarKB)
                 .Prop("maxPostImageKB", _cfg.MaxPostImageKB)
                 .Prop("editWindowMin", _cfg.EditWindowMin)
@@ -96,6 +101,7 @@ namespace Social.Web
                 .Prop("giftsEnabled", _cfg.GiftsEnabled)
                 .Prop("gamesEnabled", _cfg.GamesEnabled)
                 .Prop("gamesReady", RufflePresent())
+                .Prop("storiesEnabled", _cfg.StoriesEnabled)
                 .EndObject();
 
             b.Name("logging").BeginObject()
@@ -312,6 +318,11 @@ namespace Social.Web
                 ApplyLimit(limits, "maxGiftMessage", _cfg.MaxGiftMessage, 0, delegate(int v) { _cfg.MaxGiftMessage = v; });
                 ApplyLimit(limits, "maxGameKB", _cfg.MaxGameKB, 64, delegate(int v) { _cfg.MaxGameKB = v; });
                 ApplyLimit(limits, "maxGameFiles", _cfg.MaxGameFiles, 0, delegate(int v) { _cfg.MaxGameFiles = v; });
+                ApplyLimit(limits, "storyHours", _cfg.StoryHours, 1, delegate(int v) { _cfg.StoryHours = v; });
+                ApplyLimit(limits, "maxStoryKB", _cfg.MaxStoryKB, 64, delegate(int v) { _cfg.MaxStoryKB = v; });
+                ApplyLimit(limits, "maxStoryVideoKB", _cfg.MaxStoryVideoKB, 64, delegate(int v) { _cfg.MaxStoryVideoKB = v; });
+                ApplyLimit(limits, "storyPerDay", _cfg.StoryPerDay, 0, delegate(int v) { _cfg.StoryPerDay = v; });
+                ApplyLimit(limits, "maxStoryCaption", _cfg.MaxStoryCaption, 0, delegate(int v) { _cfg.MaxStoryCaption = v; });
                 if (limits.ContainsKey("callStun"))
                 {
                     _cfg.CallStun = Util.SingleLine(Json.GetString(limits, "callStun", _cfg.CallStun), 400);

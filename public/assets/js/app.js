@@ -794,7 +794,8 @@ var App = (function () {
   function feedView(main, r) {
     var tab = qs('tab') || 'home';
     state.feed = { tab: tab, posts: [], next: 0, hasMore: false, loading: false };
-    var html = composerHtml(0);
+    var html = '<div id="stories-tray"></div>';
+    html += composerHtml(0);
     html += '<div class="feed-tabs">' +
       feedTab('home', T('feed.home')) + feedTab('global', T('feed.global')) + feedTab('friends', T('feed.friends')) +
       '</div>';
@@ -803,6 +804,7 @@ var App = (function () {
     main.innerHTML = html;
     bindComposer(0);
     bindFeedTabs();
+    if (window.StoriesUI) StoriesUI.render();
     var draftId = Number(qs('draft') || 0);
     if (draftId > 0) loadDraftIntoComposer(draftId);
     loadFeed(false);

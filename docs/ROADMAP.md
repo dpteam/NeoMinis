@@ -7,11 +7,10 @@ is a promise — it is a parking lot so good ideas do not get lost.
 
 | Idea | Notes |
 | --- | --- |
-| **Stories** | Full-screen photos and short clips that expire after 24 hours, with a "seen by" list. |
+| **Full-text search** | One box over posts, comments and messages at once, with filters by author, date and kind. |
 
 ## Later
 
-- Full-text search across posts, comments and messages in one place, with filters.
 - Push notifications in the browser (Service Worker) on top of the current long poll.
 - WebDAV/S3-style offload of `/media/` for large instances.
 - Import of other networks (VK export, Telegram chat export) next to the DeadVK importer.
@@ -39,5 +38,6 @@ Kept here so the list above stays honest.
 - Voice and video calls plus named conference rooms over WebRTC, with history.
 - Achievements, bookmarks, photo gallery, profiles with interests and moods.
 - Photo albums: named, with a cover, filled from the wall, photos outlive the album.
+- Stories: photos and clips above the feed that vanish on time, with a seen-by list.
 - Admin board: users, roles, badges, reports, logs, AI panel, settings, backups.
 - DeadVK import, operator CLI, self-test, CI script.

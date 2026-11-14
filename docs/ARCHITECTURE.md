@@ -19,7 +19,7 @@
       SocialStore (in-memory)     SessionManager            StatsStore / CaptchaStore
       JSON tables + atomic IO     session key = PBKDF2       lifetime counters, SVG codes
               │
-      data/*.json  (16 tables + meta + stats)
+      data/*.json  (17 tables + meta + stats)
 ```
 
 Both listeners share one `SocialStore`, one `SessionManager`, one stats store and
@@ -48,7 +48,7 @@ inside `Trace`, which avoids the classic "double output / dead listener" bug.
 
 ## Storage
 
-No database server, no SQLite, no NuGet. Sixteen small JSON tables plus
+No database server, no SQLite, no NuGet. Seventeen small JSON tables plus
 `meta.json` (id counters, install id, last backup) and `stats.json` (visits). Guarantees:
 
 * **atomic replace** — write `*.tmp`, `File.Replace` (or move dance), keep `.bak`
@@ -83,6 +83,11 @@ community, not by the post's own `visibility` flag - see `SocialStore.VisibleTo`
 Photo albums follow the same rule: an album is a row in `albums.json`, and a photo
 belongs to one by its `album` field on the post. Nothing is duplicated, so a photo
 cannot go missing because an album was deleted.
+
+Stories are the only content with a built-in death date. The row lives in
+`stories.json`, but every read compares `Expires` with the clock, so an expired
+story is already invisible; the supervisor then sweeps the row and deletes the file
+from `data/media/stories/`. That is why stories never leak disk space.
 
 ## Request pipeline
 

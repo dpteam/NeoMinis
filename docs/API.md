@@ -437,6 +437,37 @@ Only the group owner (or an administrator) may edit a group, change its picture 
 remove a member; the owner can never be removed. Editors may also remove ordinary
 members, but only the owner may remove another editor.
 
+### Stories
+
+Photos and short clips that disappear after a while. Everything here is
+time-sensitive: an expired story is invisible to every endpoint even before the
+supervisor deletes its file.
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| GET | `/api/stories` | — | `{ groups[], canPost, leftToday }` |
+| GET | `/api/story` | `id` | `{ story }` |
+| GET | `/api/story/viewers` | `id` | `{ viewers[] }` (author only) |
+| POST | `/api/story/add` | `image` **or** `video`, `caption` | `{ story }` |
+| POST | `/api/story/seen` | `id` | `{ ok }` |
+| POST | `/api/story/delete` | `id` | `{ id }` |
+
+`groups` is the bar above the feed: one entry per author with at least one live
+story, own stories first, then friends, then everybody else. Each group carries
+`mine`, `unseen` and the stories in play order (oldest first).
+
+A story is either a photo or a clip, never both: the server checks the bytes
+(`PNG/JPEG/GIF/WebP` for photos, `EBML`/`ftyp`/`Ogg` for clips) and rejects anything
+else, so a renamed `.html` is not accepted. `expiresIn` is computed on every read,
+`/api/story/viewers` refuses anybody but the author, and an author never appears in
+their own viewer list.
+
+Limits: `limits.storyHours` (24, 1-168), `limits.maxStoryKB` (4096),
+`limits.maxStoryVideoKB` (8192), `limits.storyPerDay` (20, 0 = no limit) and
+`limits.maxStoryCaption` (200). `ui.storiesEnabled` hides the whole bar. Files live
+in `data/media/stories/` and are deleted by the supervisor when the story expires,
+so the folder does not grow with things nobody can see.
+
 ### Photo albums
 
 Albums are named buckets of photo posts. They never own a file: moving a picture
@@ -528,12 +559,6 @@ shelf points at it any more.
 
 Playlists group media ids in play order (max 200 items, 50 playlists per account).
 They are private to their owner; a deleted track simply disappears from the list.
-
-### Flash games
-
-Planned, see [ROADMAP.md](ROADMAP.md): `.swf` uploads played through
-[Ruffle](https://ruffle.rs), self-hosted under `/assets/vendor/ruffle/`, with their
-own size and count limits and a sandboxed player.
 
 ### Drafts and scheduling
 

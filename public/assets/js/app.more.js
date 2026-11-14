@@ -3487,6 +3487,11 @@
         field('cfg-giftmsg', T('admin.maxGiftMessage'), lim.maxGiftMessage, 'number', ' min="0"') +
         field('cfg-gamekb', T('admin.maxGameKB'), lim.maxGameKB, 'number', ' min="64"') +
         field('cfg-gamefiles', T('admin.maxGameFiles'), lim.maxGameFiles, 'number', ' min="0"') +
+        field('cfg-storyhours', T('admin.storyHours'), lim.storyHours, 'number', ' min="1" max="168"') +
+        field('cfg-storykb', T('admin.maxStoryKB'), lim.maxStoryKB, 'number', ' min="64"') +
+        field('cfg-storyvideokb', T('admin.maxStoryVideoKB'), lim.maxStoryVideoKB, 'number', ' min="64"') +
+        field('cfg-storyperday', T('admin.storyPerDay'), lim.storyPerDay, 'number', ' min="0"') +
+        field('cfg-storycaption', T('admin.maxStoryCaption'), lim.maxStoryCaption, 'number', ' min="0"') +
         field('cfg-callmembers', T('admin.maxCallMembers'), lim.maxCallMembers, 'number', ' min="2"') +
         field('cfg-callstun', T('admin.callStun'), lim.callStun) +
         '</div>';
@@ -3502,6 +3507,7 @@
         check('cfg-live', T('admin.liveNotifications'), ui.liveNotifications) +
         check('cfg-gifts', T('admin.giftsEnabled'), ui.giftsEnabled) +
         check('cfg-games', T('admin.gamesEnabled'), ui.gamesEnabled) +
+        check('cfg-stories', T('admin.storiesEnabled'), ui.storiesEnabled) +
         (ui.gamesReady === false ? '<div class="alert warn" style="margin:6px 0">' + T('admin.gamesNoRuffle') + '</div>' : '') +
         field('cfg-notifywait', T('admin.notifyWait'), ui.notifyWaitSec, 'number', ' min="1" max="25"') +
         '<div style="margin-top:6px"><button class="btn btn-sm" id="cfg-notify-test">' + UI.icon('bell') + ' ' + T('admin.notifyTest') + '</button></div>' +
@@ -3596,6 +3602,11 @@
             maxGiftMessage: Number(App.val('cfg-giftmsg')),
             maxGameKB: Number(App.val('cfg-gamekb')),
             maxGameFiles: Number(App.val('cfg-gamefiles')),
+            storyHours: Number(App.val('cfg-storyhours')),
+            maxStoryKB: Number(App.val('cfg-storykb')),
+            maxStoryVideoKB: Number(App.val('cfg-storyvideokb')),
+            storyPerDay: Number(App.val('cfg-storyperday')),
+            maxStoryCaption: Number(App.val('cfg-storycaption')),
             maxCallMembers: Number(App.val('cfg-callmembers')),
             callStun: App.val('cfg-callstun')
           },
@@ -3607,6 +3618,7 @@
             liveNotifications: document.getElementById('cfg-live').checked,
             giftsEnabled: document.getElementById('cfg-gifts').checked,
             gamesEnabled: document.getElementById('cfg-games').checked,
+            storiesEnabled: document.getElementById('cfg-stories').checked,
             notifyWaitSec: Number(App.val('cfg-notifywait'))
           },
           logging: {

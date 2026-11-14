@@ -845,6 +845,66 @@ async function main() {
   const photoStill = await alice.call('GET', '/api/post?id=' + p1.data.post.id);
   ok('photos survive their album', photoStill.status === 200, String(photoStill.status));
 
+  // ---- stories
+  const storyNew = await alice.call('POST', '/api/story/add', {
+    image: PNG, caption: 'first story'
+  });
+  ok('story published', storyNew.status === 200 && storyNew.data.story.image.indexOf('/media/stories/') === 0 &&
+    storyNew.data.story.caption === 'first story', JSON.stringify(storyNew.data && storyNew.data.story));
+  const storyId = storyNew.data.story.id;
+  ok('story expires in about a day', storyNew.data.story.expiresIn > 86000 &&
+    storyNew.data.story.expiresIn <= 86400, String(storyNew.data.story.expiresIn));
+
+  const emptyStory = await alice.call('POST', '/api/story/add', { caption: 'nothing here' });
+  ok('a story needs a photo or a clip', emptyStory.status === 400, String(emptyStory.status));
+  const bothStory = await alice.call('POST', '/api/story/add', { image: PNG, video: PNG });
+  ok('a story cannot be both photo and clip', bothStory.status === 400, String(bothStory.status));
+  const notVideo = await alice.call('POST', '/api/story/add', {
+    video: 'data:video/mp4;base64,' + Buffer.from('<html>nope</html>').toString('base64')
+  });
+  ok('a fake clip is rejected', notVideo.status === 400, String(notVideo.status));
+
+  const tray = await bob.call('GET', '/api/stories');
+  const aliceGroup = (tray.data.groups || []).filter(g => g.user && g.user.id === alice.user.id)[0];
+  ok('story shows up in the bar', tray.status === 200 && !!aliceGroup &&
+    aliceGroup.count >= 1 && aliceGroup.unseen === true, JSON.stringify(tray.data.groups && tray.data.groups.length));
+  const ownTray = await alice.call('GET', '/api/stories');
+  const ownGroup = (ownTray.data.groups || []).filter(g => g.user && g.user.id === alice.user.id)[0];
+  ok('own stories are not "unseen" for the author', !!ownGroup && ownGroup.mine === true &&
+    ownGroup.unseen === false, JSON.stringify(ownGroup && ownGroup.unseen));
+
+  const oneStory = await bob.call('GET', '/api/story?id=' + storyId);
+  ok('single story fetch', oneStory.status === 200 && oneStory.data.story.id === storyId &&
+    oneStory.data.story.seen === false, '');
+
+  const seenStory = await bob.call('POST', '/api/story/seen', { id: storyId });
+  ok('story marked as seen', seenStory.status === 200, String(seenStory.status));
+  const seenAgain = await bob.call('POST', '/api/story/seen', { id: storyId });
+  ok('seeing twice is harmless', seenAgain.status === 200, String(seenAgain.status));
+
+  const viewers = await alice.call('GET', '/api/story/viewers?id=' + storyId);
+  ok('author sees who watched', viewers.status === 200 &&
+    viewers.data.viewers.some(v => v.id === bob.user.id), JSON.stringify(viewers.data && viewers.data.viewers));
+  const foreignViewers = await bob.call('GET', '/api/story/viewers?id=' + storyId);
+  ok('nobody else sees the viewer list', foreignViewers.status === 403, String(foreignViewers.status));
+
+  const ownView = await alice.call('POST', '/api/story/seen', { id: storyId });
+  ok('the author does not count as a viewer', ownView.status === 200, '');
+  const viewersAgain = await alice.call('GET', '/api/story/viewers?id=' + storyId);
+  ok('author is not in the viewer list',
+    !(viewersAgain.data.viewers || []).some(v => v.id === alice.user.id), '');
+
+  const storySeenByBob = await bob.call('GET', '/api/stories');
+  const bobSees = (storySeenByBob.data.groups || []).filter(g => g.user && g.user.id === alice.user.id)[0];
+  ok('a watched story is no longer "unseen"', !!bobSees && bobSees.unseen === false, '');
+
+  const foreignStoryDelete = await bob.call('POST', '/api/story/delete', { id: storyId });
+  ok("nobody else deletes somebody's story", foreignStoryDelete.status === 403, String(foreignStoryDelete.status));
+  const deletedStory = await alice.call('POST', '/api/story/delete', { id: storyId });
+  ok('author deletes the story', deletedStory.status === 200, String(deletedStory.status));
+  const goneStory = await bob.call('GET', '/api/story?id=' + storyId);
+  ok('deleted story is gone', goneStory.status === 404, String(goneStory.status));
+
   // ---- file attachments
   const TXT = 'data:text/plain;base64,' + Buffer.from('attachment body').toString('base64');
   const fileMsg = await bob.call('POST', '/api/messages/send', {

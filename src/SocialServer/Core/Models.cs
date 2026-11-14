@@ -161,6 +161,23 @@ namespace Social.Core
         public DateTime Updated = DateTime.UtcNow;
     }
 
+        /// <summary>
+        /// A story: a photo or a short clip that lives for a while and then goes
+        /// away. The file is deleted when it expires, so the storage does not grow
+        /// with things nobody can see any more.
+        /// </summary>
+        public sealed class Story
+        {
+            public long Id;
+            public long Author;
+            public string Image = "";      // photo url
+            public string Video = "";      // clip url (one of the two is set)
+            public string Caption = "";
+            public DateTime Created = DateTime.UtcNow;
+            public DateTime Expires = DateTime.UtcNow.AddHours(24);
+            public List<long> Viewers = new List<long>();
+        }
+
     /// <summary>
     /// Finished call, kept for the history list. Live calls live only in memory.
     /// </summary>
@@ -336,6 +353,7 @@ namespace Social.Core
         public long NextCallId = 1;
         public long NextGiftId = 1;
         public long NextAlbumId = 1;
+        public long NextStoryId = 1;
         public long TotalRegistrations;
         public DateTime LastBackup = DateTime.MinValue;
         public string InstallId = "";

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -148,6 +149,18 @@ namespace Social
                 Check("message", msg != null && store.UnreadMessages(alice.Id) == 1, "");
                 Check("group", group != null && store.JoinGroup(group.Id, bob.Id), "");
                 Check("notification", store.UnreadNotifications(alice.Id) >= 1, "");
+
+                // stories: a live one stays, an expired one is swept with its file
+                Story live = store.AddStory(alice.Id, "/media/stories/live.png", "", "hello", 24);
+                Story old = store.AddStory(bob.Id, "/media/stories/old.png", "", "", -1);
+                bool seenOnce = store.MarkStorySeen(live.Id, bob.Id);
+                bool seenTwice = store.MarkStorySeen(live.Id, bob.Id);
+                Check("story added", live != null && old != null && store.CountLiveStories() == 1, "");
+                Check("story seen once", seenOnce && !seenTwice && live.Viewers.Count == 1, "");
+                List<string> purged = store.PurgeExpiredStories();
+                Check("expired story swept", purged.Count == 1 && purged[0] == "/media/stories/old.png" &&
+                      store.FindStory(old.Id) == null && store.FindStory(live.Id) != null,
+                      "purged=" + purged.Count);
 
                 store.SaveNow();
                 SocialStore loaded = new SocialStore(cfg);

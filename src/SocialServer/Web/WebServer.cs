@@ -626,6 +626,24 @@ namespace Social.Web
                 SendFile(req, resp, file, MediaStore.MimeForFile(ext), true);
                 return;
             }
+            // Story files (photos and short clips) are shown full screen, so they
+            // stream inline like the library - the extension decides the type.
+            if (rel.StartsWith("stories/", StringComparison.OrdinalIgnoreCase))
+            {
+                string ext = Path.GetExtension(file).ToLowerInvariant();
+                bool image = ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
+                             ext == ".gif" || ext == ".webp";
+                bool video = MediaStore.IsVideoExtension(ext) || ext == ".ogv";
+                if (!image && !video)
+                {
+                    SendText(req, resp, 404, "Not found");
+                    return;
+                }
+                resp.Set("Content-Disposition", "inline");
+                resp.Set("Accept-Ranges", "none");
+                SendFile(req, resp, file, MediaStore.MimeForFile(ext), false);
+                return;
+            }
             // Flash movies: never handed out as a plugin type. The player page
             // fetches the bytes and feeds them to Ruffle, so the browser has no
             // reason to ever treat this as executable content.

@@ -171,6 +171,13 @@ namespace Social.Core
         // Flash games (Ruffle): uploaded .swf files
         public int MaxGameKB = 8192;
         public int MaxGameFiles = 20;
+
+        // stories: how long one lives, how big it may be, how many a day
+        public int StoryHours = 24;
+        public int MaxStoryKB = 4096;
+        public int MaxStoryVideoKB = 8192;
+        public int StoryPerDay = 20;
+        public int MaxStoryCaption = 200;
         public int MaxStatusLength = 140;
         public int MaxBioLength = 2000;
         public int MaxNameLength = 40;
@@ -211,6 +218,8 @@ namespace Social.Core
         public bool GiftsEnabled = true;
         // Flash games shelf (needs public/assets/vendor/ruffle)
         public bool GamesEnabled = true;
+        // stories: the bar of circles above the feed
+        public bool StoriesEnabled = true;
 
         public bool Degraded;
         public string DegradedReason = "";
@@ -467,6 +476,11 @@ namespace Social.Core
                     else if (key == "maxvideofiles") MaxVideoFiles = Int(val, MaxVideoFiles);
                     else if (key == "maxgamekb") MaxGameKB = Int(val, MaxGameKB);
                     else if (key == "maxgamefiles") MaxGameFiles = Int(val, MaxGameFiles);
+                    else if (key == "storyhours") StoryHours = Int(val, StoryHours);
+                    else if (key == "maxstorykb") MaxStoryKB = Int(val, MaxStoryKB);
+                    else if (key == "maxstoryvideokb") MaxStoryVideoKB = Int(val, MaxStoryVideoKB);
+                    else if (key == "storyperday") StoryPerDay = Int(val, StoryPerDay);
+                    else if (key == "maxstorycaption") MaxStoryCaption = Int(val, MaxStoryCaption);
                     else if (key == "maxstatuslength") MaxStatusLength = Int(val, MaxStatusLength);
                     else if (key == "maxbiolength") MaxBioLength = Int(val, MaxBioLength);
                     else if (key == "maxnamelength") MaxNameLength = Int(val, MaxNameLength);
@@ -507,6 +521,7 @@ namespace Social.Core
                     else if (key == "notifywaitsec") NotifyWaitSec = Int(val, NotifyWaitSec);
                     else if (key == "giftsenabled") GiftsEnabled = Bool(val, GiftsEnabled);
                     else if (key == "gamesenabled") GamesEnabled = Bool(val, GamesEnabled);
+                    else if (key == "storiesenabled") StoriesEnabled = Bool(val, StoriesEnabled);
                     break;
             }
         }
@@ -540,6 +555,13 @@ namespace Social.Core
             if (MaxGiftMessage > 1000) MaxGiftMessage = 1000;
             if (MaxGameKB < 64) MaxGameKB = 64;
             if (MaxGameFiles < 0) MaxGameFiles = 0;
+            if (StoryHours < 1) StoryHours = 1;
+            if (StoryHours > 168) StoryHours = 168;
+            if (MaxStoryKB < 64) MaxStoryKB = 64;
+            if (MaxStoryVideoKB < 64) MaxStoryVideoKB = 64;
+            if (StoryPerDay < 0) StoryPerDay = 0;
+            if (MaxStoryCaption < 0) MaxStoryCaption = 0;
+            if (MaxStoryCaption > 500) MaxStoryCaption = 500;
             if (BackupKeep < 1) BackupKeep = 1;
             if (SaveDebounceMs < 100) SaveDebounceMs = 100;
             if (string.IsNullOrEmpty(CookieName)) CookieName = "sid";

@@ -103,6 +103,10 @@ namespace Social
                     _app.Sessions.Cleanup();
                     _app.Captcha.Prune();
 
+                    // stories really do disappear on time, files included
+                    if (_app.WebPublic != null && _app.WebPublic.Api != null)
+                        _app.WebPublic.Api.SweepStories();
+
                     // peak online
                     _app.Stats.NotePeak(_app.Store.CountOnline(_app.Config.OnlineWindowSec));
 
