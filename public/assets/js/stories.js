@@ -15,6 +15,10 @@ var StoriesUI = (function () {
   var pos = -1;             // current position in flat
   var timer = null;
   var openedAt = 0;
+  // Bumped on every open and every close. A callback captured the value it was
+  // born with, so a timer or a media event that arrives one tick too late does
+  // nothing instead of reopening the story the visitor just closed.
+  var epoch = 0;
 
   function T(k, a, b) { return I18N.t(k, a, b); }
   function byId(id) { return document.getElementById(id); }
@@ -168,8 +172,19 @@ var StoriesUI = (function () {
     }
     if (!flat.length) { UI.toast(T('stories.empty'), 'info'); return; }
     pos = start < 0 ? 0 : start;
+    epoch++;
     ensureOverlay();
     show();
+  }
+
+  /// <summary>
+  /// True only while the viewer is actually on screen. The overlay element is
+  /// reused for the whole session (it is hidden, never removed), so its mere
+  /// existence says nothing about whether the visitor is looking at it.
+  /// </summary>
+  function isOpen() {
+    var o = byId('story-overlay');
+    return !!o && /(^|\s)open(\s|$)/.test(o.className);
   }
 
   function ensureOverlay() {
@@ -204,7 +219,7 @@ var StoriesUI = (function () {
   }
 
   function onKey(e) {
-    if (!byId('story-overlay') || !byId('story-overlay').className.match(/open/)) return;
+    if (!isOpen()) return;
     if (e.key === 'Escape') { close(); return; }
     if (e.key === 'ArrowLeft') { step(-1); return; }
     if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); step(1); }
@@ -250,13 +265,19 @@ var StoriesUI = (function () {
           // animation: a 20-second video used to fill the 7-second default bar
           // and then sit at 100% while the clip kept playing.
           freezeBar(0);
+          var mine = epoch;
           v.addEventListener('timeupdate', function () {
+            // the element may outlive the close by a tick
+            if (mine !== epoch || !isOpen()) return;
             var dur = v.duration;
             if (dur > 0 && isFinite(dur)) freezeBar(v.currentTime / dur);
             // keep the watchdog alive: only a stall or a missing "ended" fires it
             armWatchdog();
           });
-          v.addEventListener('ended', function () { step(1); });
+          v.addEventListener('ended', function () {
+            if (mine !== epoch || !isOpen()) return;
+            step(1);
+          });
           // Some screen recordings carry no duration at all (Infinity); seeking
           // far ahead makes the browser scan the file and report the real one.
           v.addEventListener('loadedmetadata', function () {
@@ -379,18 +400,27 @@ var StoriesUI = (function () {
   /// </summary>
   function armWatchdog(ms) {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(function () { step(1); }, ms || 5000);
+    var mine = epoch;
+    timer = setTimeout(function () {
+      if (mine !== epoch || !isOpen()) return;
+      step(1);
+    }, ms || 5000);
   }
 
   function armTimer(seconds) {
     if (timer) clearTimeout(timer);
+    var mine = epoch;
     openedAt = Date.now();
     animateBar(seconds);
-    timer = setTimeout(function () { step(1); }, Math.max(2, seconds) * 1000);
+    timer = setTimeout(function () {
+      if (mine !== epoch || !isOpen()) return;
+      step(1);
+    }, Math.max(2, seconds) * 1000);
   }
 
   function step(delta) {
-    if (!byId('story-overlay')) return;
+    // a timer or a media event that outlived the close must not resurrect it
+    if (!isOpen()) return;
     if (timer) { clearTimeout(timer); timer = null; }
     var next = pos + delta;
     if (next < 0) { next = 0; }
@@ -438,16 +468,22 @@ var StoriesUI = (function () {
   }
 
   function close() {
+    // Anything already queued in the event loop belongs to the story that is
+    // being closed, so invalidate it before doing anything else.
+    epoch++;
     if (timer) { clearTimeout(timer); timer = null; }
+    // Pause first: clearing the media box detaches the element, and a detached
+    // video can keep playing its audio for a moment.
+    var v = byId('story-video');
+    if (v) { try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { } }
     var o = byId('story-overlay');
     if (o) {
       o.className = 'story-overlay';
       var media = byId('story-media');
       if (media) media.innerHTML = '';
     }
-    var v = byId('story-video');
-    if (v) { try { v.pause(); } catch (e) { } }
     pos = -1;
+    flat = [];
     render();
   }
 
