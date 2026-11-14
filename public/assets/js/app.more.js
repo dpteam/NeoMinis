@@ -3766,6 +3766,13 @@
         field('cfg-videofiles', T('admin.maxVideoFiles'), lim.maxVideoFiles, 'number', ' min="1"') +
         '</div>' +
         field('cfg-msgvideokb', T('admin.maxMessageVideoKB'), lim.maxMessageVideoKB, 'number', ' min="64"') +
+        '<hr>' +
+        check('cfg-apps', T('admin.appsEnabled'), lim.appsEnabled) +
+        '<div class="inline-fields">' +
+        field('cfg-appkeys', T('admin.appStorageKeys'), lim.appStorageKeys, 'number', ' min="1" max="10000"') +
+        field('cfg-appbytes', T('admin.appValueBytes'), lim.appValueBytes, 'number', ' min="64" max="65536"') +
+        '</div>' +
+        '<div class="hint">' + T('admin.appsHint') + '</div>' +
         '<div class="inline-fields">' +
         field('cfg-xfermb', T('admin.maxTransferMB'), lim.maxTransferMB, 'number', ' min="0" max="512"') +
         field('cfg-xferttl', T('admin.transferTtlMin'), lim.transferTtlMin, 'number', ' min="1" max="240"') +
@@ -3897,6 +3904,9 @@
             maxAudioKB: Number(App.val('cfg-audiokb')),
             maxVideoKB: Number(App.val('cfg-videokb')),
             maxMessageVideoKB: Number(App.val('cfg-msgvideokb')),
+            appsEnabled: document.getElementById('cfg-apps').checked,
+            appStorageKeys: Number(App.val('cfg-appkeys')),
+            appValueBytes: Number(App.val('cfg-appbytes')),
             maxTransferMB: Number(App.val('cfg-xfermb')),
             transferChunkKB: Number(App.val('cfg-xferchunk')),
             transferTtlMin: Number(App.val('cfg-xferttl')),

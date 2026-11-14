@@ -41,13 +41,17 @@ namespace Social.Core
         private readonly List<Album> _albums = new List<Album>();
         private readonly List<Story> _stories = new List<Story>();
         private readonly List<Channel> _channels = new List<Channel>();
+        private readonly List<App> _apps = new List<App>();
+        private readonly List<AppGrant> _appGrants = new List<AppGrant>();
+        private readonly List<AppData> _appData = new List<AppData>();
+        private readonly List<AppScore> _appScores = new List<AppScore>();
         private Meta _meta = new Meta();
 
         private readonly Dictionary<long, User> _userById = new Dictionary<long, User>();
         private readonly Dictionary<string, User> _userByName = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
 
         private bool _dirtyUsers, _dirtyPosts, _dirtyComments, _dirtyFriends, _dirtyMessages;
-        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts, _dirtyAlbums, _dirtyStories, _dirtyChannels;
+        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts, _dirtyAlbums, _dirtyStories, _dirtyChannels, _dirtyApps, _dirtyAppGrants, _dirtyAppData, _dirtyAppScores;
         private bool _readOnly;
         private string _saveError = "";
         private DateTime _lastSave = DateTime.MinValue;
@@ -74,7 +78,8 @@ namespace Social.Core
                 {
                     return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
                            _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
-                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls || _dirtyGifts || _dirtyAlbums || _dirtyStories || _dirtyChannels;
+                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls || _dirtyGifts || _dirtyAlbums || _dirtyStories || _dirtyChannels ||
+                           _dirtyApps || _dirtyAppGrants || _dirtyAppData || _dirtyAppScores;
                 }
             }
         }
@@ -141,6 +146,14 @@ namespace Social.Core
                 _channels.Clear();
                 _channels.AddRange(LoadTable("channels.json", ChannelFromDict));
                 if (_channels.Count == 0) SeedChannels();
+                _apps.Clear();
+                _apps.AddRange(LoadTable("apps.json", AppFromDict));
+                _appGrants.Clear();
+                _appGrants.AddRange(LoadTable("appgrants.json", AppGrantFromDict));
+                _appData.Clear();
+                _appData.AddRange(LoadTable("appdata.json", AppDataFromDict));
+                _appScores.Clear();
+                _appScores.AddRange(LoadTable("appscores.json", AppScoreFromDict));
 
                 // sort newest first, keeping the hot queries cheap
                 _posts.Sort(delegate(Post a, Post b) { return b.Id.CompareTo(a.Id); });
@@ -152,6 +165,7 @@ namespace Social.Core
                 _loaded = true;
                 _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
                 _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = _dirtyStories = _dirtyChannels = false;
+                _dirtyApps = _dirtyAppGrants = _dirtyAppData = _dirtyAppScores = false;
 
                 Log.Info("DATA", "loaded users=" + _users.Count + " posts=" + _posts.Count +
                                   " comments=" + _comments.Count + " friends=" + _friends.Count +
@@ -237,6 +251,18 @@ namespace Social.Core
             long maxChannel = 0;
             for (int i = 0; i < _channels.Count; i++) if (_channels[i].Id > maxChannel) maxChannel = _channels[i].Id;
             if (_meta.NextChannelId <= maxChannel) _meta.NextChannelId = maxChannel + 1;
+            long maxApp = 0;
+            for (int i = 0; i < _apps.Count; i++) if (_apps[i].Id > maxApp) maxApp = _apps[i].Id;
+            if (_meta.NextAppId <= maxApp) _meta.NextAppId = maxApp + 1;
+            long maxGrant = 0;
+            for (int i = 0; i < _appGrants.Count; i++) if (_appGrants[i].Id > maxGrant) maxGrant = _appGrants[i].Id;
+            if (_meta.NextAppGrantId <= maxGrant) _meta.NextAppGrantId = maxGrant + 1;
+            long maxAppData = 0;
+            for (int i = 0; i < _appData.Count; i++) if (_appData[i].Id > maxAppData) maxAppData = _appData[i].Id;
+            if (_meta.NextAppDataId <= maxAppData) _meta.NextAppDataId = maxAppData + 1;
+            long maxAppScore = 0;
+            for (int i = 0; i < _appScores.Count; i++) if (_appScores[i].Id > maxAppScore) maxAppScore = _appScores[i].Id;
+            if (_meta.NextAppScoreId <= maxAppScore) _meta.NextAppScoreId = maxAppScore + 1;
         }
 
         private string ReadJson(string path)
@@ -348,9 +374,14 @@ namespace Social.Core
                     if (force || _dirtyAlbums) WriteTable("albums.json", AlbumsToArray());
                     if (force || _dirtyStories) WriteTable("stories.json", StoriesToArray());
                     if (force || _dirtyChannels) WriteTable("channels.json", ChannelsToArray());
+                    if (force || _dirtyApps) WriteTable("apps.json", AppsToArray());
+                    if (force || _dirtyAppGrants) WriteTable("appgrants.json", AppGrantsToArray());
+                    if (force || _dirtyAppData) WriteTable("appdata.json", AppDataToArray());
+                    if (force || _dirtyAppScores) WriteTable("appscores.json", AppScoresToArray());
 
                     _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
                     _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = _dirtyStories = _dirtyChannels = false;
+                    _dirtyApps = _dirtyAppGrants = _dirtyAppData = _dirtyAppScores = false;
                     _lastSave = DateTime.UtcNow;
                     _saveError = "";
                     if (_readOnly)
@@ -432,6 +463,10 @@ namespace Social.Core
         private void MarkAlbums() { _dirtyAlbums = true; }
         private void MarkStories() { _dirtyStories = true; }
         private void MarkChannels() { _dirtyChannels = true; _dirtyMeta = true; }
+        private void MarkApps() { _dirtyApps = true; _dirtyMeta = true; }
+        private void MarkAppGrants() { _dirtyAppGrants = true; _dirtyMeta = true; }
+        private void MarkAppData() { _dirtyAppData = true; }
+        private void MarkAppScores() { _dirtyAppScores = true; }
 
         // ============================================================== users
 
@@ -2779,8 +2814,568 @@ namespace Social.Core
             return c;
         }
 
-        // ============================================================== games
+        // ============================================================== apps
 
+        public List<App> Apps(bool publishedOnly)
+        {
+            lock (_sync)
+            {
+                List<App> list = new List<App>();
+                for (int i = 0; i < _apps.Count; i++)
+                {
+                    if (publishedOnly && !_apps[i].Published) continue;
+                    list.Add(_apps[i]);
+                }
+                list.Sort(delegate(App a, App b) { return b.Installs.CompareTo(a.Installs); });
+                return list;
+            }
+        }
+
+        public List<App> AppsByOwner(long owner)
+        {
+            lock (_sync)
+            {
+                List<App> list = new List<App>();
+                for (int i = 0; i < _apps.Count; i++) if (_apps[i].Owner == owner) list.Add(_apps[i]);
+                list.Sort(delegate(App a, App b) { return b.Id.CompareTo(a.Id); });
+                return list;
+            }
+        }
+
+        public App FindApp(long id)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _apps.Count; i++) if (_apps[i].Id == id) return _apps[i];
+                return null;
+            }
+        }
+
+        public App FindAppByClientId(string clientId)
+        {
+            if (string.IsNullOrEmpty(clientId)) return null;
+            lock (_sync)
+            {
+                for (int i = 0; i < _apps.Count; i++)
+                    if (string.Equals(_apps[i].ClientId, clientId, StringComparison.Ordinal))
+                        return _apps[i];
+                return null;
+            }
+        }
+
+        public App CreateApp(long owner, string name, string description, string icon, string type,
+                             string url, string clientId, string secretHash, string scopes)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                App a = new App();
+                a.Id = _meta.NextAppId++;
+                a.Owner = owner;
+                a.Name = name;
+                a.Description = description ?? "";
+                a.Icon = icon ?? "";
+                a.Type = type;
+                a.Url = url ?? "";
+                a.ClientId = clientId;
+                a.SecretHash = secretHash;
+                a.Scopes = scopes ?? "";
+                a.Created = DateTime.UtcNow;
+                _apps.Add(a);
+                MarkApps();
+                return a;
+            }
+        }
+
+        public bool UpdateApp(long id, string name, string description, string icon, string url, string scopes, bool? published)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                App a = FindApp(id);
+                if (a == null) return false;
+                if (!string.IsNullOrEmpty(name)) a.Name = name;
+                a.Description = description ?? "";
+                a.Icon = icon ?? "";
+                a.Url = url ?? "";
+                if (scopes != null) a.Scopes = scopes;
+                if (published.HasValue) a.Published = published.Value;
+                MarkApps();
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Removes the app, its grants and everything it stored. Returns how many
+        /// rows went away, which is the honest number to report to the developer.
+        /// </summary>
+        public bool DeleteApp(long id, out int removed)
+        {
+            removed = 0;
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _apps.Count; i++)
+                {
+                    if (_apps[i].Id != id) continue;
+                    _apps.RemoveAt(i);
+                    removed++;
+                    for (int g = _appGrants.Count - 1; g >= 0; g--)
+                        if (_appGrants[g].AppId == id) { _appGrants.RemoveAt(g); removed++; }
+                    for (int d = _appData.Count - 1; d >= 0; d--)
+                        if (_appData[d].AppId == id) { _appData.RemoveAt(d); removed++; }
+                    for (int s = _appScores.Count - 1; s >= 0; s--)
+                        if (_appScores[s].AppId == id) { _appScores.RemoveAt(s); removed++; }
+                    MarkApps();
+                    MarkAppGrants();
+                    MarkAppData();
+                    MarkAppScores();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        public void BumpAppInstalls(long appId)
+        {
+            lock (_sync)
+            {
+                App a = FindApp(appId);
+                if (a == null) return;
+                a.Installs++;
+                MarkApps();
+            }
+        }
+
+        // ---- grants
+
+        public AppGrant GrantFor(long appId, long userId)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _appGrants.Count; i++)
+                {
+                    AppGrant g = _appGrants[i];
+                    if (g.AppId == appId && g.User == userId && !g.Revoked) return g;
+                }
+                return null;
+            }
+        }
+
+        public List<AppGrant> GrantsFor(long userId)
+        {
+            lock (_sync)
+            {
+                List<AppGrant> list = new List<AppGrant>();
+                for (int i = 0; i < _appGrants.Count; i++)
+                    if (_appGrants[i].User == userId && !_appGrants[i].Revoked) list.Add(_appGrants[i]);
+                list.Sort(delegate(AppGrant a, AppGrant b) { return b.Id.CompareTo(a.Id); });
+                return list;
+            }
+        }
+
+        public AppGrant FindGrantByCode(string code)
+        {
+            if (string.IsNullOrEmpty(code)) return null;
+            lock (_sync)
+            {
+                for (int i = 0; i < _appGrants.Count; i++)
+                {
+                    AppGrant g = _appGrants[i];
+                    if (!g.Revoked && string.Equals(g.Code, code, StringComparison.Ordinal)) return g;
+                }
+                return null;
+            }
+        }
+
+        public AppGrant FindGrantByToken(string tokenHash)
+        {
+            if (string.IsNullOrEmpty(tokenHash)) return null;
+            lock (_sync)
+            {
+                for (int i = 0; i < _appGrants.Count; i++)
+                {
+                    AppGrant g = _appGrants[i];
+                    if (g.Revoked || string.IsNullOrEmpty(g.TokenHash)) continue;
+                    if (string.Equals(g.TokenHash, tokenHash, StringComparison.Ordinal)) return g;
+                }
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Records an approval: scopes plus a fresh one-time code. Approving again
+        /// replaces the scopes of the existing grant instead of stacking rows.
+        /// </summary>
+        public AppGrant SaveGrant(long appId, long userId, string scopes, string code, DateTime codeExpires)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                AppGrant g = null;
+                for (int i = 0; i < _appGrants.Count; i++)
+                {
+                    if (_appGrants[i].AppId != appId || _appGrants[i].User != userId) continue;
+                    g = _appGrants[i];
+                    break;
+                }
+                if (g == null)
+                {
+                    g = new AppGrant();
+                    g.Id = _meta.NextAppGrantId++;
+                    g.AppId = appId;
+                    g.User = userId;
+                    g.Created = DateTime.UtcNow;
+                    _appGrants.Add(g);
+                }
+                g.Scopes = scopes;
+                g.Code = code ?? "";
+                g.CodeExpires = codeExpires;
+                g.Revoked = false;
+                MarkAppGrants();
+                return g;
+            }
+        }
+
+        public bool SetGrantToken(long grantId, string tokenHash)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _appGrants.Count; i++)
+                {
+                    if (_appGrants[i].Id != grantId) continue;
+                    _appGrants[i].TokenHash = tokenHash;
+                    _appGrants[i].Code = "";
+                    _appGrants[i].CodeExpires = DateTime.MinValue;
+                    MarkAppGrants();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        public bool TouchGrant(long grantId)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _appGrants.Count; i++)
+                {
+                    if (_appGrants[i].Id != grantId) continue;
+                    _appGrants[i].LastUsed = DateTime.UtcNow;
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>Drops the user's access. The app keeps working for everybody else.</summary>
+        public bool RevokeGrant(long appId, long userId)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                bool any = false;
+                for (int i = 0; i < _appGrants.Count; i++)
+                {
+                    AppGrant g = _appGrants[i];
+                    if (g.AppId != appId || g.User != userId) continue;
+                    g.Revoked = true;
+                    g.TokenHash = "";
+                    g.Code = "";
+                    any = true;
+                }
+                if (any) MarkAppGrants();
+                return any;
+            }
+        }
+
+        // ---- per-app storage
+
+        public string GetAppValue(long appId, long userId, string key)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _appData.Count; i++)
+                {
+                    AppData d = _appData[i];
+                    if (d.AppId == appId && d.User == userId && string.Equals(d.Key, key, StringComparison.Ordinal))
+                        return d.Value;
+                }
+                return null;
+            }
+        }
+
+        public int CountAppKeys(long appId, long userId)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _appData.Count; i++)
+                    if (_appData[i].AppId == appId && _appData[i].User == userId) n++;
+                return n;
+            }
+        }
+
+        public List<string> AppKeys(long appId, long userId, int limit)
+        {
+            lock (_sync)
+            {
+                List<string> keys = new List<string>();
+                for (int i = 0; i < _appData.Count && keys.Count < limit; i++)
+                    if (_appData[i].AppId == appId && _appData[i].User == userId) keys.Add(_appData[i].Key);
+                keys.Sort(StringComparer.Ordinal);
+                return keys;
+            }
+        }
+
+        public bool SetAppValue(long appId, long userId, string key, string value)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _appData.Count; i++)
+                {
+                    AppData d = _appData[i];
+                    if (d.AppId != appId || d.User != userId || !string.Equals(d.Key, key, StringComparison.Ordinal)) continue;
+                    d.Value = value;
+                    d.Updated = DateTime.UtcNow;
+                    MarkAppData();
+                    return true;
+                }
+                AppData fresh = new AppData();
+                fresh.Id = _meta.NextAppDataId++;
+                fresh.AppId = appId;
+                fresh.User = userId;
+                fresh.Key = key;
+                fresh.Value = value;
+                fresh.Updated = DateTime.UtcNow;
+                _appData.Add(fresh);
+                MarkAppData();
+                return true;
+            }
+        }
+
+        public bool DeleteAppValue(long appId, long userId, string key)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _appData.Count; i++)
+                {
+                    AppData d = _appData[i];
+                    if (d.AppId != appId || d.User != userId || !string.Equals(d.Key, key, StringComparison.Ordinal)) continue;
+                    _appData.RemoveAt(i);
+                    MarkAppData();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        // ---- leaderboards
+
+        /// <summary>Stores a score, keeping only the user's best. Returns the rank.</summary>
+        public int SubmitScore(long appId, long userId, long score, out bool improved)
+        {
+            improved = false;
+            lock (_sync)
+            {
+                EnsureWritable();
+                AppScore row = null;
+                for (int i = 0; i < _appScores.Count; i++)
+                {
+                    if (_appScores[i].AppId != appId || _appScores[i].User != userId) continue;
+                    row = _appScores[i];
+                    break;
+                }
+                if (row == null)
+                {
+                    row = new AppScore();
+                    row.Id = _meta.NextAppScoreId++;
+                    row.AppId = appId;
+                    row.User = userId;
+                    row.Score = score;
+                    row.Updated = DateTime.UtcNow;
+                    _appScores.Add(row);
+                    improved = true;
+                    MarkAppScores();
+                }
+                else if (score > row.Score)
+                {
+                    row.Score = score;
+                    row.Updated = DateTime.UtcNow;
+                    improved = true;
+                    MarkAppScores();
+                }
+                return RankOf(appId, row.Score);
+            }
+        }
+
+        private int RankOf(long appId, long score)
+        {
+            int better = 0;
+            for (int i = 0; i < _appScores.Count; i++)
+            {
+                AppScore s = _appScores[i];
+                if (s.AppId != appId) continue;
+                if (s.Score > score) better++;
+            }
+            return better + 1;
+        }
+
+        public List<AppScore> TopScores(long appId, int limit)
+        {
+            lock (_sync)
+            {
+                List<AppScore> list = new List<AppScore>();
+                for (int i = 0; i < _appScores.Count; i++)
+                    if (_appScores[i].AppId == appId) list.Add(_appScores[i]);
+                list.Sort(delegate(AppScore a, AppScore b)
+                {
+                    int byScore = b.Score.CompareTo(a.Score);
+                    return byScore != 0 ? byScore : a.Updated.CompareTo(b.Updated);
+                });
+                if (limit > 0 && list.Count > limit) list.RemoveRange(limit, list.Count - limit);
+                return list;
+            }
+        }
+
+        public AppScore ScoreFor(long appId, long userId)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _appScores.Count; i++)
+                    if (_appScores[i].AppId == appId && _appScores[i].User == userId) return _appScores[i];
+                return null;
+            }
+        }
+
+        // ---- serialization
+
+        private List<object> AppsToArray()
+        {
+            List<object> list = new List<object>(_apps.Count);
+            for (int i = 0; i < _apps.Count; i++)
+            {
+                App a = _apps[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = a.Id; d["owner"] = a.Owner; d["name"] = a.Name;
+                d["description"] = a.Description; d["icon"] = a.Icon; d["type"] = a.Type;
+                d["url"] = a.Url; d["clientId"] = a.ClientId; d["secretHash"] = a.SecretHash;
+                d["scopes"] = a.Scopes; d["published"] = a.Published; d["installs"] = a.Installs;
+                d["created"] = a.Created;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static App AppFromDict(Dictionary<string, object> d)
+        {
+            App a = new App();
+            a.Id = Json.GetLong(d, "id", 0);
+            a.Owner = Json.GetLong(d, "owner", 0);
+            a.Name = Json.GetString(d, "name", "");
+            a.Description = Json.GetString(d, "description", "");
+            a.Icon = Json.GetString(d, "icon", "");
+            a.Type = Json.GetString(d, "type", "external");
+            a.Url = Json.GetString(d, "url", "");
+            a.ClientId = Json.GetString(d, "clientId", "");
+            a.SecretHash = Json.GetString(d, "secretHash", "");
+            a.Scopes = Json.GetString(d, "scopes", "");
+            a.Published = Json.GetBool(d, "published", false);
+            a.Installs = Json.GetInt(d, "installs", 0);
+            a.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            if (a.Id <= 0) return null;
+            return a;
+        }
+
+        private List<object> AppGrantsToArray()
+        {
+            List<object> list = new List<object>(_appGrants.Count);
+            for (int i = 0; i < _appGrants.Count; i++)
+            {
+                AppGrant g = _appGrants[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = g.Id; d["appId"] = g.AppId; d["user"] = g.User; d["scopes"] = g.Scopes;
+                d["code"] = g.Code; d["codeExpires"] = g.CodeExpires; d["tokenHash"] = g.TokenHash;
+                d["created"] = g.Created; d["lastUsed"] = g.LastUsed; d["revoked"] = g.Revoked;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static AppGrant AppGrantFromDict(Dictionary<string, object> d)
+        {
+            AppGrant g = new AppGrant();
+            g.Id = Json.GetLong(d, "id", 0);
+            g.AppId = Json.GetLong(d, "appId", 0);
+            g.User = Json.GetLong(d, "user", 0);
+            g.Scopes = Json.GetString(d, "scopes", "");
+            g.Code = Json.GetString(d, "code", "");
+            g.CodeExpires = Json.GetDate(d, "codeExpires", DateTime.MinValue);
+            g.TokenHash = Json.GetString(d, "tokenHash", "");
+            g.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            g.LastUsed = Json.GetDate(d, "lastUsed", DateTime.MinValue);
+            g.Revoked = Json.GetBool(d, "revoked", false);
+            if (g.Id <= 0) return null;
+            return g;
+        }
+
+        private List<object> AppDataToArray()
+        {
+            List<object> list = new List<object>(_appData.Count);
+            for (int i = 0; i < _appData.Count; i++)
+            {
+                AppData v = _appData[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = v.Id; d["appId"] = v.AppId; d["user"] = v.User;
+                d["key"] = v.Key; d["value"] = v.Value; d["updated"] = v.Updated;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static AppData AppDataFromDict(Dictionary<string, object> d)
+        {
+            AppData v = new AppData();
+            v.Id = Json.GetLong(d, "id", 0);
+            v.AppId = Json.GetLong(d, "appId", 0);
+            v.User = Json.GetLong(d, "user", 0);
+            v.Key = Json.GetString(d, "key", "");
+            v.Value = Json.GetString(d, "value", "");
+            v.Updated = Json.GetDate(d, "updated", DateTime.UtcNow);
+            if (v.Id <= 0) return null;
+            return v;
+        }
+
+        private List<object> AppScoresToArray()
+        {
+            List<object> list = new List<object>(_appScores.Count);
+            for (int i = 0; i < _appScores.Count; i++)
+            {
+                AppScore s = _appScores[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = s.Id; d["appId"] = s.AppId; d["user"] = s.User;
+                d["score"] = s.Score; d["updated"] = s.Updated;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static AppScore AppScoreFromDict(Dictionary<string, object> d)
+        {
+            AppScore s = new AppScore();
+            s.Id = Json.GetLong(d, "id", 0);
+            s.AppId = Json.GetLong(d, "appId", 0);
+            s.User = Json.GetLong(d, "user", 0);
+            s.Score = Json.GetLong(d, "score", 0);
+            s.Updated = Json.GetDate(d, "updated", DateTime.UtcNow);
+            if (s.Id <= 0) return null;
+            return s;
+        }
+
+        // ============================================================== games
         /// <summary>
         /// The games shelf: newest first, optionally filtered by a search string
         /// and by owner. Paged with an id cursor so the client can "load more".

@@ -164,8 +164,13 @@ namespace Social.Core
         // generic file attachments in private messages
         public int MaxFileKB = 4096;
 
-        // Peer file transfer between friends: the server only relays chunks in
-        // memory, so nothing is ever written to data/media and nothing survives a
+        // Third-party apps. A token grants exactly the scopes the user approved;
+        // HTML apps run on our own origin, so only staff may publish them.
+        public bool AppsEnabled = true;
+        public int AppStorageKeys = 100;
+        public int AppValueBytes = 4096;
+
+        // Peer file transfer between friends: the server only relays chunks in        // memory, so nothing is ever written to data/media and nothing survives a
         // restart. 0 disables the whole feature.
         public int MaxTransferMB = 32;
         public int TransferChunkKB = 256;
@@ -510,7 +515,9 @@ namespace Social.Core
                     else if (key == "maxvoicesec") MaxVoiceSec = Int(val, MaxVoiceSec);
                     else if (key == "maxfilekb") MaxFileKB = Int(val, MaxFileKB);
                     else if (key == "maxtransfermb") MaxTransferMB = Int(val, MaxTransferMB);
-                    else if (key == "transferchunkkb") TransferChunkKB = Int(val, TransferChunkKB);
+                    else if (key == "appsenabled") AppsEnabled = Bool(val, AppsEnabled);
+                    else if (key == "appstoragekeys") AppStorageKeys = Int(val, AppStorageKeys);
+                    else if (key == "appvaluebytes") AppValueBytes = Int(val, AppValueBytes);                    else if (key == "transferchunkkb") TransferChunkKB = Int(val, TransferChunkKB);
                     else if (key == "transferttlmin") TransferTtlMin = Int(val, TransferTtlMin);
                     else if (key == "feedbackperhour") FeedbackPerHour = Int(val, FeedbackPerHour);
                     else if (key == "giftperhour") GiftPerHour = Int(val, GiftPerHour);
@@ -543,6 +550,12 @@ namespace Social.Core
                     else if (key == "logringsize") LogRingSize = Int(val, LogRingSize);
                     else if (key == "notificationsperuser") NotificationsPerUser = Int(val, NotificationsPerUser);
                     else if (key == "messagesperthread") MessagesPerThread = Int(val, MessagesPerThread);
+                    break;
+
+                case "apps":
+                    if (key == "enabled") AppsEnabled = Bool(val, AppsEnabled);
+                    else if (key == "storagekeys") AppStorageKeys = Int(val, AppStorageKeys);
+                    else if (key == "valuebytes") AppValueBytes = Int(val, AppValueBytes);
                     break;
 
                 case "storage":
@@ -643,7 +656,10 @@ namespace Social.Core
                 MaxBodyBytes = (int)needed;
             }
             if (MaxTransferMB < 1) MaxTransferMB = 1;
-            if (MaxTransferMB > 512) MaxTransferMB = 512;
+            if (AppStorageKeys < 1) AppStorageKeys = 1;
+            if (AppStorageKeys > 10000) AppStorageKeys = 10000;
+            if (AppValueBytes < 64) AppValueBytes = 64;
+            if (AppValueBytes > 65536) AppValueBytes = 65536;            if (MaxTransferMB > 512) MaxTransferMB = 512;
             if (TransferChunkKB < 32) TransferChunkKB = 32;
             if (TransferChunkKB > 2048) TransferChunkKB = 2048;
             if (TransferTtlMin < 1) TransferTtlMin = 1;

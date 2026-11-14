@@ -419,6 +419,68 @@ account; only a hashed IP is kept for abuse handling.
 Moderators can read feedback; the message, contact, page, user agent, an internal
 note and who handled it are all shown in the admin board.
 
+### Applications API
+
+Third-party apps with OAuth-style consent. An app is registered by a developer,
+gets a `clientId` and a secret (shown once, stored hashed), and asks for a list of
+named scopes. A user approves a **subset** of them, receives a one-time code, and
+the app trades that code plus its secret for a bearer token.
+
+Scopes (`Core/AppScopes.cs`) — deliberately small, and there is no "everything":
+
+| Scope | Lets the app |
+| --- | --- |
+| `profile` | read the user's id, username, display name and avatar |
+| `wall.post` | publish a post as the user |
+| `messages.read` | read a named conversation |
+| `storage` | keep key/value data for that user (quota from `[apps]`) |
+| `score` | submit a score and read the leaderboard |
+
+Session endpoints (HMAC-signed like everything else):
+
+| Method | Path | Body | Result |
+| --- | --- | --- | --- |
+| GET | `/api/apps` | — | `{ apps[], scopes[], canPublishHtml }` — the published catalogue |
+| GET | `/api/apps/mine` | — | `{ apps[], grants[], scopes[], canPublishHtml }` |
+| POST | `/api/apps/register` | `name`, `description`, `type`, `url`, `scopes` | `{ app, secret }` |
+| POST | `/api/apps/update` | `id`, `name`, `description`, `url`, `scopes`, `published` | `{ app }` |
+| POST | `/api/apps/delete` | `id` | `{ deleted, records }` |
+| POST | `/api/apps/authorize` | `id`, `scopes` | `{ code, expires, scopes }` |
+| POST | `/api/apps/revoke` | `id` | `{ revoked }` |
+| GET | `/api/apps/scores` | `id`, `limit` | `{ scores[], mine }` |
+| POST | `/api/apps/score` | `id`, `score` | `{ score, rank, improved }` |
+
+`scopes` is accepted as an array (what the SPA sends) or a comma separated string
+(what curl and the CLI send). An app may only be approved for scopes it actually
+asked for — `400 scope-not-offered` otherwise.
+
+**The token surface is different on purpose.** An external app cannot produce our
+HMAC signatures, so it talks plain JSON with `X-App-Token`:
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| POST | `/api/apps/token` | `clientId`, `clientSecret`, `code` → `{ token, scopes, userId, user }` |
+| GET | `/api/app/profile` | needs `profile` |
+| GET | `/api/app/storage?key=` / POST | needs `storage`; POST takes `key`, `value` or `delete` |
+| GET | `/api/app/scores` / POST `/api/app/score` | needs `score`; keeps the user's best |
+| POST | `/api/app/post` | needs `wall.post`; publishes as the user |
+| GET | `/api/app/messages?with=` | needs `messages.read` |
+
+Rules:
+
+* the code is valid for ten minutes and works **exactly once** — the token
+  replaces it;
+* revoking kills the token immediately (`401 bad-token`) without touching anybody
+  else's install;
+* **an HTML app runs on this site's own origin, so only staff may register or
+  publish one** (`403 html-admin-only`). `.swf` and external apps do not need that;
+* deleting an app removes its grants, its stored data and its scores in one go, and
+  the response says how many rows went (`records`);
+* app storage is per app **and** per user, so one install can never read another's.
+
+Everything is off with `[apps] enabled=false`: the catalogue, the consent screen
+and every app endpoint answer `403 apps-off`.
+
 ### Voice channels
 
 Named rooms, Discord-style. The row is only the sign on the wall; who is inside

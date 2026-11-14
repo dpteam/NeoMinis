@@ -78,34 +78,25 @@ poll) but they are the minimum.
 
 ### Applications API (the big one)
 
-The site should host small third-party apps the way VK and Telegram do, and the
-DartPower mini-games should become the first real examples.
+**Shipped:** registration with a one-time secret, five named scopes, the consent
+screen, code → token exchange, per-user app storage with a quota, leaderboards, and
+a plain-JSON token surface an external server can actually call. See the
+Applications API section in `API.md`. HTML apps stay administrator-only because
+they run on our origin.
 
-**Permission model** (partly built: `.swf` uploads already need `canGames`, granted in
-Admin → Users; admins always may):
+What is left:
 
-1. An app is registered by a developer and gets a `clientId` + secret.
-2. The app asks for scopes (`profile`, `wall.post`, `messages.read`, `storage`).
-3. The owner approves them on a consent screen; tokens can be revoked per app.
-4. **HTML apps can only be published by administrators** — they run on our origin, so
-   that is the only safe rule. `.swf` games are sandboxed in an iframe already and
-   only need the `canGames` flag.
-
-| Endpoint | Purpose |
-| --- | --- |
-| `POST /api/apps/register` | developer registers an app (name, icon, type) |
-| `GET /api/apps` | public catalogue, with install counters |
-| `POST /api/apps/token` | exchange a one-time code for an access token |
-| `POST /api/apps/revoke` | the user drops an app |
-| `GET /api/apps/longpoll` | VK-style `LongPoll`: one blocking request returning `{ts, updates[]}` — same `EnterWait` budget as notifications |
-| `POST /api/apps/storage` | per-app key/value storage, quota per app |
-| `POST /api/apps/score` | leaderboards for games |
-
-**Migration of the existing mini-games** (`C:\Servers\WebServers\`): `joker`, `dilema`,
-`dicer`, `pets`, `soccer`, `space`, `spore` are Node + SQLite. One port at a time: read
-their `server.js` routes, keep the game logic, replace `fetch('/api/…')` with our
-endpoints. `spore` is already a static bundle and is the easiest first move; `dicer`
-and `pets` carry the most state (inventory, levels) and need per-app storage.
+1. **Migrate the DartPower mini-games** (`C:\Servers\WebServers\`: `joker`,
+   `dilema`, `dicer`, `pets`, `soccer`, `space`, `spore` are Node + SQLite). One at
+   a time: read `server.js`, keep the game logic, replace `fetch('/api/…')` with the
+   app endpoints. `spore` is already a static bundle and is the easiest first move;
+   `dicer` and `pets` carry the most state and exercise the storage scope properly.
+2. **A VK-style long poll for apps** (`/api/apps/longpoll`) so a game can be told
+   about an event instead of polling, sharing the `EnterWait` budget.
+3. **Signed requests from the app** (HMAC with the client secret) for the cases
+   where a bearer token in a header is not enough.
+4. **A consent screen for HTML apps** that shows the origin they will run on,
+   because that is the part a user should be suspicious of.
 
 ### Push notifications
 
@@ -204,6 +195,11 @@ Kept here so the list above stays honest.
   `channels.json`, live occupancy read from the call registry, create/edit/delete
   with the creator or an admin in charge, and a delete that does not throw out the
   people already talking.
+- Applications API: registration with a one-time secret, five named scopes
+  (`profile`, `wall.post`, `messages.read`, `storage`, `score`), a consent screen
+  where the user ticks a subset, a one-time code exchanged for a bearer token, a
+  plain-JSON token surface an external app can call, per-user app storage with a
+  quota, and leaderboards. HTML apps stay administrator-only.
 - Groups with editable settings, pictures and member management.
 - Communities: owner / editor / member roles, join requests for closed groups and a
   moderation queue ("members post, editors approve").

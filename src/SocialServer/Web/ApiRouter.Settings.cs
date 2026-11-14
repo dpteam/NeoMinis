@@ -88,6 +88,9 @@ namespace Social.Web
                 .Prop("maxTransferMB", _cfg.MaxTransferMB)
                 .Prop("transferChunkKB", _cfg.TransferChunkKB)
                 .Prop("transferTtlMin", _cfg.TransferTtlMin)
+                .Prop("appsEnabled", _cfg.AppsEnabled)
+                .Prop("appStorageKeys", _cfg.AppStorageKeys)
+                .Prop("appValueBytes", _cfg.AppValueBytes)
                 .Prop("maxAvatarKB", _cfg.MaxAvatarKB)
                 .Prop("maxPostImageKB", _cfg.MaxPostImageKB)
                 .Prop("editWindowMin", _cfg.EditWindowMin)
@@ -367,6 +370,13 @@ namespace Social.Web
                 ApplyLimit(limits, "storyPerDay", _cfg.StoryPerDay, 0, delegate(int v) { _cfg.StoryPerDay = v; });
                 ApplyLimit(limits, "maxStoryCaption", _cfg.MaxStoryCaption, 0, delegate(int v) { _cfg.MaxStoryCaption = v; });
                 ApplyLimit(limits, "maxMessageVideoKB", _cfg.MaxMessageVideoKB, 64, delegate(int v) { _cfg.MaxMessageVideoKB = v; });
+                if (limits.ContainsKey("appsEnabled"))
+                {
+                    _cfg.AppsEnabled = Json.GetBool(limits, "appsEnabled", _cfg.AppsEnabled);
+                    _cfg.SetIniValue("apps", "enabled", _cfg.AppsEnabled ? "true" : "false");
+                }
+                ApplyLimit(limits, "appStorageKeys", _cfg.AppStorageKeys, 1, delegate(int v) { _cfg.AppStorageKeys = v; });
+                ApplyLimit(limits, "appValueBytes", _cfg.AppValueBytes, 64, delegate(int v) { _cfg.AppValueBytes = v; });
                 ApplyLimit(limits, "maxTransferMB", _cfg.MaxTransferMB, 1, delegate(int v) { _cfg.MaxTransferMB = v; });
                 ApplyLimit(limits, "transferChunkKB", _cfg.TransferChunkKB, 32, delegate(int v) { _cfg.TransferChunkKB = v; });
                 ApplyLimit(limits, "transferTtlMin", _cfg.TransferTtlMin, 1, delegate(int v) { _cfg.TransferTtlMin = v; });

@@ -898,6 +898,33 @@ img { max-width: 100%; }
 .chan-side-foot { padding: 8px 10px; border-top: 1px solid var(--border); background: var(--panel-2); }
 .chan-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 
+/* --------------------------------------------------------------- apps */
+.app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.app-card {
+  display: flex; flex-direction: column; gap: 5px; padding: 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+.app-head { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.app-head i { color: var(--accent); }
+.app-desc { min-height: 30px; }
+.app-meta { opacity: .85; }
+.app-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 4px; }
+.app-grant-row, .app-own-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 2px; border-bottom: 1px solid var(--border);
+}
+.app-grant-row:last-child, .app-own-row:last-child { border-bottom: 0; }
+.app-grant-row > i, .app-own-row > i { color: var(--accent); width: 16px; }
+.app-grant-main { flex: 1; min-width: 0; }
+.app-grant-main b { font-size: 12.5px; }
+.scope-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0; }
+.scope-chip {
+  font-size: 10.5px; padding: 1px 6px; border-radius: 8px;
+  background: var(--panel); border: 1px solid var(--border); color: var(--text-soft);
+}
+.app-card .badge.ok { background: var(--ok); color: #fff; }
+
 @media (max-width: 720px) {
   .chan-layout { grid-template-columns: 1fr; }
   .chan-side { position: static; }

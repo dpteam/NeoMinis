@@ -113,6 +113,11 @@ namespace Social.Web
                 if (route == "guest") { HandleGuest(req, resp, ip); return true; }
                 if (route == "recover") { HandleRecover(req, resp, ip); return true; }
                 if (route == "feedback") { HandleFeedback(req, resp, ip); return true; }
+                if (route == "apps/token") { HandleAppToken(req, resp); return true; }
+                // an external app cannot sign our requests, so it gets its own
+                // plain-JSON surface authenticated by a bearer token
+                if (route.StartsWith("app/", StringComparison.Ordinal))
+                    return HandleAppRequest(req, resp, ip, route);
 
                 return HandleAuthenticated(req, resp, ip, route);
             }
@@ -750,7 +755,7 @@ namespace Social.Web
             "games", "game", "gifts", "friends",
             "groups", "group", "group/feed",
             "albums", "album", "stories", "story",
-            "stats", "online"
+            "stats", "online", "apps"
         };
 
         private static bool GuestMayRead(ApiCtx ctx)
@@ -823,6 +828,16 @@ namespace Social.Web
             if (r == "channel/create") { RequireMethod(m, "POST"); HandleChannelCreate(ctx); return; }
             if (r == "channel/edit") { RequireMethod(m, "POST"); HandleChannelEdit(ctx); return; }
             if (r == "channel/delete") { RequireMethod(m, "POST"); HandleChannelDelete(ctx); return; }
+
+            if (r == "apps") { RequireMethod(m, "GET"); HandleApps(ctx); return; }
+            if (r == "apps/mine") { RequireMethod(m, "GET"); HandleAppsMine(ctx); return; }
+            if (r == "apps/register") { RequireMethod(m, "POST"); HandleAppRegister(ctx); return; }
+            if (r == "apps/update") { RequireMethod(m, "POST"); HandleAppUpdate(ctx); return; }
+            if (r == "apps/delete") { RequireMethod(m, "POST"); HandleAppDelete(ctx); return; }
+            if (r == "apps/authorize") { RequireMethod(m, "POST"); HandleAppAuthorize(ctx); return; }
+            if (r == "apps/revoke") { RequireMethod(m, "POST"); HandleAppRevoke(ctx); return; }
+            if (r == "apps/scores") { RequireMethod(m, "GET"); HandleAppScores(ctx); return; }
+            if (r == "apps/score") { RequireMethod(m, "POST"); HandleAppScoreSubmit(ctx); return; }
             if (r == "gifts") { RequireMethod(m, "GET"); HandleGifts(ctx); return; }
             if (r == "gifts/sent") { RequireMethod(m, "GET"); HandleGiftsSent(ctx); return; }
             if (r == "gifts/send") { RequireMethod(m, "POST"); HandleGiftSend(ctx); return; }

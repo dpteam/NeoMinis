@@ -182,6 +182,66 @@ namespace Social.Core
     }
 
     /// <summary>
+    /// A third-party app. The client secret is stored hashed: the developer sees
+    /// it once, when the app is registered, exactly like an API key anywhere else.
+    /// </summary>
+    public sealed class App
+    {
+        public long Id;
+        public long Owner;
+        public string Name = "";
+        public string Description = "";
+        public string Icon = "";
+        public string Type = "external";   // external | html | swf
+        public string Url = "";
+        public string ClientId = "";
+        public string SecretHash = "";     // HMAC(serverSecret, secret)
+        public string Scopes = "";         // comma separated requested scopes
+        public bool Published;
+        public int Installs;
+        public DateTime Created = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// One user's approval of one app: the scopes they agreed to, the one-time
+    /// code that is exchanged for a token, and the token itself (hashed).
+    /// </summary>
+    public sealed class AppGrant
+    {
+        public long Id;
+        public long AppId;
+        public long User;
+        public string Scopes = "";
+        public string Code = "";           // one-time, short lived, empty once used
+        public DateTime CodeExpires = DateTime.MinValue;
+        public string TokenHash = "";      // HMAC(serverSecret, token)
+        public DateTime Created = DateTime.UtcNow;
+        public DateTime LastUsed = DateTime.MinValue;
+        public bool Revoked;
+    }
+
+    /// <summary>One key/value pair an app keeps for one user.</summary>
+    public sealed class AppData
+    {
+        public long Id;
+        public long AppId;
+        public long User;
+        public string Key = "";
+        public string Value = "";
+        public DateTime Updated = DateTime.UtcNow;
+    }
+
+    /// <summary>One entry in an app's leaderboard: a user's best score.</summary>
+    public sealed class AppScore
+    {
+        public long Id;
+        public long AppId;
+        public long User;
+        public long Score;
+        public DateTime Updated = DateTime.UtcNow;
+    }
+
+    /// <summary>
     /// A named voice room, Discord-style. The row is only the name and the order;
     /// who is inside right now lives in <see cref="CallRegistry"/>, because that is
     /// true only for as long as the browsers stay connected and persisting it would
@@ -392,6 +452,10 @@ namespace Social.Core
         public long NextAlbumId = 1;
         public long NextStoryId = 1;
         public long NextChannelId = 1;
+        public long NextAppId = 1;
+        public long NextAppGrantId = 1;
+        public long NextAppDataId = 1;
+        public long NextAppScoreId = 1;
         public long TotalRegistrations;
         public DateTime LastBackup = DateTime.MinValue;
         public string InstallId = "";

@@ -362,6 +362,7 @@ var App = (function () {
       html += side('#/gifts', 'gift', T('nav.gifts'), 'gifts');
     if (!App.state.site || App.state.site.gamesEnabled !== false)
       html += side('#/games', 'gamepad', T('nav.games'), 'games');
+    html += side('#/apps', 'puzzle-piece', T('nav.apps'), 'apps');
     html += '<div class="side-sep"></div>';
     html += side('#/profile/' + u.id, 'id-card', T('nav.profile'), 'profile');
     html += side('#/settings', 'gear', T('nav.settings'), 'settings');

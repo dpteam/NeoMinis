@@ -1812,6 +1812,122 @@ async function main() {
       policyNow.data.limits.callIcePolicy === 'all', String(policyNow.data.limits.callIcePolicy));
   }
 
+  // ---- third-party apps
+  // Fresh sessions: the admin block above bans and unbans bob, which drops his.
+  const appUser = new Client("app-user");
+  await appUser.login(ub, "bob-password-1");
+
+  const appReg = await alice.call('POST', '/api/apps/register', {
+    name: 'Suite App', description: 'registered by the test suite', type: 'external',
+    url: 'https://example.com/app', scopes: ['profile', 'storage', 'score', 'wall.post']
+  });
+  ok('an app can be registered', appReg.status === 200 && !!appReg.data.secret &&
+    appReg.data.app.scopes === 'profile,wall.post,storage,score',
+    JSON.stringify(appReg.data && appReg.data.app && appReg.data.app.scopes));
+  const appId = appReg.data.app.id;
+  const clientId = appReg.data.app.clientId;
+  const appSecret = appReg.data.secret;
+
+  const htmlApp = await appUser.call('POST', '/api/apps/register', {
+    name: 'Html App', type: 'html', url: 'https://example.com/x', scopes: ['profile']
+  });
+  ok('an HTML app needs staff', htmlApp.status === 403, String(htmlApp.status));
+
+  const badType = await alice.call('POST', '/api/apps/register', { name: 'X', type: 'nonsense' });
+  ok('an unknown app type is refused', badType.status === 400, String(badType.status));
+
+  const appPub = await alice.call('POST', '/api/apps/update', { id: appId, published: true });
+  ok('the developer publishes the app', appPub.status === 200 && appPub.data.app.published === true, '');
+
+  const catalogue = await appUser.call('GET', '/api/apps');
+  ok('a published app shows in the catalogue',
+    catalogue.status === 200 && catalogue.data.apps.some(a => a.id === appId), String(catalogue.status));
+  ok('the catalogue never leaks the secret',
+    !JSON.stringify(catalogue.data).includes(appSecret), '');
+
+  const appHijack = await appUser.call('POST', '/api/apps/update', { id: appId, name: 'hijacked' });
+  ok('only the developer may edit an app', appHijack.status === 403, String(appHijack.status));
+
+  // bob approves a subset of what the app asked for
+  const tooWide = await appUser.call('POST', '/api/apps/authorize', { id: appId, scopes: ['messages.read'] });
+  ok('a scope the app did not ask for is refused', tooWide.status === 400, String(tooWide.status));
+
+  const auth = await appUser.call('POST', '/api/apps/authorize', { id: appId, scopes: ['profile', 'storage'] });
+  ok('the user approves a subset', auth.status === 200 && !!auth.data.code &&
+    auth.data.scopes === 'profile,storage', JSON.stringify(auth.data && auth.data.scopes));
+
+  // the app trades the code for a token, plain JSON, no session
+  const tokenRes = await fetch(BASE + '/api/apps/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId, clientSecret: appSecret, code: auth.data.code })
+  });
+  const tokenData = await tokenRes.json();
+  ok('the code buys a token', tokenRes.status === 200 && !!tokenData.token &&
+    tokenData.scopes === 'profile,storage' && tokenData.userId === appUser.user.id,
+    String(tokenRes.status));
+  const appToken = tokenData.token;
+
+  const reuse = await fetch(BASE + '/api/apps/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId, clientSecret: appSecret, code: auth.data.code })
+  });
+  ok('a code works exactly once', reuse.status === 400, String(reuse.status));
+
+  const badSecret = await fetch(BASE + '/api/apps/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId, clientSecret: 'nope', code: 'whatever' })
+  });
+  ok('a wrong client secret is refused', badSecret.status === 401, String(badSecret.status));
+
+  const noToken = await fetch(BASE + '/api/app/profile');
+  ok('the app surface needs a token', noToken.status === 401, String(noToken.status));
+
+  const appProfile = await fetch(BASE + '/api/app/profile', { headers: { 'X-App-Token': appToken } });
+  const profileData = await appProfile.json();
+  ok('a token reads the profile it was granted',
+    appProfile.status === 200 && profileData.user.id === appUser.user.id, String(appProfile.status));
+
+  const appStore = await fetch(BASE + '/api/app/storage', {
+    method: 'POST', headers: { 'X-App-Token': appToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'save', value: '{"level":3}' })
+  });
+  ok('an app can keep its own data', appStore.status === 200, String(appStore.status));
+
+  const appRead = await fetch(BASE + '/api/app/storage?key=save', { headers: { 'X-App-Token': appToken } });
+  const readData = await appRead.json();
+  ok('the app reads its own data back', appRead.status === 200 && readData.value === '{"level":3}',
+    String(appRead.status));
+
+  // a scope the user did not approve must be refused, even though the app asked
+  const noScope = await fetch(BASE + '/api/app/post', {
+    method: 'POST', headers: { 'X-App-Token': appToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: 'should not appear' })
+  });
+  ok('an unapproved scope is refused', noScope.status === 403, String(noScope.status));
+
+  // one user's app data is not another user's
+  const otherTokenRes = await alice.call('POST', '/api/apps/authorize', { id: appId, scopes: ['storage'] });
+  const otherTok = await fetch(BASE + '/api/apps/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId, clientSecret: appSecret, code: otherTokenRes.data.code })
+  });
+  const otherData = await otherTok.json();
+  const otherRead = await fetch(BASE + '/api/app/storage?key=save', {
+    headers: { 'X-App-Token': otherData.token }
+  });
+  const otherReadData = await otherRead.json();
+  ok('app storage is per user', otherRead.status === 200 && otherReadData.value === null,
+    JSON.stringify(otherReadData && otherReadData.value));
+
+  const revoke = await appUser.call('POST', '/api/apps/revoke', { id: appId });
+  const deadToken = await fetch(BASE + '/api/app/profile', { headers: { 'X-App-Token': appToken } });
+  ok('revoking kills the token', revoke.status === 200 && deadToken.status === 401,
+    String(deadToken.status));
+
+  const appDel = await alice.call('POST', '/api/apps/delete', { id: appId });
+  ok('the developer deletes the app', appDel.status === 200 && appDel.data.deleted === true &&
+    appDel.data.records >= 2, JSON.stringify(appDel.data));
+
   // ---- guest / kiosk (read-only browsing)
   const guest = new Client('guest');
   const gLogin = await guest.guest('');

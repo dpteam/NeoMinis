@@ -155,6 +155,7 @@ Plain ES5, no framework, no build step. Files are loaded in order:
 | `sound.js` | WebAudio presets, per-event toggles, volume, persistence |
 | `ui.js` | DOM helpers, escaping, toasts, modals, themes, file→dataURL |
 | `api.js` | transport: handshake, login/register/recover/guest, signed+sealed calls |
+| `apps.js` | app catalogue, consent screen, developer panel |
 | `app.js` | shell, router, feed, post, profile, composer, comment/like logic |
 | `app.more.js` | friends, people, messages, groups, notifications, settings, admin, search |
 
