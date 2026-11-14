@@ -875,6 +875,19 @@ async function main() {
   const photoStill = await alice.call('GET', '/api/post?id=' + p1.data.post.id);
   ok('photos survive their album', photoStill.status === 200, String(photoStill.status));
 
+  // ---- profile cover and the cosmetic VIP label
+  const cover = await alice.call('POST', '/api/profile/cover', { data: PNG });
+  ok('cover uploaded', cover.status === 200 && cover.data.cover.indexOf('/media/avatars/') === 0,
+    JSON.stringify(cover.data));
+  const covered = await alice.call('GET', '/api/profile?user=' + alice.user.id);
+  ok('cover comes back on the profile', covered.data.user.cover === cover.data.cover, '');
+  const coverCleared = await alice.call('POST', '/api/profile/cover', { data: '' });
+  ok('cover can be cleared', coverCleared.status === 200 && coverCleared.data.cover === '', '');
+  const badCover = await alice.call('POST', '/api/profile/cover', {
+    data: 'data:image/png;base64,' + Buffer.from('<html>nope</html>').toString('base64')
+  });
+  ok('a fake image is not a cover', badCover.status === 400, String(badCover.status));
+
   // ---- stories
   const storyNew = await alice.call('POST', '/api/story/add', {
     image: PNG, caption: 'first story'
@@ -1159,6 +1172,14 @@ async function main() {
     id: upTrack.data.item.id, title: 'Stolen'
   });
   ok("nobody else edits my track", foreignEdit.status === 403, String(foreignEdit.status));
+
+  // the shared shelf must not be what "my library" shows
+  const mineOnly = await alice.call('GET', '/api/media?kind=audio&user=' + alice.user.id);
+  ok('asking for my library returns only mine', mineOnly.status === 200 &&
+    mineOnly.data.items.every(i => i.owner === alice.user.id), '');
+  const everyone = await alice.call('GET', '/api/media?kind=audio');
+  ok('the shared shelf names the owner', everyone.status === 200 &&
+    everyone.data.items.every(i => typeof i.ownerName === 'string'), '');
   const emptyTitle = await alice.call('POST', '/api/media/edit', { id: upTrack.data.item.id, title: '   ' });
   ok('a track needs a title', emptyTitle.status === 400, String(emptyTitle.status));
   const badKind = await alice.call('POST', '/api/media/upload', {

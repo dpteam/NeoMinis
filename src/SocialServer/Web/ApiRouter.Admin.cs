@@ -333,6 +333,17 @@ namespace Social.Web
                              "badge " + badge + " for @" + target.Username);
                 }
             }
+            else if (action == "vip")
+            {
+                // cosmetic only: a golden label, nothing more (the old VK joke)
+                bool on = BodyBool(ctx, "on", true);
+                target.Vip = on;
+                _store.MarkUserDirty(target);
+                _store.Notify(target.Id, ctx.User.Id, "admin",
+                    on ? "gave you the VIP label" : "took away your VIP label", "#/profile/" + target.Id);
+                Log.Info("ADMIN", "@" + ctx.User.Username + (on ? " granted" : " revoked") +
+                         " VIP for @" + target.Username);
+            }
             else if (action == "allow-games")
             {
                 // SWF uploads are a privilege: an admin hands it out per account.

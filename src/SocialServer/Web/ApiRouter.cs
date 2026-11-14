@@ -655,6 +655,7 @@ namespace Social.Web
             if (r == "comment/delete") { RequireMethod(m, "POST"); HandleCommentDelete(ctx); return; }
             if (r == "profile") { HandleProfile(ctx); return; }
             if (r == "avatar") { RequireMethod(m, "POST"); HandleAvatar(ctx); return; }
+            if (r == "profile/cover") { RequireMethod(m, "POST"); HandleCover(ctx); return; }
             if (r == "people") { RequireMethod(m, "GET"); HandlePeople(ctx); return; }
             if (r == "search") { RequireMethod(m, "GET"); HandleSearch(ctx); return; }
             if (r == "search/posts") { RequireMethod(m, "GET"); HandleSearchPosts(ctx); return; }
@@ -689,6 +690,7 @@ namespace Social.Web
             if (r == "game") { RequireMethod(m, "GET"); HandleGame(ctx); return; }
             if (r == "game/upload") { RequireMethod(m, "POST"); HandleGameUpload(ctx); return; }
             if (r == "game/edit") { RequireMethod(m, "POST"); HandleGameEdit(ctx); return; }
+            if (r == "game/cover") { RequireMethod(m, "POST"); HandleGameCover(ctx); return; }
             if (r == "game/delete") { RequireMethod(m, "POST"); HandleGameDelete(ctx); return; }
             if (r == "game/play") { RequireMethod(m, "POST"); HandleGamePlay(ctx); return; }
             if (r == "game/like") { RequireMethod(m, "POST"); HandleGameLike(ctx); return; }

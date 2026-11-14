@@ -20,6 +20,7 @@ namespace Social.Web
             b.Prop("role", u.Role);
             b.Prop("status", Util.SingleLine(u.Status, _cfg.MaxStatusLength));
             b.Prop("online", !u.HideOnline && (DateTime.UtcNow - u.LastSeen).TotalSeconds <= _cfg.OnlineWindowSec);
+            if (u.Vip) b.Prop("vip", true);
             b.EndObject();
             return b.ToString();
         }
@@ -51,10 +52,15 @@ namespace Social.Web
             b.Prop("friends", _store.CountFriends(u.Id));
             b.Prop("posts", _store.CountPosts(u.Id));
             b.Prop("canMessage", CanMessageUser(viewer, u));
+            b.Prop("canCall", !self && viewer != null && _cfg.MaxCallMembers >= 2 &&
+                              CanMessageUser(viewer, u) &&
+                              !_store.IsBlocked(u.Id, viewer.Id) && !_store.IsBlocked(viewer.Id, u.Id));
             b.Prop("mood", u.Mood);
             b.Prop("legacySource", u.LegacySource);
             if (!string.IsNullOrEmpty(u.Badges)) b.Prop("badges", u.Badges);
             if (self || staff) b.Prop("canGames", u.CanGames || u.IsAdmin);
+            b.Prop("vip", u.Vip);
+            b.Prop("cover", u.Cover);
             if (self || staff) b.Prop("lastSeen", Util.Iso(u.LastSeen));
             else if (!u.HideOnline) b.Prop("lastSeen", Util.Iso(u.LastSeen));
             else b.Prop("lastSeen", "");

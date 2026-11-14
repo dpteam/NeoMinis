@@ -20,7 +20,9 @@ namespace Social.Core
     public sealed class SocialStore
     {
         private readonly object _sync = new object();
-        private readonly Config _cfg;
+        private readonly Config _cfg;        /// <summary>The language new accounts start with, so "polyglot" means a real switch.</summary>
+        public string DefaultLanguage { get { return _cfg == null ? "en" : _cfg.DefaultLanguage; } }
+
         private readonly List<User> _users = new List<User>();
         private readonly List<Post> _posts = new List<Post>();
         private readonly List<Comment> _comments = new List<Comment>();
@@ -2680,6 +2682,20 @@ namespace Social.Core
             }
         }
 
+        public bool SetGameCover(long id, long owner, string url)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                MediaItem m = FindMedia(id);
+                if (m == null || m.Kind != "game") return false;
+                if (m.Owner != owner) return false;
+                m.Cover = url ?? "";
+                MarkMedia();
+                return true;
+            }
+        }
+
         /// <summary>Counts one play. Cheap on purpose: no notification, no history.</summary>
         public int AddGamePlay(long id)
         {
@@ -2853,6 +2869,7 @@ namespace Social.Core
                 {
                     d["description"] = m.Description;
                     d["plays"] = m.Plays;
+                    if (!string.IsNullOrEmpty(m.Cover)) d["cover"] = m.Cover;
                     List<object> likes = new List<object>(m.Likes.Count);
                     for (int k = 0; k < m.Likes.Count; k++) likes.Add(m.Likes[k]);
                     d["likes"] = likes;
@@ -2877,6 +2894,7 @@ namespace Social.Core
             m.Created = Json.GetDate(d, "created", DateTime.UtcNow);
             m.Description = Json.GetString(d, "description", "");
             m.Plays = Json.GetInt(d, "plays", 0);
+            m.Cover = Json.GetString(d, "cover", "");
             List<object> likes = Json.Get(d, "likes") as List<object>;
             if (likes != null)
             {
@@ -3234,8 +3252,18 @@ namespace Social.Core
             return urls;
         }
 
-        public int CountLiveStories()
+        /// <summary>Every story the author ever posted, live or expired.</summary>
+        public int CountStoriesBy(long author)
         {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _stories.Count; i++) if (_stories[i].Author == author) n++;
+                return n;
+            }
+        }
+
+        public int CountLiveStories()        {
             DateTime now = DateTime.UtcNow;
             lock (_sync)
             {
@@ -3350,8 +3378,18 @@ namespace Social.Core
             }
         }
 
-        public int CountUnseenGifts(long userId)
+        /// <summary>Gifts the user gave away, hidden ones included.</summary>
+        public int CountGiftsSent(long userId)
         {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _gifts.Count; i++) if (_gifts[i].From == userId) n++;
+                return n;
+            }
+        }
+
+        public int CountUnseenGifts(long userId)        {
             lock (_sync)
             {
                 int n = 0;
@@ -4006,6 +4044,8 @@ namespace Social.Core
             d["favBooks"] = u.FavBooks; d["persona"] = u.Persona; d["mood"] = u.Mood;
             d["badges"] = u.Badges; d["notifyMute"] = u.NotifyMute; d["legacySource"] = u.LegacySource; d["legacyId"] = u.LegacyId;
             if (u.CanGames) d["canGames"] = true;
+            if (u.Vip) d["vip"] = true;
+            if (!string.IsNullOrEmpty(u.Cover)) d["cover"] = u.Cover;
             return d;
         }
 
@@ -4059,6 +4099,8 @@ namespace Social.Core
             u.LegacySource = Json.GetString(d, "legacySource", "");
             u.LegacyId = Json.GetString(d, "legacyId", "");
             u.CanGames = Json.GetBool(d, "canGames", false);
+            u.Vip = Json.GetBool(d, "vip", false);
+            u.Cover = Json.GetString(d, "cover", "");
             return u;
         }
 

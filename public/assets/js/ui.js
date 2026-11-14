@@ -116,8 +116,14 @@ var UI = (function () {
     return '<a class="' + (cls || '') + '" href="' + attr(href) + '">' + esc(u.displayName || u.username || '?') + '</a>';
   }
 
-  function roleBadge(role) {
-    if (role === 'admin') return '<span class="badge admin">' + icon('shield-halved') + ' admin</span>';
+  /// <summary>Cosmetic golden label, the old VK joke: it means nothing at all.</summary>
+  function vipBadge(user) {
+    if (!user || !user.vip) return '';
+    return '<span class="badge vip" title="' + attr(I18N.t('profile.vipHint')) + '">' +
+      icon('crown') + ' VIP</span>';
+  }
+
+  function roleBadge(role) {    if (role === 'admin') return '<span class="badge admin">' + icon('shield-halved') + ' admin</span>';
     if (role === 'moderator') return '<span class="badge mod">' + icon('gavel') + ' mod</span>';
     return '';
   }
@@ -374,7 +380,7 @@ var UI = (function () {
   return {
     $: $, $$: $$, esc: esc, attr: attr, nl2br: nl2br, linkify: linkify,
     safeUrl: safeUrl, timeAgo: timeAgo, formatDate: formatDate, formatTime: formatTime, initials: initials,
-    avatar: avatar, icon: icon, userLink: userLink, roleBadge: roleBadge, presence: presence,
+    avatar: avatar, icon: icon, userLink: userLink, roleBadge: roleBadge, vipBadge: vipBadge, presence: presence,
     spinner: spinner, empty: empty, toast: toast, modal: modal, confirm: confirmBox,
     imageModal: imageModal, getTheme: getTheme, applyTheme: applyTheme, cycleTheme: cycleTheme,
     mediaBlocked: mediaBlocked, mediaBlockedText: mediaBlockedText, mediaReady: mediaReady,

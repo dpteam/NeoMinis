@@ -827,6 +827,38 @@ namespace Social.Web
             SendOk(ctx, b);
         }
 
+        private void HandleCover(ApiCtx ctx)
+        {
+            // the strip above the avatar; a wide picture, so a slightly bigger cap
+            // than an avatar but still small
+            string data = BodyStr(ctx, "data", "");
+            if (data.Length == 0)
+            {
+                // clearing the cover falls back to the gradient
+                string previous = ctx.User.Cover;
+                ctx.User.Cover = "";
+                _store.MarkUserDirty(ctx.User);
+                if (!string.IsNullOrEmpty(previous)) _media.Delete(previous);
+                JsonBuilder cleared = new JsonBuilder(64);
+                cleared.BeginObject().Prop("cover", "");
+                SendOk(ctx, cleared);
+                return;
+            }
+
+            string err;
+            string url = _media.SaveDataUrl(data, "avatar", _cfg.MaxAvatarKB * 2, out err);
+            if (url == null) throw new ApiException(400, err, "Cover could not be saved");
+            string old = ctx.User.Cover;
+            ctx.User.Cover = url;
+            _store.MarkUserDirty(ctx.User);
+            if (!string.IsNullOrEmpty(old)) _media.Delete(old);
+
+            JsonBuilder b = new JsonBuilder(128);
+            b.BeginObject();
+            b.Prop("cover", url);
+            SendOk(ctx, b);
+        }
+
         // ============================================================= people
 
         private void HandlePeople(ApiCtx ctx)
@@ -1014,8 +1046,15 @@ namespace Social.Web
 
         // ===================================================== media library
 
-        private void HandleMedia(ApiCtx ctx)
+        /// <summary>Display name of a media owner, for the shared shelf.</summary>
+        private string OwnerName(long id)
         {
+            User u = _store.FindUser(id);
+            if (u == null) return "";
+            return u.DisplayName.Length > 0 ? u.DisplayName : u.Username;
+        }
+
+        private void HandleMedia(ApiCtx ctx)        {
             string kind = (GetQuery(ctx.Query, "kind") ?? "").Trim().ToLowerInvariant();
             if (kind != "audio" && kind != "video") kind = "";
             long userId = LongQuery(ctx, "user");
@@ -1044,6 +1083,7 @@ namespace Social.Web
                     .Prop("owner", m.Owner)
                     .Prop("savedFrom", m.SavedFrom)
                     .Prop("description", m.Description)
+                    .Prop("ownerName", OwnerName(m.Owner))
                     .Prop("mine", ctx.User != null && m.Owner == ctx.User.Id)
                     .EndObject();
             }

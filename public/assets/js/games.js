@@ -26,8 +26,11 @@ var GamesUI = (function () {
 
   function card(g) {
     var owner = g.owner || {};
+    var cover = UI.safeUrl(g.cover);
     return '<a class="game-card" href="#/game/' + g.id + '">' +
-      '<div class="game-cover">' + UI.icon('gamepad') +
+      '<div class="game-cover">' + (cover
+        ? '<img class="game-cover-img" src="' + UI.attr(cover) + '" alt="" loading="lazy">'
+        : UI.icon('gamepad')) +
       (g.plays > 0 ? '<span class="game-plays">' + UI.icon('play') + ' ' + g.plays + '</span>' : '') +
       '</div>' +
       '<div class="game-meta"><div class="game-title">' + UI.esc(g.title) + '</div>' +
@@ -224,21 +227,49 @@ var GamesUI = (function () {
           body: '<div class="field"><label>' + T('games.name') + '</label>' +
             '<input class="input" id="ge-name" maxlength="120" value="' + UI.attr(g.title) + '"></div>' +
             '<div class="field"><label>' + T('games.description') + '</label>' +
-            '<textarea class="input" id="ge-desc" rows="3" maxlength="1000">' + UI.esc(g.description) + '</textarea></div>',
+            '<textarea class="input" id="ge-desc" rows="3" maxlength="1000">' + UI.esc(g.description) + '</textarea></div>' +
+            '<div class="field"><label>' + T('games.preview') + '</label>' +
+            '<div style="display:flex;gap:10px;align-items:center">' +
+            (UI.safeUrl(g.cover)
+              ? '<img class="game-preview-thumb" src="' + UI.attr(UI.safeUrl(g.cover)) + '" alt="">'
+              : '<span class="tiny muted">' + T('games.noPreview') + '</span>') +
+            '<input type="file" id="ge-cover" accept="image/png,image/jpeg,image/gif,image/webp"></div></div>',
           actions: [
             { label: T('common.cancel'), cls: 'btn-ghost' },
             {
               label: T('common.save'), cls: 'btn-primary', keepOpen: true,
               onClick: function (box, done) {
-                Api.request('POST', '/api/game/edit', {
-                  id: g.id,
-                  title: (byId('ge-name') || {}).value || '',
-                  description: (byId('ge-desc') || {}).value || ''
-                }, function (e2) {
-                  if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
-                  if (done) done();
-                  UI.toast(T('common.saved'), 'ok');
-                  App.views.game(main, r);
+                function saveMeta(then) {
+                  Api.request('POST', '/api/game/edit', {
+                    id: g.id,
+                    title: (byId('ge-name') || {}).value || '',
+                    description: (byId('ge-desc') || {}).value || ''
+                  }, function (e2) {
+                    if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+                    then();
+                  });
+                }
+                function saveCover(then) {
+                  var input = byId('ge-cover');
+                  var file = input && input.files && input.files[0];
+                  if (!file) { then(); return; }
+                  var limit = (App.state.site.maxAvatarKB || 512) * 2;
+                  if (file.size > limit * 1024) {
+                    UI.toast(T('games.previewTooBig', String(limit)), 'err');
+                    then();
+                    return;
+                  }
+                  UI.fileToDataUrl(file, limit, function (err, dataUrl) {
+                    if (err) { UI.toast(T('games.previewTooBig', String(limit)), 'err'); then(); return; }
+                    Api.request('POST', '/api/game/cover', { id: g.id, data: dataUrl }, function () { then(); });
+                  });
+                }
+                saveMeta(function () {
+                  saveCover(function () {
+                    if (done) done();
+                    UI.toast(T('common.saved'), 'ok');
+                    App.views.game(main, r);
+                  });
                 });
                 return false;
               }

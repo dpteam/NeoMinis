@@ -1854,7 +1854,7 @@ var App = (function () {
   function commentHtml(c) {
     var a = c.author || {};
     return '<div class="comment" data-comment="' + c.id + '">' + UI.avatar(a, 26) +
-      '<div class="comment-main"><div class="who"><a href="#/u/' + encodeURIComponent(a.username || '') + '">' + UI.esc(a.displayName || a.username) + '</a>' +
+      '<div class="comment-main"><div class="who"><a href="#/u/' + encodeURIComponent(a.username || '') + '">' + UI.esc(a.displayName || a.username) + '</a> ' + UI.vipBadge(a) +
       '<span>' + UI.timeAgo(c.created) + '</span>' +
       (c.canDelete ? '<button type="button" class="btn btn-xs btn-ghost comment-delete" data-id="' + c.id + '" style="float:right">' + UI.icon('trash') + '</button>' : '') +
       '</div><div class="text">' + UI.linkify(c.body || '').replace(/\n/g, '<br>') + '</div></div></div>';
@@ -2055,6 +2055,13 @@ var App = (function () {
           actions += '<button type="button" class="btn btn-primary friend-action" data-user="' + u.id + '" data-action="request">' + UI.icon('user-plus') + ' ' + T('profile.addFriend') + '</button>';
         }
         if (u.canMessage && !messageShown) actions += '<a class="btn" href="#/im/' + u.id + '">' + UI.icon('envelope') + ' ' + T('profile.message') + '</a>';
+        // calling straight from the profile, like the chat header
+        if (u.canCall) {
+          actions += '<button type="button" class="btn" id="profile-call-audio" title="' +
+            UI.attr(T('calls.audioCall')) + '">' + UI.icon('phone') + '</button>';
+          actions += '<button type="button" class="btn" id="profile-call-video" title="' +
+            UI.attr(T('calls.videoCall')) + '">' + UI.icon('video') + '</button>';
+        }
       }
 
       var info = '';
@@ -2070,9 +2077,12 @@ var App = (function () {
       info += row(T('profile.joined'), UI.formatDate(u.created));
       if (u.bio) info += '<div style="margin-top:10px;font-size:12.5px;white-space:pre-wrap">' + UI.nl2br(u.bio) + '</div>';
 
-      var html = '<div class="profile-cover"></div>';
+      var html = '<div class="profile-cover' + (u.cover ? ' has-image' : '') + '"' +
+        (u.cover ? ' style="background-image:url(' + UI.attr(UI.safeUrl(u.cover)) + ')"' : '') + '>' +
+        (isSelf ? '<button type="button" class="cover-edit" id="cover-edit" title="' +
+          UI.attr(T('profile.changeCover')) + '">' + UI.icon('camera') + '</button>' : '') + '</div>';
       html += '<div class="profile-head">' + UI.avatar(u, 96, false) +
-        '<div class="profile-head-main"><h1>' + UI.esc(u.displayName) + ' ' + UI.roleBadge(u.role) + '</h1>' +
+        '<div class="profile-head-main"><h1>' + UI.esc(u.displayName) + ' ' + UI.roleBadge(u.role) + ' ' + UI.vipBadge(u) + '</h1>' +
         '<div class="username">@' + UI.esc(u.username) + ' · ' + (u.online ? T('profile.online') : T('profile.offline')) + '</div>' +
         (u.status || u.mood ? '<div class="status">' + (u.mood ? UI.icon(moodIcon(u.mood)) + ' ' : '') + UI.esc(u.status || T('mood.' + u.mood)) + '</div>' : '') +
         badgeIcons(u.badges) + '</div>' +
@@ -2119,6 +2129,17 @@ var App = (function () {
       main.innerHTML = html;
       bindFriendActions(main);
       if (window.GiftUI) GiftUI.bind(main);
+
+      var callAudio = document.getElementById('profile-call-audio');
+      if (callAudio) callAudio.addEventListener('click', function () {
+        if (window.CallUI) CallUI.start(u.id, false);
+      });
+      var callVideo = document.getElementById('profile-call-video');
+      if (callVideo) callVideo.addEventListener('click', function () {
+        if (window.CallUI) CallUI.start(u.id, true);
+      });
+      var coverEdit = document.getElementById('cover-edit');
+      if (coverEdit) coverEdit.addEventListener('click', function () { pickCover(); });
       var cells = main.querySelectorAll('.photo-cell');
       for (var ci = 0; ci < cells.length; ci++) {
         cells[ci].addEventListener('click', function () { UI.imageModal(this.getAttribute('data-full')); });
@@ -2154,6 +2175,28 @@ var App = (function () {
         });
       }
     });
+  }
+
+  /// <summary>Picks a wide picture for the strip above the avatar.</summary>
+  function pickCover() {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/gif,image/webp';
+    input.addEventListener('change', function () {
+      var f = input.files && input.files[0];
+      if (!f) return;
+      var limit = (state.site.maxAvatarKB || 512) * 2;
+      if (f.size > limit * 1024) { UI.toast(T('profile.coverTooBig', limit), 'err'); return; }
+      UI.fileToDataUrl(f, limit, function (err, dataUrl) {
+        if (err) { UI.toast(T('profile.coverTooBig', limit), 'err'); return; }
+        Api.request('POST', '/api/profile/cover', { data: dataUrl }, function (e2) {
+          if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+          UI.toast(T('common.saved'), 'ok');
+          route();
+        });
+      });
+    });
+    input.click();
   }
 
   function row(label, value) {

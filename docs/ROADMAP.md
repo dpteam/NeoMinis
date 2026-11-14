@@ -27,6 +27,8 @@ Needs a new field or a new check in several places, but no new subsystem.
 | **Guest / demo / kiosk mode** | Today every `/api/` call needs a session. Add a read-only anonymous viewer: a `[site] guestMode` flag (plus `guestPassword` for kiosk), a `viewer = null` path through the read endpoints (feed, post, profile, group, tags, search, media, games), and a hard 403 on every write. Kiosk variant: no login form, a "demo" banner, auto-return to the feed after a few idle minutes, no admin entry. Careful with the rate limiter and with `UserView` (an anonymous viewer must not see e-mails or IP hashes). |
 | **Janitors (granular moderator rights)** | Right now `moderator` is all-or-nothing. Give a user a set of permission flags (`canDeletePosts`, `canCloseReports`, `canWarn`, `canMuteInChat`, `canSeeFeedback`) and check those instead of `IsModerator` in the admin endpoints. A "janitor" is just a user with two of them. Admin → Users gets a checkbox panel. Existing moderators keep every flag. |
 | **Profile rating** | The old-VK joke: a percentage from how filled the profile is (avatar, cover, bio, city, birthday, status, interests, first post) up to 100%, then the achievements add on top as a separate counter. Show it on the profile as a small meter with a tooltip listing what is missing. Pure computation, no storage — derived from the user row and the badge list. |
+| **Gift details** | Gifts are one-line rows today ("Crown from Anonymous, 2 min ago"). Add a gift page per item: who sent what, the full note, when, whether it was opened, and a per-kind counter ("3 hearts, 1 crown"). Let the recipient hide or keep a gift from that page too, not only from the list. |
+| **README and a logo for NeoMinis** | The repo is the engine (`NeoMinis`), the instance is `DPT.Minis`. Write a proper README: what it is, screenshots, the feature list, a 60-second quick start (`build.cmd` → `run.cmd` → open the port), the config map, how to add a language, how to run the tests, and the architecture in one picture. Plus a real logo: an SVG mark that works at 16 px as a favicon and at 512 px in the README, in the light/dark variants the site already supports. |
 
 ## Large
 
@@ -72,6 +74,8 @@ poll) but they are the minimum.
 | --- | --- |
 | **Screen sharing** | `getDisplayMedia` plus a second track per peer; `display-capture` is already allowed in `Permissions-Policy`. Needs renegotiation, because adding a track mid-call changes the SDP. |
 | **Calls that survive a reload** | `/api/call/active` exists; the overlay has to restore the peer connections from `sessionStorage` too. |
+| **Fix "connection failed" first** | In testing the peers stayed in ICE state `new` and the call showed "не удалось соединиться". Most likely cause: only a public STUN server is configured (`limits.callStun`), so any symmetric NAT or a hairpin between two machines behind the same router cannot connect. Needs (a) a real TURN server in the config recipe, (b) the overlay printing the ICE state and the candidate pair so the failure is diagnosable, (c) a fallback to the relay when direct fails. This is the first thing to do before any of the fancy call features. |
+| **Discord-style call page** | Replace the single "room name" box with a Discord-like sidebar: a list of channels (text-like names, e.g. `general`, `games`, `afk`) that anybody can create, a "join" button per channel, a list of who is inside each channel right now, and the active call filling the rest of the page. Voice channels get a speaker icon, the number of people inside, and a green ring around avatars of people currently talking (Web Audio level meter per peer). Rooms become persistent channel records (name, created by, order) instead of free-typed names, with an admin-editable list. |
 | **Ringing when the tab is closed** | Web Push with a `call` payload, a ringtone, and an "answer" action in the notification. |
 | **Group layout** | Grid that switches to speaker view, mute-all, "raise hand", per-member volume. |
 | **Noise suppression / echo cancel** | `getUserMedia({ audio: { echoCancellation, noiseSuppression, autoGainControl } })` as toggles. |
@@ -191,7 +195,8 @@ Kept here so the list above stays honest.
 - Mentions, hashtags, tag pages, filtered post search.
 - Notifications: live long poll, per-type mutes, filters, desktop notifications, live
   unread counters for messages, notifications and friend requests.
-- Music and video library with uploads, playlists, editable titles/descriptions.
+- Music and video library with uploads, playlists, editable titles/descriptions, and
+  a "My library" tab that really shows only yours (the shared shelf is separate).
 - "Save to my library": one-click copy of somebody else's track or clip.
 - Gifts: a built-in catalogue sent from a profile, anonymous or signed, with their own
   block on the wall, a received/sent page and notifications.
@@ -200,6 +205,8 @@ Kept here so the list above stays honest.
   counter and likes.
 - Voice and video calls plus named conference rooms over WebRTC, with history.
 - Achievements, bookmarks, photo gallery, profiles with interests and moods.
+- Profile cover, calls from the profile, game preview images, a cosmetic VIP label,
+  and 23 achievements instead of 13.
 - Photo albums: named, with a cover, filled from the wall, photos outlive the album.
 - Stories: photos and clips above the feed that vanish on time, with a seen-by list.
 - One search over people, posts, comments, your own messages, communities and games,

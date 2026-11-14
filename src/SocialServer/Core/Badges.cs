@@ -43,8 +43,45 @@ namespace Social.Core
             new BadgeDef("collector",   "bookmark", false),
             new BadgeDef("chatter",     "comments", false),
             new BadgeDef("veteran",     "clock-rotate-left", false),
+
+            // photos and albums
+            new BadgeDef("first_photo", "camera", false),
+            new BadgeDef("photographer", "camera-retro", false),
+            new BadgeDef("album_maker", "folder-open", false),
+            new BadgeDef("curator",     "images", false),
+
+            // stories
+            new BadgeDef("storyteller", "circle-play", false),
+            new BadgeDef("chronicler",  "film", false),
+
+            // gifts
+            new BadgeDef("giver",       "gift", false),
+            new BadgeDef("generous",    "hand-holding-heart", false),
+            new BadgeDef("beloved",     "heart-circle-check", false),
+
+            // library and games
+            new BadgeDef("gamer",       "gamepad", false),
+            new BadgeDef("archivist",   "headphones", false),
+            new BadgeDef("cinephile",   "clapperboard", false),
+
+            // communities
+            new BadgeDef("community",   "people-roof", false),
+            new BadgeDef("organizer",   "people-group", false),
+
+            // conversation and language
+            new BadgeDef("messenger",   "paper-plane", false),
+            new BadgeDef("polyglot",    "language", false),
+
+            // one very liked post
+            new BadgeDef("spotlight",   "star", false),
+
+            // manual only: handed out by an administrator
             new BadgeDef("verified",    "circle-check", true),
-            new BadgeDef("admin_grant", "user-shield", true)
+            new BadgeDef("admin_grant", "user-shield", true),
+            new BadgeDef("founder",     "flag", true),
+            new BadgeDef("legend",      "crown", true),
+            new BadgeDef("helper",      "handshake", true),
+            new BadgeDef("joker",       "face-laugh-squint", true)
         };
 
         public static BadgeDef Find(string id)
@@ -130,6 +167,52 @@ namespace Social.Core
             if (marks >= 10) earned.Add("collector");
             if (messages >= 100) earned.Add("chatter");
             if (days >= 365) earned.Add("veteran");
+
+            // photos, albums and stories
+            List<Post> photos = store.PhotoPosts(u.Id, 0, 200);
+            int photoCount = 0;
+            int bestPost = 0;
+            for (int i = 0; i < photos.Count; i++)
+            {
+                if (!string.IsNullOrEmpty(photos[i].Image)) photoCount++;
+                if (photos[i].Likes.Count > bestPost) bestPost = photos[i].Likes.Count;
+            }
+            if (photoCount >= 1) earned.Add("first_photo");
+            if (photoCount >= 10) earned.Add("photographer");
+            int albums = store.CountAlbums(u.Id);
+            if (albums >= 1) earned.Add("album_maker");
+            if (albums >= 5) earned.Add("curator");
+            int stories = store.CountStoriesBy(u.Id);
+            if (stories >= 1) earned.Add("storyteller");
+            if (stories >= 20) earned.Add("chronicler");
+
+            // gifts
+            int giftsSent = store.CountGiftsSent(u.Id);
+            int giftsIn = store.CountGifts(u.Id);
+            if (giftsSent >= 1) earned.Add("giver");
+            if (giftsSent >= 10) earned.Add("generous");
+            if (giftsIn >= 5) earned.Add("beloved");
+
+            // library and games
+            if (store.CountMedia(u.Id, "game") >= 1) earned.Add("gamer");
+            if (store.CountMedia(u.Id, "audio") >= 10) earned.Add("archivist");
+            if (store.CountMedia(u.Id, "video") >= 5) earned.Add("cinephile");
+
+            // communities
+            int communities = store.GroupsFor(u.Id).Count;
+            if (communities >= 3) earned.Add("community");
+            if (communities >= 10) earned.Add("organizer");
+
+            // conversation and language: polyglot means the account really switched
+            // away from the site default, not that it merely has a language set
+            if (messages >= 1000) earned.Add("messenger");
+            if (!string.IsNullOrEmpty(u.Lang) &&
+                !string.Equals(u.Lang, store.DefaultLanguage, StringComparison.OrdinalIgnoreCase))
+                earned.Add("polyglot");
+
+            // a post that many people liked
+            if (bestPost >= 10) earned.Add("spotlight");
+
             return earned;
         }
 

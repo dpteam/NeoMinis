@@ -555,6 +555,8 @@ notification for every mentioned user (at most 10 per post/comment, never yourse
 | POST | `/api/media/upload` | `kind`, `fileName`, `data`, `title`, `artist`, `duration` | `{ item }` |
 | POST | `/api/media/delete` | `id` | `{ ok }` |
 | POST | `/api/media/edit` | `id`, `title`, `artist`, `description` | `{ item }` |
+| POST | `/api/game/cover` | `id`, `data` (data URL, empty clears) | `{ game }` |
+| POST | `/api/profile/cover` | `data` (data URL, empty clears) | `{ cover }` |
 | POST | `/api/media/save` | `id` | `{ item }` (copy on your own shelf) |
 | GET | `/api/playlists` | `user` (optional) | `{ playlists[{ id, name, count, mine, created, updated }] }` |
 | GET | `/api/playlist` | `id` | `{ id, name, items[] }` |
@@ -563,8 +565,10 @@ notification for every mentioned user (at most 10 per post/comment, never yourse
 | POST | `/api/playlist/item` | `id`, `media`, `add` | `{ ok }` |
 
 Every account has a music and a video shelf. `GET /api/media` without `user`
-returns the shared shelf (everything, with `mine` telling what is yours); with
-`user` it returns that person's library, and a private profile hides it.
+returns the shared shelf (everything, with `mine` telling what is yours and
+`ownerName` saying whose it is); with `user` it returns that person's library, and a
+private profile hides it. The SPA's "My library" tab always passes `user`, so the
+page never mixes your files with everybody else's.
 `/api/media/edit` renames a track (`title`, `artist`) or a clip (`title`,
 `description`) and is owner-only; games are edited through `/api/game/edit`.
 Uploads are data URLs of real audio/video containers — `limits.maxAudioKB` /

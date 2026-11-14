@@ -42,6 +42,7 @@ namespace Social.Web
             b.Prop("url", m.Url);
             b.Prop("size", m.Size);
             b.Prop("plays", m.Plays);
+            b.Prop("cover", m.Cover);
             b.Prop("likes", m.Likes.Count);
             b.Prop("liked", viewer != null && m.Likes.Contains(viewer.Id));
             b.Prop("created", Util.Iso(m.Created));
@@ -135,6 +136,37 @@ namespace Social.Web
             JsonBuilder b = new JsonBuilder(1024);
             b.BeginObject();
             b.Name("game").Raw(GameJson(item, ctx.User));
+            SendOk(ctx, b);
+        }
+
+        /// <summary>Uploads or clears a game's preview image. Owner (or staff) only.</summary>
+        private void HandleGameCover(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            MediaItem m = RequireGame(id);
+            if (m.Owner != ctx.User.Id && !ctx.User.IsModerator)
+                throw new ApiException(403, "not-mine", "That is not your game");
+
+            string data = BodyStr(ctx, "data", "");
+            if (data.Length == 0)
+            {
+                string previous = m.Cover;
+                _store.SetGameCover(id, ctx.User.Id, "");
+                if (!string.IsNullOrEmpty(previous)) _media.Delete(previous);
+            }
+            else
+            {
+                string err;
+                string url = _media.SaveDataUrl(data, "avatar", _cfg.MaxAvatarKB * 2, out err);
+                if (url == null) throw new ApiException(400, err, "Preview could not be saved");
+                string old = m.Cover;
+                _store.SetGameCover(id, ctx.User.Id, url);
+                if (!string.IsNullOrEmpty(old)) _media.Delete(old);
+            }
+
+            JsonBuilder b = new JsonBuilder(512);
+            b.BeginObject();
+            b.Name("game").Raw(GameJson(m, ctx.User));
             SendOk(ctx, b);
         }
 

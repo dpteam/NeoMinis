@@ -451,7 +451,7 @@
       if (oldBody) atBottom = (oldBody.scrollHeight - oldBody.scrollTop - oldBody.clientHeight) < 60;
 
       var body = '<div class="chat-head">' + UI.avatar(other, 34) +
-        '<div class="chat-head-main"><div class="name">' + UI.esc(other.displayName) + '</div>' +
+        '<div class="chat-head-main"><div class="name">' + UI.esc(other.displayName) + ' ' + UI.vipBadge(other) + '</div>' +
         '<div class="tiny muted" id="chat-presence">' + (other.online ? T('profile.online') : '@' + UI.esc(other.username)) + '</div>' +
         '<div class="tiny muted chat-read hidden" id="chat-read"></div></div>' +
         '<button class="btn btn-sm" id="chat-call-audio" title="' + UI.attr(T('calls.audioCall')) + '">' + UI.icon('phone') + '</button>' +
@@ -2236,10 +2236,20 @@
 
       var title = isVideo ? T('media.videoTitle') : T('media.musicTitle');
       var iconName = isVideo ? 'film' : 'music';
+      // "mine" is the default: the page used to say "my library" while showing
+      // everybody's files, which is exactly as confusing as it sounds
+      var scope = App.qs('scope') === 'all' ? 'all' : 'mine';
+      var me = state.user || {};
 
       main.innerHTML = '<div class="card"><div class="card-h">' + UI.icon(iconName) + ' ' + title +
         '<span class="right"><button class="btn btn-xs btn-primary" id="media-upload">' +
         UI.icon('upload') + ' ' + T('media.upload') + '</button></span></div>' +
+        '<div class="card-b" style="padding:8px 10px 0"><div class="feed-tabs" style="margin:0">' +
+        '<a class="tab2' + (scope === 'mine' ? ' active' : '') + '" href="#/' +
+          (isVideo ? 'video' : 'music') + '">' + T('media.mine') + '</a>' +
+        '<a class="tab2' + (scope === 'all' ? ' active' : '') + '" href="#/' +
+          (isVideo ? 'video' : 'music') + '?scope=all">' + T('media.everyone') + '</a>' +
+        '</div></div>' +
         '<div class="card-b"><div class="tiny muted" style="margin-bottom:8px">' +
         UI.esc(T('media.hint', maxKb, maxFiles)) + '</div>' +
         '<input type="file" id="media-file" class="hidden" accept="' +
@@ -2422,7 +2432,8 @@
           html += '<div class="media-row" data-id="' + m.id + '">' +
             '<div class="media-main">' +
             '<div class="media-title">' + UI.esc(m.title || T('media.untitled')) +
-            (m.artist ? ' <span class="media-artist">— ' + UI.esc(m.artist) + '</span>' : '') + '</div>' +
+            (m.artist ? ' <span class="media-artist">— ' + UI.esc(m.artist) + '</span>' : '') +
+            (scope === 'all' && !m.mine && m.ownerName ? ' <span class="tiny muted">· ' + UI.esc(m.ownerName) + '</span>' : '') + '</div>' +
             '<div class="tiny muted">' + UI.bytes(m.size || 0) +
             (m.duration ? ' · ' + fmtSec(m.duration) : '') + ' · ' + UI.timeAgo(m.created) + '</div>' +
             (m.description ? '<div class="media-desc tiny">' + UI.nl2br(UI.esc(m.description)) + '</div>' : '') +
@@ -2496,7 +2507,11 @@
       }
 
       function load() {
-        Api.request('GET', '/api/media?kind=' + kind, null, function (err, data) {
+        var url = '/api/media?kind=' + kind;
+        // "mine" must ask for this account explicitly: without `user` the server
+        // returns the shared shelf of everybody
+        if (scope !== 'all' && me.id) url += '&user=' + encodeURIComponent(me.id);
+        Api.request('GET', url, null, function (err, data) {
           if (err) { list.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
           items = (data && data.items) || [];
           render();
@@ -3142,6 +3157,8 @@
           '<button class="btn btn-sm" id="au-revoke-mod"' + (canRevokeMod ? '' : ' disabled') + '>' + UI.icon('gavel') + ' ' + T('admin.revokeMod') + '</button>' +
           '<button class="btn btn-sm' + (u.canGames ? '' : ' btn-ok') + '" id="au-games">' + UI.icon('gamepad') + ' ' +
             (u.canGames ? T('admin.forbidGames') : T('admin.allowGames')) + '</button>' +
+          '<button class="btn btn-sm' + (u.vip ? '' : ' btn-ok') + '" id="au-vip">' + UI.icon('crown') + ' ' +
+            (u.vip ? T('admin.removeVip') : T('admin.makeVip')) + '</button>' +
           '</div>';
         if (roleLocked) body += '<div class="hint">' + T('admin.roleLocked') + '</div>';
         else if (selfBlocked) body += '<div class="hint">' + T('admin.selfDemoteBlocked') + '</div>';
@@ -3243,6 +3260,11 @@
       var gmBtn = box.querySelector('#au-games');
       if (gmBtn) gmBtn.addEventListener('click', function () {
         send('allow-games', { on: !u.canGames });
+      });
+
+      var vipBtn = box.querySelector('#au-vip');
+      if (vipBtn) vipBtn.addEventListener('click', function () {
+        send('vip', { on: !u.vip });
       });
 
       var warn = box.querySelector('#au-warn');

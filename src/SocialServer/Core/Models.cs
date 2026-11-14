@@ -57,6 +57,12 @@ namespace Social.Core
         // per-account privilege: may upload Flash games (admins always may)
         public bool CanGames;
 
+        // cosmetic, like the old VK joke: a golden label and nothing else
+        public bool Vip;
+
+        // profile cover strip; empty = the default gradient
+        public string Cover = "";
+
         public bool IsAdmin { get { return Role == "admin"; } }
         public bool IsModerator { get { return Role == "admin" || Role == "moderator"; } }
         public bool IsBannedNow { get { return Banned && (BannedUntil == DateTime.MinValue || BannedUntil > DateTime.UtcNow); } }
@@ -132,6 +138,7 @@ namespace Social.Core
         public string Description = "";
         public int Plays;
         public List<long> Likes = new List<long>();
+        public string Cover = "";       // preview image, empty = the gamepad placeholder
     }
 
     /// <summary>
