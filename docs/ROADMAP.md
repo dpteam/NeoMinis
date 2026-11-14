@@ -1,44 +1,99 @@
 # Roadmap
 
-Ideas that are not built yet, roughly in the order they make sense. Nothing here
-is a promise — it is a parking lot so good ideas do not get lost.
+Ideas that are not built yet, ordered by how much work they are: a quick win is a
+day, medium is a few days, large is a sprint. Nothing here is a promise — it is a
+parking lot so good ideas do not get lost.
 
-## Next up
+## Quick wins
+
+Small, self-contained, no new storage.
+
+| Idea | Notes |
+| --- | --- |
+| **Call from the profile** | The chat header already has phone and camera buttons; the profile only has "Message" and "Remove friend". Add the same two buttons for friends (and keep the "can they be called" check in one place). ~30 lines. |
+| **VIP badge** | Cosmetic only, exactly like the old VK joke: a `vip` flag on the user, a golden label next to the name on the wall, in the chat and in comments, granted and revoked by an admin in Admin → Users. Grants nothing. |
+| **Game previews** | `MediaItem` already has a cover slot for albums; games need their own `cover` image (upload, `maxAvatarKB` limits, shown in the shelf grid and on the game page instead of the gamepad placeholder). |
+| **Profile cover upload** | `.profile-cover` is an empty div today. Add `POST /api/profile/cover`, store under `/media/avatars/`, crop with `object-fit`, fall back to the gradient. |
+| **More achievements** | Pure data: `Badges.All` has 13 entries and the granting rules are a switch. Add ~20: first photo, first album, first story, first gift sent/received, first game uploaded, 100 messages, 10 communities, night owl (posting after 3am), polyglot (changed language), collector of gifts, and a few manual ones for admins. |
+| **Polish + finish the translations** | `i18n.t()` already falls back `lang → en → ru → key`, so a missing key is never a raw key on screen. What is missing is content: `uk` and `lt` only have ~15 keys each (they fall back to English), and there is no `pl` at all. Add `pl`, then fill `uk`/`lt` from the `ru` text. Mechanical but long; needs a native eye for the funnier strings. |
+
+## Medium
+
+Needs a new field or a new check in several places, but no new subsystem.
+
+| Idea | Notes |
+| --- | --- |
+| **Privacy settings** | Today only two knobs exist: profile visibility (`public`/`friends`/`private`) and "hide online". Extend to per-area switches on the user: who may write first, who may call, who sees friends, who sees gifts, who sees albums, who may invite to a community, who sees the wall. Store as one flat string (`privacy.write=friends,privacy.call=all`), check it in `CanMessageUser`, `HandleCallStart`, `CanViewProfile` and the gift/album endpoints, and put the switches in Settings. Default everything to `all` so nothing changes for existing accounts. |
+| **Guest / demo / kiosk mode** | Today every `/api/` call needs a session. Add a read-only anonymous viewer: a `[site] guestMode` flag (plus `guestPassword` for kiosk), a `viewer = null` path through the read endpoints (feed, post, profile, group, tags, search, media, games), and a hard 403 on every write. Kiosk variant: no login form, a "demo" banner, auto-return to the feed after a few idle minutes, no admin entry. Careful with the rate limiter and with `UserView` (an anonymous viewer must not see e-mails or IP hashes). |
+| **Janitors (granular moderator rights)** | Right now `moderator` is all-or-nothing. Give a user a set of permission flags (`canDeletePosts`, `canCloseReports`, `canWarn`, `canMuteInChat`, `canSeeFeedback`) and check those instead of `IsModerator` in the admin endpoints. A "janitor" is just a user with two of them. Admin → Users gets a checkbox panel. Existing moderators keep every flag. |
+| **Profile rating** | The old-VK joke: a percentage from how filled the profile is (avatar, cover, bio, city, birthday, status, interests, first post) up to 100%, then the achievements add on top as a separate counter. Show it on the profile as a small meter with a tooltip listing what is missing. Pure computation, no storage — derived from the user row and the badge list. |
+
+## Large
+
+New subsystem or a real chunk of work.
+
+### File transfer in DMs (a Send-Anywhere / TransFerry for our own site)
+
+`C:\Servers\WebServers\send.dartpower.xyz` already does this and is the reference:
+a three-tier transfer (WebRTC P2P → WebSocket relay → plain HTTP(S) PUT/GET), an
+8-digit code to pair two people, 256 KB chunks, SHA-256 checked on both sides, rooms
+with a TTL, and a relay that only ever stores ciphertext. What it does not do is tie
+into accounts, which is exactly what we need.
+
+Our version, as a panel inside a conversation:
+
+1. **Pairing.** The sender starts a transfer, gets an 8-digit code (valid ~30
+   minutes), the recipient types it in the chat. **Friends only** — a stranger can
+   never receive, so the code alone is not enough.
+2. **Consent before a byte moves.** The recipient sees the file name, size, type and
+   the sender, and can accept or refuse. Refusing tells the sender, and nothing is
+   ever written to disk.
+3. **No extension limits.** The EXE/APK ban exists because files live on our origin
+   and get served back; a transfer only moves bytes between two browsers, so the
+   blocklist does not apply. Files are hashed, never executed, never stored in
+   `data/media/` for more than the transfer's lifetime.
+4. **Three tiers, same as TransFerry.** Direct WebRTC when both sides are reachable,
+   the WebSocket relay when they are not, plain chunked PUT/GET when even WebSocket
+   is blocked by a proxy. The client picks automatically and says which one it uses.
+5. **Relay mode for NAT hairpin.** If two people sit behind the same NAT (or the
+   same host publishes an app), the browser cannot connect to its own public address.
+   That is the DPTDOOM2 problem: force the transfer through the relay when the
+   detected public address matches, or let the user pick "relay only".
+6. **Housekeeping.** Rooms expire, the relay has a disk cap (`maxRelayBytes`) and a
+   per-user concurrency cap; a finished transfer leaves a normal message in the chat
+   with the file name, size and hash.
 
 ### Calls like Telegram / Discord
 
-The current calls work (1:1 and named rooms, WebRTC media, signalling over the
-long poll) but they are the minimum. To reach Telegram/Discord level:
+The current calls work (1:1 and named rooms, WebRTC media, signalling over the long
+poll) but they are the minimum.
 
 | Piece | Notes |
 | --- | --- |
-| **Screen sharing** | `getDisplayMedia` plus a second track per peer; the button already exists in `Permissions-Policy` (`display-capture`). Needs renegotiation, because adding a track mid-call changes the SDP. |
-| **Calls that survive a reload** | Store the call in `sessionStorage` and rejoin on `CallUI.init` — half done (`/api/call/active` exists), but the overlay has to restore the peer connections too. |
-| **Ringing when the tab is closed** | Web Push (see below) with a `call` payload, plus a ringtone and an "answer" action in the notification. |
-| **Group layout** | A grid that switches to speaker view when somebody is loud, mute-all, "raise hand", per-member volume. |
-| **Noise suppression / echo cancel** | `getUserMedia({ audio: { echoCancellation, noiseSuppression, autoGainControl } })`, exposed as a toggle. |
+| **Screen sharing** | `getDisplayMedia` plus a second track per peer; `display-capture` is already allowed in `Permissions-Policy`. Needs renegotiation, because adding a track mid-call changes the SDP. |
+| **Calls that survive a reload** | `/api/call/active` exists; the overlay has to restore the peer connections from `sessionStorage` too. |
+| **Ringing when the tab is closed** | Web Push with a `call` payload, a ringtone, and an "answer" action in the notification. |
+| **Group layout** | Grid that switches to speaker view, mute-all, "raise hand", per-member volume. |
+| **Noise suppression / echo cancel** | `getUserMedia({ audio: { echoCancellation, noiseSuppression, autoGainControl } })` as toggles. |
 | **Call link** | `#/call/<room>` with a copy button, so a room can be pasted into a chat. |
-| **Recording** | `MediaRecorder` over a mixed stream, saved to the media library. Needs consent from every participant and a visible "recording" badge. |
-| **Push-to-talk and per-app volume** | Keyboard hold to talk, ducking other audio. |
-| **TURN server** | Without it, symmetric NATs cannot connect. `limits.callStun` already accepts a comma-separated list, so adding a TURN URL with credentials is a config change plus a documented `coturn` recipe. |
-| **Call quality stats** | `pc.getStats()` → bitrate, packet loss and RTT in the overlay, so "it sounds bad" has a number. |
+| **Recording** | `MediaRecorder` over a mixed stream into the media library, with a visible "recording" badge and consent from every participant. |
+| **TURN server** | Symmetric NATs cannot connect without it. `limits.callStun` already takes a list, so this is a config change plus a documented `coturn` recipe. |
+| **Call quality stats** | `pc.getStats()` → bitrate, packet loss, RTT in the overlay, so "it sounds bad" has a number. |
 
 ### Applications API (the big one)
 
 The site should host small third-party apps the way VK and Telegram do, and the
 DartPower mini-games should become the first real examples.
 
-**Permission model** (partly built: `.swf` uploads already need `canGames`, granted
-in Admin → Users; admins always may):
+**Permission model** (partly built: `.swf` uploads already need `canGames`, granted in
+Admin → Users; admins always may):
 
 1. An app is registered by a developer and gets a `clientId` + secret.
 2. The app asks for scopes (`profile`, `wall.post`, `messages.read`, `storage`).
 3. The owner approves them on a consent screen; tokens can be revoked per app.
-4. **HTML apps can only be published by administrators** — they run on our origin,
-   so that is the only safe rule. `.swf` games are sandboxed in an iframe already
-   and only need the `canGames` flag.
-
-**What the API needs:**
+4. **HTML apps can only be published by administrators** — they run on our origin, so
+   that is the only safe rule. `.swf` games are sandboxed in an iframe already and
+   only need the `canGames` flag.
 
 | Endpoint | Purpose |
 | --- | --- |
@@ -46,49 +101,47 @@ in Admin → Users; admins always may):
 | `GET /api/apps` | public catalogue, with install counters |
 | `POST /api/apps/token` | exchange a one-time code for an access token |
 | `POST /api/apps/revoke` | the user drops an app |
-| `GET /api/apps/longpoll` | VK-style `LongPoll`: one blocking request that returns `{ts, updates[]}` — the same `EnterWait` budget the notifications use |
+| `GET /api/apps/longpoll` | VK-style `LongPoll`: one blocking request returning `{ts, updates[]}` — same `EnterWait` budget as notifications |
 | `POST /api/apps/storage` | per-app key/value storage, quota per app |
 | `POST /api/apps/score` | leaderboards for games |
 
-**Migration of the existing mini-games** (`C:\Servers\WebServers\`): `joker`,
-`dilema`, `dicer`, `pets`, `soccer`, `space`, `spore` are Node + SQLite. The plan is
-one port at a time: read their `server.js` routes, keep the game logic, and replace
-`fetch('/api/…')` with our own endpoints (`/api/apps/…` + `longpoll`). `spore` is
-already a static Flash/HTML bundle and is the easiest first move; `dicer` and `pets`
-carry the most state (inventory, levels) and will need a per-app storage table.
+**Migration of the existing mini-games** (`C:\Servers\WebServers\`): `joker`, `dilema`,
+`dicer`, `pets`, `soccer`, `space`, `spore` are Node + SQLite. One port at a time: read
+their `server.js` routes, keep the game logic, replace `fetch('/api/…')` with our
+endpoints. `spore` is already a static bundle and is the easiest first move; `dicer`
+and `pets` carry the most state (inventory, levels) and need per-app storage.
 
 ### Push notifications
 
-Service Worker + Web Push so likes and messages arrive with the tab closed, on top
-of the current long poll. Needs VAPID keys in `config.ini`, a subscription table,
-and a "notifications" switch in Settings.
+Service Worker + Web Push so likes and messages arrive with the tab closed, on top of
+the current long poll. Needs VAPID keys in `config.ini`, a subscription table, and a
+switch in Settings.
 
 ## Later
 
-- **Import from VK GDPR dumps.** A user can request their data from VK and get a
+- **Import from VK GDPR dumps.** A user can request their data from VK and gets a
   folder of JSON/HTML. Import posts, photos, friends and messages from that dump —
   much more reliable than scraping, and legal. Same shape as the DeadVK importer:
-  a `--import-vk <dir>` command plus a dry-run report.
-- **Two-factor authentication (TOTP)** as an option per account, with recovery codes.
-- **WebDAV/S3 offload** of `/media/` for large instances, so the JSON tables stay
-  small and files live elsewhere.
-- **Full offline PWA**: cache the shell, queue posts while offline, sync on reconnect.
-- **Video/audio transcoding** on upload (ffmpeg optional) to normalise everything to
-  one container and generate thumbnails.
+  `--import-vk <dir>` plus a dry-run report.
+- **Two-factor authentication (TOTP)** per account, with recovery codes.
+- **WebDAV/S3 offload** of `/media/` for large instances.
+- **Full offline PWA**: cache the shell, queue posts offline, sync on reconnect.
+- **Transcoding on upload** (optional ffmpeg) to normalise containers and build
+  thumbnails.
 
 ## Ideas per feature
 
 Small things that would make what already exists noticeably better.
 
 **Feed and posts**
-- Edit history ("edited 3 times", show the old versions to the author).
+- Edit history ("edited 3 times", old versions visible to the author).
 - "Show less like this" per author, remembered per user.
 - Draft autosave in `localStorage` so a closed tab does not lose text.
-- Post preview card for external links (title + description, no images).
+- Link preview cards (title + description, no images).
 
 **Messages**
 - Search inside one conversation (the global search already finds them).
-- Message pins inside a chat.
+- Pinned messages inside a chat.
 - "Delete for everyone" with a time window.
 - Scheduled messages ("send at 9:00").
 - Sticker packs next to the emoji picker.
@@ -101,7 +154,7 @@ Small things that would make what already exists noticeably better.
 **Profiles and albums**
 - Drag photos between albums.
 - Album sharing with a token link for people without an account.
-- Profile covers (the cover strip is there but has no upload).
+- Profile covers (see the quick wins above).
 
 **Games**
 - Comments under a game, and a "plays today" counter.
@@ -115,14 +168,12 @@ Small things that would make what already exists noticeably better.
 
 **Admin and operations**
 - Bulk actions in the user list (ban several at once).
-- A "storage" panel: biggest files, orphaned media, files without a record.
+- A "storage" panel: biggest files, orphaned media, records without a file.
 - Per-user quota overview.
-- Scheduled maintenance mode with a countdown banner.
+- Maintenance mode with a countdown banner.
 
 **Everywhere**
 - Keyboard shortcuts (`g f` for feed, `/` for search) with a cheat sheet.
-- Dark/OLED polish: the code highlight and the call overlay still assume the light
-  palette in a couple of places.
 - Accessibility: focus rings on every custom button, `aria-live` for toasts.
 
 ## Done
@@ -132,18 +183,19 @@ Kept here so the list above stays honest.
 - Feed with images, video links, polls, reactions, likes, reposts, pins, edits.
 - Drafts and scheduled publication.
 - Private messages: live delivery, typing, read receipts, replies, reactions,
-  forwarding, search, pictures/GIFs, albums, voice messages, clips, file attachments.
+  forwarding, search, pictures/GIFs, albums, voice messages, clips, file attachments
+  with an executable blocklist.
 - Groups with editable settings, pictures and member management.
-- Communities: owner / editor / member roles, join requests for closed groups and
-  a moderation queue ("members post, editors approve").
+- Communities: owner / editor / member roles, join requests for closed groups and a
+  moderation queue ("members post, editors approve").
 - Mentions, hashtags, tag pages, filtered post search.
-- Notifications: live long poll, per-type mutes, filters, desktop notifications,
-  live unread counters for messages, notifications and friend requests.
+- Notifications: live long poll, per-type mutes, filters, desktop notifications, live
+  unread counters for messages, notifications and friend requests.
 - Music and video library with uploads, playlists, editable titles/descriptions.
 - "Save to my library": one-click copy of somebody else's track or clip.
-- Gifts: a built-in catalogue sent from a profile, anonymous or signed, with
-  their own block on the wall, a received/sent page and notifications.
-- Flash games: upload `.swf` (admins and approved authors only), play it through a
+- Gifts: a built-in catalogue sent from a profile, anonymous or signed, with their own
+  block on the wall, a received/sent page and notifications.
+- Flash games: upload `.swf` (admins and approved authors only), played through a
   self-hosted Ruffle build inside a sandboxed iframe, with a shelf, search, plays
   counter and likes.
 - Voice and video calls plus named conference rooms over WebRTC, with history.
@@ -152,6 +204,6 @@ Kept here so the list above stays honest.
 - Stories: photos and clips above the feed that vanish on time, with a seen-by list.
 - One search over people, posts, comments, your own messages, communities and games,
   with kind tabs and date/author filters.
-- Mobile layout: chip rail navigation, stacked messenger, finger-sized controls.
+- Mobile layout: chip-rail navigation, stacked messenger, finger-sized controls.
 - Admin board: users, roles, badges, reports, logs, AI panel, settings, backups.
 - DeadVK import, operator CLI, self-test, CI script.
