@@ -1,4 +1,4 @@
-/* ==========================================================================
+﻿/* ==========================================================================
    Social - a small self-hosted social network
    Visual language: Facebook/VK ca. 2008 chrome (blue gradients, tiny type,
    squared blocks) rebuilt with modern spacing, soft shadows and easing.
@@ -1707,3 +1707,57 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .call-row:last-child { border-bottom: 0; }
 .call-row > i { color: var(--accent); width: 16px; text-align: center; }
 .call-row-main { min-width: 0; }
+
+/* ------------------------------------------------------------------ gifts */
+
+.gift-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, 74px);
+  gap: 8px; margin-bottom: 10px;
+}
+.gift-tile {
+  position: relative; border-radius: 10px; padding: 9px 4px 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  background: var(--panel-2); border: 1px solid var(--border); overflow: hidden;
+}
+.gift-tile::before,
+.gift-badge::before,
+.gift-pick::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: var(--gift-color, var(--accent)); opacity: .13; pointer-events: none;
+}
+.gift-icon { position: relative; color: var(--gift-color, var(--accent)); font-size: 21px; line-height: 1; }
+.gift-label { position: relative; font-size: 10px; color: var(--muted); text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+.gift-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-bottom: 1px solid var(--border);
+}
+.gift-row:last-child { border-bottom: 0; }
+.gift-badge {
+  position: relative; flex: 0 0 auto; width: 38px; height: 38px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel-2); color: var(--gift-color, var(--accent)); font-size: 16px;
+}
+.gift-badge > i { position: relative; }
+.gift-row-main { flex: 1; min-width: 0; }
+.gift-row-head { font-size: 12.5px; }
+.gift-msg { font-size: 12.5px; margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
+
+.gift-picker {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px; margin-bottom: 12px;
+}
+.gift-pick {
+  position: relative; height: 44px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--field);
+  color: var(--gift-color, var(--accent)); font-size: 17px;
+}
+.gift-pick > i { position: relative; }
+.gift-pick:hover { background: var(--hover); }
+.gift-pick.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+
+.gift-badge-sm {
+  flex: 0 0 auto; width: 32px; height: 32px; border-radius: 8px; font-size: 14px;
+}

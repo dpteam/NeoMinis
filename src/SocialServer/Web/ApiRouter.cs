@@ -48,6 +48,7 @@ namespace Social.Web
         private readonly Dictionary<string, ActionWindow> _actions = new Dictionary<string, ActionWindow>(StringComparer.Ordinal);
         private readonly Dictionary<string, ActionWindow> _registerRate = new Dictionary<string, ActionWindow>(StringComparer.Ordinal);
         private readonly Dictionary<string, ActionWindow> _feedbackRate = new Dictionary<string, ActionWindow>(StringComparer.Ordinal);
+        private readonly Dictionary<string, ActionWindow> _giftRate = new Dictionary<string, ActionWindow>(StringComparer.Ordinal);
         private readonly object _actionLock = new object();
         private static readonly DateTime StartedUtc = DateTime.UtcNow;
 
@@ -207,7 +208,10 @@ namespace Social.Web
                 .Prop("maxVideoFiles", _cfg.MaxVideoFiles)
                 .Prop("feedbackPerHour", _cfg.FeedbackPerHour)
                 .Prop("maxCallMembers", _cfg.MaxCallMembers)
-                .Prop("callStun", _cfg.CallStun);
+                .Prop("callStun", _cfg.CallStun)
+                .Prop("giftPerHour", _cfg.GiftPerHour)
+                .Prop("maxGiftMessage", _cfg.MaxGiftMessage)
+                .Prop("giftsEnabled", _cfg.GiftsEnabled);
             b.Prop("maxStatusLength", _cfg.MaxStatusLength);
             b.Prop("maxBioLength", _cfg.MaxBioLength);
             b.Prop("maxNameLength", _cfg.MaxNameLength);
@@ -229,6 +233,18 @@ namespace Social.Web
                 b.Prop("id", Badges.All[i].Id);
                 b.Prop("icon", Badges.All[i].Icon);
                 b.Prop("manual", Badges.All[i].Manual);
+                b.EndObject();
+            }
+            b.EndArray();
+            // gift catalogue: key -> icon/colour, so the picker needs no extra request
+            b.Name("gifts").BeginArray();
+            List<GiftKind> giftKinds = GiftCatalog.List();
+            for (int i = 0; i < giftKinds.Count; i++)
+            {
+                b.BeginObject();
+                b.Prop("key", giftKinds[i].Key);
+                b.Prop("icon", giftKinds[i].Icon);
+                b.Prop("color", giftKinds[i].Color);
                 b.EndObject();
             }
             b.EndArray();
@@ -653,6 +669,11 @@ namespace Social.Web
             if (r == "call/wait") { RequireMethod(m, "GET"); HandleCallWait(ctx); return; }
             if (r == "call/active") { RequireMethod(m, "GET"); HandleCallActive(ctx); return; }
             if (r == "call/history") { RequireMethod(m, "GET"); HandleCallHistory(ctx); return; }
+            if (r == "gifts") { RequireMethod(m, "GET"); HandleGifts(ctx); return; }
+            if (r == "gifts/sent") { RequireMethod(m, "GET"); HandleGiftsSent(ctx); return; }
+            if (r == "gifts/send") { RequireMethod(m, "POST"); HandleGiftSend(ctx); return; }
+            if (r == "gifts/seen") { RequireMethod(m, "POST"); HandleGiftSeen(ctx); return; }
+            if (r == "gifts/delete") { RequireMethod(m, "POST"); HandleGiftDelete(ctx); return; }
             if (r == "friends") { RequireMethod(m, "GET"); HandleFriends(ctx); return; }
             if (r == "friend") { RequireMethod(m, "POST"); HandleFriendAction(ctx); return; }
             if (r == "messages/threads") { RequireMethod(m, "GET"); HandleThreads(ctx); return; }

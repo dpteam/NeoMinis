@@ -340,6 +340,8 @@ var App = (function () {
     html += side('#/music', 'music', T('nav.music'), 'music');
     html += side('#/video', 'film', T('nav.video'), 'video');
     html += side('#/calls', 'phone', T('nav.calls'), 'calls');
+    if (!App.state.site || App.state.site.giftsEnabled !== false)
+      html += side('#/gifts', 'gift', T('nav.gifts'), 'gifts');
     html += '<div class="side-sep"></div>';
     html += side('#/profile/' + u.id, 'id-card', T('nav.profile'), 'profile');
     html += side('#/settings', 'gear', T('nav.settings'), 'settings');
@@ -2063,6 +2065,7 @@ var App = (function () {
         '<div class="stat-card"><b>' + (u.posts || 0) + '</b><span>' + T('profile.posts') + '</span></div>' +
         '<div class="stat-card"><b>' + (u.likes || 0) + '</b><span>' + T('profile.likes') + '</span></div></div>' +
         '<table class="info-table">' + info + '</table></div></div>';
+      if (window.GiftUI) html += GiftUI.cardHtml(u, data);
       html += badgesCard(u.badges, isSelf);
       var photoList = data.photos || [];
       if (photoList.length) {
@@ -2095,6 +2098,7 @@ var App = (function () {
       html += '</div>';
       main.innerHTML = html;
       bindFriendActions(main);
+      if (window.GiftUI) GiftUI.bind(main);
       var cells = main.querySelectorAll('.photo-cell');
       for (var ci = 0; ci < cells.length; ci++) {
         cells[ci].addEventListener('click', function () { UI.imageModal(this.getAttribute('data-full')); });

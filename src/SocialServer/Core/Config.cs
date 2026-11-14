@@ -153,6 +153,10 @@ namespace Social.Core
         // anonymous feedback to the operators
         public int FeedbackPerHour = 5;
 
+        // gifts people send each other
+        public int GiftPerHour = 30;
+        public int MaxGiftMessage = 300;
+
         // voice and video calls
         public int MaxCallMembers = 8;
         // comma separated ICE servers; empty = LAN only, no external lookups
@@ -199,6 +203,8 @@ namespace Social.Core
         // long-poll notifications: on/off and how long a single wait may block
         public bool LiveNotifications = true;
         public int NotifyWaitSec = 20;
+        // the gift shop on profiles
+        public bool GiftsEnabled = true;
 
         public bool Degraded;
         public string DegradedReason = "";
@@ -445,6 +451,8 @@ namespace Social.Core
                     else if (key == "maxvoicesec") MaxVoiceSec = Int(val, MaxVoiceSec);
                     else if (key == "maxfilekb") MaxFileKB = Int(val, MaxFileKB);
                     else if (key == "feedbackperhour") FeedbackPerHour = Int(val, FeedbackPerHour);
+                    else if (key == "giftperhour") GiftPerHour = Int(val, GiftPerHour);
+                    else if (key == "maxgiftmessage") MaxGiftMessage = Int(val, MaxGiftMessage);
                     else if (key == "maxcallmembers") MaxCallMembers = Int(val, MaxCallMembers);
                     else if (key == "callstun") CallStun = val;
                     else if (key == "maxaudiokb") MaxAudioKB = Int(val, MaxAudioKB);
@@ -489,6 +497,7 @@ namespace Social.Core
                     else if (key == "allowsounds") AllowSounds = Bool(val, AllowSounds);
                     else if (key == "livenotifications") LiveNotifications = Bool(val, LiveNotifications);
                     else if (key == "notifywaitsec") NotifyWaitSec = Int(val, NotifyWaitSec);
+                    else if (key == "giftsenabled") GiftsEnabled = Bool(val, GiftsEnabled);
                     break;
             }
         }
@@ -517,6 +526,9 @@ namespace Social.Core
             if (NotifyWaitSec > 25) NotifyWaitSec = 25;
             if (MaxAvatarKB < 16) MaxAvatarKB = 16;
             if (MaxPostImageKB < 64) MaxPostImageKB = 64;
+            if (GiftPerHour < 0) GiftPerHour = 0;
+            if (MaxGiftMessage < 0) MaxGiftMessage = 0;
+            if (MaxGiftMessage > 1000) MaxGiftMessage = 1000;
             if (BackupKeep < 1) BackupKeep = 1;
             if (SaveDebounceMs < 100) SaveDebounceMs = 100;
             if (string.IsNullOrEmpty(CookieName)) CookieName = "sid";

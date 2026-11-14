@@ -529,6 +529,54 @@ async function main() {
   await alice.call('POST', '/api/call/leave', { id: roomId });
   await bob.call('POST', '/api/call/leave', { id: roomId });
 
+  // ---- gifts
+  const giftSent = await alice.call('POST', '/api/gifts/send', {
+    to: bob.user.id, kind: 'heart', message: 'for the test suite'
+  });
+  ok('gift sent', giftSent.status === 200 && giftSent.data.gift.kind === 'heart' &&
+    giftSent.data.gift.from && giftSent.data.gift.from.id === alice.user.id,
+    JSON.stringify(giftSent.data && giftSent.data.gift));
+  const giftId = giftSent.data && giftSent.data.gift && giftSent.data.gift.id;
+
+  const bobGifts = await bob.call('GET', '/api/gifts');
+  ok('recipient sees the gift', bobGifts.status === 200 && bobGifts.data.total === 1 &&
+    bobGifts.data.gifts.some(g => g.id === giftId && g.message === 'for the test suite'),
+    JSON.stringify(bobGifts.data));
+  ok('gift is unseen until opened', bobGifts.data.unseen === 1, String(bobGifts.data.unseen));
+
+  const giftNotif = await bob.call('GET', '/api/notifications?limit=20');
+  ok('gift shows up in notifications',
+    (giftNotif.data.notifications || []).some(n => n.type === 'gift' && n.actor && n.actor.id === alice.user.id), '');
+
+  const sentList = await alice.call('GET', '/api/gifts/sent');
+  ok('sender sees it in "sent"', sentList.data.gifts.some(g => g.id === giftId), '');
+
+  const anonGift = await alice.call('POST', '/api/gifts/send', {
+    to: bob.user.id, kind: 'cake', anonymous: true, message: 'secret admirer'
+  });
+  ok('anonymous gift sent', anonGift.status === 200 && anonGift.data.gift.anonymous === true,
+    String(anonGift.status));
+  const bobGifts2 = await bob.call('GET', '/api/gifts');
+  const anonRow = (bobGifts2.data.gifts || []).filter(g => g.anonymous)[0];
+  ok('anonymous gift hides the sender', !!anonRow && anonRow.from === null,
+    JSON.stringify(anonRow && anonRow.from));
+
+  const seen = await bob.call('POST', '/api/gifts/seen', { id: 0 });
+  ok('gifts marked seen', seen.status === 200 && seen.data.unseen === 0, String(seen.data.unseen));
+
+  const badGift = await alice.call('POST', '/api/gifts/send', { to: bob.user.id, kind: 'nonsense' });
+  ok('unknown gift rejected', badGift.status === 400, String(badGift.status));
+  const selfGift = await alice.call('POST', '/api/gifts/send', { to: alice.user.id, kind: 'heart' });
+  ok('cannot gift yourself', selfGift.status === 400, String(selfGift.status));
+
+  const profileGift = await bob.call('GET', '/api/profile?user=' + bob.user.id);
+  ok('profile carries the gift counter', profileGift.data.giftCount === 2, String(profileGift.data.giftCount));
+
+  const hidden = await bob.call('POST', '/api/gifts/delete', { id: giftId });
+  ok('recipient can hide a gift', hidden.status === 200 && hidden.data.total === 1, String(hidden.status));
+  const notMine = await alice.call('POST', '/api/gifts/delete', { id: anonGift.data.gift.id });
+  ok('only the recipient can hide a gift', notMine.status === 404, String(notMine.status));
+
   // ---- file attachments
   const TXT = 'data:text/plain;base64,' + Buffer.from('attachment body').toString('base64');
   const fileMsg = await bob.call('POST', '/api/messages/send', {

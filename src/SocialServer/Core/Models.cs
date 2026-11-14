@@ -268,6 +268,24 @@ namespace Social.Core
         public DateTime HandledAt = DateTime.MinValue;
     }
 
+    /// <summary>
+    /// A gift one person sent another. <see cref="Kind"/> is a key of the
+    /// built-in catalogue (<see cref="GiftCatalog"/>), so the tile never depends
+    /// on an uploaded file.
+    /// </summary>
+    public sealed class Gift
+    {
+        public long Id;
+        public long From;
+        public long To;
+        public string Kind = "heart";
+        public string Message = "";
+        public bool Anonymous;
+        public DateTime Created = DateTime.UtcNow;
+        public bool Seen;        // the recipient opened the gifts page
+        public bool Hidden;      // the recipient removed it from their wall
+    }
+
     public sealed class Meta
     {
         public int Version = 1;        public DateTime Created = DateTime.UtcNow;
@@ -283,6 +301,7 @@ namespace Social.Core
         public long NextPlaylistId = 1;
         public long NextFeedbackId = 1;
         public long NextCallId = 1;
+        public long NextGiftId = 1;
         public long TotalRegistrations;
         public DateTime LastBackup = DateTime.MinValue;
         public string InstallId = "";

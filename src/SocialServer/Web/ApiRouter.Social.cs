@@ -712,6 +712,14 @@ namespace Social.Web
                 AppendPhotos(gb, "photos", visiblePhotos);
 
                 gb.Prop("canPost", CanPostOnWall(ctx.User, target));
+                bool moreGifts;
+                List<Gift> gifts = _store.GiftsTo(target.Id, 0, 6, out moreGifts);
+                gb.Name("gifts").BeginArray();
+                for (int i = 0; i < gifts.Count; i++) gb.Raw(GiftJson(gifts[i], ctx.User));
+                gb.EndArray();
+                gb.Prop("giftCount", _store.CountGifts(target.Id));
+                gb.Prop("canGift", _cfg.GiftsEnabled && target.Id != ctx.User.Id &&
+                                   !_store.IsBlocked(target.Id, ctx.User.Id));
                 SendOk(ctx, gb);
                 return;
             }

@@ -1446,9 +1446,13 @@
           var a = item.actor || {};
           var ic = item.type === 'like' ? 'heart' : item.type === 'comment' ? 'comment' : item.type === 'friend' ? 'user-plus'
             : item.type === 'message' ? 'envelope' : item.type === 'admin' ? 'bullhorn' : item.type === 'badge' ? 'trophy'
-            : item.type === 'mention' ? 'at' : item.type === 'reaction' ? 'face-smile' : item.type === 'repost' ? 'retweet' : 'bell';
+            : item.type === 'mention' ? 'at' : item.type === 'reaction' ? 'face-smile' : item.type === 'repost' ? 'retweet'
+            : item.type === 'gift' ? 'gift' : 'bell';
+          var who = a.displayName || a.username;
+          var face = a.id ? UI.avatar(a, 32)
+            : '<span class="gift-badge gift-badge-sm" style="--gift-color:#7c8cff">' + UI.icon('gift') + '</span>';
           html += '<a class="notif' + (item.read ? '' : ' unread') + '" data-id="' + item.id + '" href="' + UI.attr(item.link || '#/notifications') + '">' +
-            UI.avatar(a, 32) + '<div class="notif-main"><span class="who">' + UI.esc(a.displayName || a.username || '?') + '</span> ' + UI.esc(item.text) +
+            face + '<div class="notif-main"><span class="who">' + UI.esc(who || T('gifts.someone')) + '</span> ' + UI.esc(item.text) +
             '<div class="when">' + UI.timeAgo(item.created) + '</div></div><span class="type">' + UI.icon(ic) + '</span></a>';
         }
       }
@@ -2081,7 +2085,7 @@
         ['like', 'notify.like'], ['comment', 'notify.comment'], ['friend', 'notify.friend'],
         ['message', 'notify.message'], ['wall', 'notify.wall'], ['group', 'notify.group'],
         ['mention', 'notify.mention'], ['badge', 'notify.badge'],
-        ['reaction', 'notify.reaction'], ['repost', 'notify.repost']
+        ['reaction', 'notify.reaction'], ['repost', 'notify.repost'], ['gift', 'notify.gift']
       ];
       var notifHtml = '';
       for (var nti = 0; nti < notifTypes.length; nti++) {
@@ -3034,6 +3038,8 @@
         '</div>' +
         field('cfg-editwin', T('admin.editWindow'), lim.editWindowMin, 'number', ' min="0"') +
         field('cfg-fbph', T('admin.feedbackPerHour'), lim.feedbackPerHour, 'number', ' min="1"') +
+        field('cfg-giftph', T('admin.giftPerHour'), lim.giftPerHour, 'number', ' min="0"') +
+        field('cfg-giftmsg', T('admin.maxGiftMessage'), lim.maxGiftMessage, 'number', ' min="0"') +
         field('cfg-callmembers', T('admin.maxCallMembers'), lim.maxCallMembers, 'number', ' min="2"') +
         field('cfg-callstun', T('admin.callStun'), lim.callStun) +
         '</div>';
@@ -3047,6 +3053,7 @@
         field('cfg-themes', T('admin.allowThemes'), ui.allowThemes) +
         check('cfg-sounds', T('admin.allowSounds'), ui.allowSounds) +
         check('cfg-live', T('admin.liveNotifications'), ui.liveNotifications) +
+        check('cfg-gifts', T('admin.giftsEnabled'), ui.giftsEnabled) +
         field('cfg-notifywait', T('admin.notifyWait'), ui.notifyWaitSec, 'number', ' min="1" max="25"') +
         '<div style="margin-top:6px"><button class="btn btn-sm" id="cfg-notify-test">' + UI.icon('bell') + ' ' + T('admin.notifyTest') + '</button></div>' +
         '<hr><h3 style="margin-top:10px">' + T('admin.settingsLogging') + '</h3>' +
@@ -3136,6 +3143,8 @@
             maxPostImageKB: Number(App.val('cfg-imagekb')),
             editWindowMin: Number(App.val('cfg-editwin')),
             feedbackPerHour: Number(App.val('cfg-fbph')),
+            giftPerHour: Number(App.val('cfg-giftph')),
+            maxGiftMessage: Number(App.val('cfg-giftmsg')),
             maxCallMembers: Number(App.val('cfg-callmembers')),
             callStun: App.val('cfg-callstun')
           },
@@ -3145,6 +3154,7 @@
             allowThemes: App.val('cfg-themes'),
             allowSounds: document.getElementById('cfg-sounds').checked,
             liveNotifications: document.getElementById('cfg-live').checked,
+            giftsEnabled: document.getElementById('cfg-gifts').checked,
             notifyWaitSec: Number(App.val('cfg-notifywait'))
           },
           logging: {

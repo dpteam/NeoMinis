@@ -67,6 +67,8 @@ namespace Social.Web
                 .Prop("feedbackPerHour", _cfg.FeedbackPerHour)
                 .Prop("maxCallMembers", _cfg.MaxCallMembers)
                 .Prop("callStun", _cfg.CallStun)
+                .Prop("giftPerHour", _cfg.GiftPerHour)
+                .Prop("maxGiftMessage", _cfg.MaxGiftMessage)
                 .Prop("maxAvatarKB", _cfg.MaxAvatarKB)
                 .Prop("maxPostImageKB", _cfg.MaxPostImageKB)
                 .Prop("editWindowMin", _cfg.EditWindowMin)
@@ -89,6 +91,7 @@ namespace Social.Web
                 .Prop("allowSounds", _cfg.AllowSounds)
                 .Prop("liveNotifications", _cfg.LiveNotifications)
                 .Prop("notifyWaitSec", _cfg.NotifyWaitSec)
+                .Prop("giftsEnabled", _cfg.GiftsEnabled)
                 .EndObject();
 
             b.Name("logging").BeginObject()
@@ -301,6 +304,8 @@ namespace Social.Web
                 ApplyLimit(limits, "maxVideoFiles", _cfg.MaxVideoFiles, 1, delegate(int v) { _cfg.MaxVideoFiles = v; });
                 ApplyLimit(limits, "feedbackPerHour", _cfg.FeedbackPerHour, 1, delegate(int v) { _cfg.FeedbackPerHour = v; });
                 ApplyLimit(limits, "maxCallMembers", _cfg.MaxCallMembers, 2, delegate(int v) { _cfg.MaxCallMembers = v; });
+                ApplyLimit(limits, "giftPerHour", _cfg.GiftPerHour, 0, delegate(int v) { _cfg.GiftPerHour = v; });
+                ApplyLimit(limits, "maxGiftMessage", _cfg.MaxGiftMessage, 0, delegate(int v) { _cfg.MaxGiftMessage = v; });
                 if (limits.ContainsKey("callStun"))
                 {
                     _cfg.CallStun = Util.SingleLine(Json.GetString(limits, "callStun", _cfg.CallStun), 400);
@@ -351,6 +356,11 @@ namespace Social.Web
                     if (v > 25) v = 25;
                     _cfg.NotifyWaitSec = v;
                     _cfg.SetIniValue("ui", "notifyWaitSec", v.ToString(CultureInfo.InvariantCulture));
+                }
+                if (ui.ContainsKey("giftsEnabled"))
+                {
+                    _cfg.GiftsEnabled = Json.GetBool(ui, "giftsEnabled", _cfg.GiftsEnabled);
+                    _cfg.SetIniValue("ui", "giftsEnabled", _cfg.GiftsEnabled ? "true" : "false");
                 }
             }
 

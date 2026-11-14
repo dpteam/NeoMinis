@@ -35,13 +35,14 @@ namespace Social.Core
         private readonly List<Playlist> _playlists = new List<Playlist>();
         private readonly List<Feedback> _feedback = new List<Feedback>();
         private readonly List<CallRecord> _calls = new List<CallRecord>();
+        private readonly List<Gift> _gifts = new List<Gift>();
         private Meta _meta = new Meta();
 
         private readonly Dictionary<long, User> _userById = new Dictionary<long, User>();
         private readonly Dictionary<string, User> _userByName = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
 
         private bool _dirtyUsers, _dirtyPosts, _dirtyComments, _dirtyFriends, _dirtyMessages;
-        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls;
+        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts;
         private bool _readOnly;
         private string _saveError = "";
         private DateTime _lastSave = DateTime.MinValue;
@@ -68,7 +69,7 @@ namespace Social.Core
                 {
                     return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
                            _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
-                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls;
+                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls || _dirtyGifts;
                 }
             }
         }
@@ -126,6 +127,8 @@ namespace Social.Core
                 // a restart means every call that was still open is over
                 for (int i = 0; i < _calls.Count; i++)
                     if (_calls[i].Ended == DateTime.MinValue) _calls[i].Ended = _calls[i].Started;
+                _gifts.Clear();
+                _gifts.AddRange(LoadTable("gifts.json", GiftFromDict));
 
                 // sort newest first, keeping the hot queries cheap
                 _posts.Sort(delegate(Post a, Post b) { return b.Id.CompareTo(a.Id); });
@@ -136,7 +139,7 @@ namespace Social.Core
                 EnsureCounters();
                 _loaded = true;
                 _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = false;
+                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = false;
 
                 Log.Info("DATA", "loaded users=" + _users.Count + " posts=" + _posts.Count +
                                   " comments=" + _comments.Count + " friends=" + _friends.Count +
@@ -168,6 +171,7 @@ namespace Social.Core
                 m.NextPlaylistId = Json.GetLong(d, "nextPlaylistId", 1);
                 m.NextFeedbackId = Json.GetLong(d, "nextFeedbackId", 1);
                 m.NextCallId = Json.GetLong(d, "nextCallId", 1);
+                m.NextGiftId = Json.GetLong(d, "nextGiftId", 1);
                 m.TotalRegistrations = Json.GetLong(d, "totalRegistrations", 0);
                 m.LastBackup = Json.GetDate(d, "lastBackup", DateTime.MinValue);
                 m.InstallId = Json.GetString(d, "installId", "");
@@ -183,7 +187,7 @@ namespace Social.Core
 
         private void EnsureCounters()
         {
-            long maxUser = 0, maxPost = 0, maxComment = 0, maxMessage = 0, maxNotif = 0, maxGroup = 0, maxReport = 0, maxDraft = 0, maxMedia = 0, maxPlaylist = 0, maxFeedback = 0, maxCall = 0;
+            long maxUser = 0, maxPost = 0, maxComment = 0, maxMessage = 0, maxNotif = 0, maxGroup = 0, maxReport = 0, maxDraft = 0, maxMedia = 0, maxPlaylist = 0, maxFeedback = 0, maxCall = 0, maxGift = 0;
             for (int i = 0; i < _users.Count; i++) if (_users[i].Id > maxUser) maxUser = _users[i].Id;
             for (int i = 0; i < _posts.Count; i++) if (_posts[i].Id > maxPost) maxPost = _posts[i].Id;
             for (int i = 0; i < _comments.Count; i++) if (_comments[i].Id > maxComment) maxComment = _comments[i].Id;
@@ -196,6 +200,7 @@ namespace Social.Core
             for (int i = 0; i < _playlists.Count; i++) if (_playlists[i].Id > maxPlaylist) maxPlaylist = _playlists[i].Id;
             for (int i = 0; i < _feedback.Count; i++) if (_feedback[i].Id > maxFeedback) maxFeedback = _feedback[i].Id;
             for (int i = 0; i < _calls.Count; i++) if (_calls[i].Id > maxCall) maxCall = _calls[i].Id;
+            for (int i = 0; i < _gifts.Count; i++) if (_gifts[i].Id > maxGift) maxGift = _gifts[i].Id;
             if (_meta.NextUserId <= maxUser) _meta.NextUserId = maxUser + 1;
             if (_meta.NextPostId <= maxPost) _meta.NextPostId = maxPost + 1;
             if (_meta.NextCommentId <= maxComment) _meta.NextCommentId = maxComment + 1;
@@ -208,6 +213,7 @@ namespace Social.Core
             if (_meta.NextPlaylistId <= maxPlaylist) _meta.NextPlaylistId = maxPlaylist + 1;
             if (_meta.NextFeedbackId <= maxFeedback) _meta.NextFeedbackId = maxFeedback + 1;
             if (_meta.NextCallId <= maxCall) _meta.NextCallId = maxCall + 1;
+            if (_meta.NextGiftId <= maxGift) _meta.NextGiftId = maxGift + 1;
         }
 
         private string ReadJson(string path)
@@ -315,9 +321,10 @@ namespace Social.Core
                     if (force || _dirtyPlaylists) WriteTable("playlists.json", PlaylistsToArray());
                     if (force || _dirtyFeedback) WriteTable("feedback.json", FeedbackToArray());
                     if (force || _dirtyCalls) WriteTable("calls.json", CallsToArray());
+                    if (force || _dirtyGifts) WriteTable("gifts.json", GiftsToArray());
 
                     _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = false;
+                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = false;
                     _lastSave = DateTime.UtcNow;
                     _saveError = "";
                     if (_readOnly)
@@ -395,6 +402,7 @@ namespace Social.Core
         private void MarkPlaylists() { _dirtyPlaylists = true; }
         private void MarkFeedback() { _dirtyFeedback = true; }
         private void MarkCalls() { _dirtyCalls = true; }
+        private void MarkGifts() { _dirtyGifts = true; }
 
         // ============================================================== users
 
@@ -2446,6 +2454,187 @@ namespace Social.Core
             return r;
         }
 
+        // =============================================================== gifts
+
+        public Gift AddGift(long from, long to, string kind, string message, bool anonymous)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Gift g = new Gift();
+                g.Id = _meta.NextGiftId++;
+                g.From = from;
+                g.To = to;
+                g.Kind = kind;
+                g.Message = message ?? "";
+                g.Anonymous = anonymous;
+                g.Created = DateTime.UtcNow;
+                _gifts.Insert(0, g);
+                if (_gifts.Count > 5000) _gifts.RemoveRange(5000, _gifts.Count - 5000);
+                MarkGifts();
+                _dirtyMeta = true;
+                return g;
+            }
+        }
+
+        /// <summary>Gifts the user received, newest first, hidden ones skipped.</summary>
+        public List<Gift> GiftsTo(long userId, long before, int limit, out bool hasMore)
+        {
+            List<Gift> list = new List<Gift>();
+            hasMore = false;
+            lock (_sync)
+            {
+                for (int i = 0; i < _gifts.Count; i++)
+                {
+                    Gift g = _gifts[i];
+                    if (g.To != userId || g.Hidden) continue;
+                    if (before > 0 && g.Id >= before) continue;
+                    if (list.Count >= limit) { hasMore = true; break; }
+                    list.Add(g);
+                }
+            }
+            return list;
+        }
+
+        /// <summary>Gifts the user sent, newest first.</summary>
+        public List<Gift> GiftsFrom(long userId, long before, int limit, out bool hasMore)
+        {
+            List<Gift> list = new List<Gift>();
+            hasMore = false;
+            lock (_sync)
+            {
+                for (int i = 0; i < _gifts.Count; i++)
+                {
+                    Gift g = _gifts[i];
+                    if (g.From != userId) continue;
+                    if (before > 0 && g.Id >= before) continue;
+                    if (list.Count >= limit) { hasMore = true; break; }
+                    list.Add(g);
+                }
+            }
+            return list;
+        }
+
+        public int CountGifts(long userId)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _gifts.Count; i++) if (_gifts[i].To == userId && !_gifts[i].Hidden) n++;
+                return n;
+            }
+        }
+
+        public int CountUnseenGifts(long userId)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _gifts.Count; i++)
+                    if (_gifts[i].To == userId && !_gifts[i].Hidden && !_gifts[i].Seen) n++;
+                return n;
+            }
+        }
+
+        /// <summary>How many gifts of one kind the user got, for the profile counter.</summary>
+        public int CountGiftsOfKind(long userId, string kind)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _gifts.Count; i++)
+                    if (_gifts[i].To == userId && !_gifts[i].Hidden && _gifts[i].Kind == kind) n++;
+                return n;
+            }
+        }
+
+        public Gift FindGift(long id)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _gifts.Count; i++) if (_gifts[i].Id == id) return _gifts[i];
+                return null;
+            }
+        }
+
+        /// <summary>Marks one gift (or every gift) of this user as seen.</summary>
+        public bool MarkGiftSeen(long userId, long id)
+        {
+            lock (_sync)
+            {
+                bool any = false;
+                for (int i = 0; i < _gifts.Count; i++)
+                {
+                    Gift g = _gifts[i];
+                    if (g.To != userId || g.Seen) continue;
+                    if (id > 0 && g.Id != id) continue;
+                    g.Seen = true;
+                    any = true;
+                }
+                if (any) MarkGifts();
+                return any;
+            }
+        }
+
+        /// <summary>The recipient takes a gift off their wall.</summary>
+        public bool HideGift(long userId, long id)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _gifts.Count; i++)
+                {
+                    if (_gifts[i].Id != id || _gifts[i].To != userId) continue;
+                    _gifts[i].Hidden = true;
+                    MarkGifts();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>Drops every gift sent to or by an account that is being deleted.</summary>
+        public int PurgeGiftsOf(long userId)
+        {
+            lock (_sync)
+            {
+                int n = _gifts.RemoveAll(delegate(Gift g) { return g.To == userId || g.From == userId; });
+                if (n > 0) MarkGifts();
+                return n;
+            }
+        }
+
+        private List<object> GiftsToArray()
+        {
+            List<object> list = new List<object>(_gifts.Count);
+            for (int i = 0; i < _gifts.Count; i++)
+            {
+                Gift g = _gifts[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = g.Id; d["from"] = g.From; d["to"] = g.To; d["kind"] = g.Kind;
+                d["message"] = g.Message; d["anonymous"] = g.Anonymous;
+                d["created"] = g.Created; d["seen"] = g.Seen; d["hidden"] = g.Hidden;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static Gift GiftFromDict(Dictionary<string, object> d)
+        {
+            Gift g = new Gift();
+            g.Id = Json.GetLong(d, "id", 0);
+            g.From = Json.GetLong(d, "from", 0);
+            g.To = Json.GetLong(d, "to", 0);
+            g.Kind = Json.GetString(d, "kind", "heart");
+            g.Message = Json.GetString(d, "message", "");
+            g.Anonymous = Json.GetBool(d, "anonymous", false);
+            g.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            g.Seen = Json.GetBool(d, "seen", false);
+            g.Hidden = Json.GetBool(d, "hidden", false);
+            if (g.Id <= 0 || g.To <= 0) return null;
+            return g;
+        }
+
         // ============================================================= feedback
 
         public Feedback AddFeedback(string kind, string message, string contact, string page,
@@ -2670,6 +2859,9 @@ namespace Social.Core
                 // group membership
                 for (int g = 0; g < _groups.Count; g++)
                     if (_groups[g].Members.Remove(userId)) removed++;
+
+                // gifts sent or received
+                removed += PurgeGiftsOf(userId);
 
                 _users.Remove(u);
                 _userById.Remove(userId);
@@ -2945,6 +3137,7 @@ namespace Social.Core
             d["nextPlaylistId"] = m.NextPlaylistId;
             d["nextFeedbackId"] = m.NextFeedbackId;
             d["nextCallId"] = m.NextCallId;
+            d["nextGiftId"] = m.NextGiftId;
             d["totalRegistrations"] = m.TotalRegistrations;
             d["lastBackup"] = m.LastBackup;
             d["installId"] = m.InstallId;

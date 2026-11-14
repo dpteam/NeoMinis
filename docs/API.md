@@ -336,6 +336,30 @@ and is what `#/calls` shows. `limits.maxCallMembers` (default 8) caps a call, an
 `limits.callStun` holds the comma-separated ICE servers the browsers use (empty =
 LAN only, no external lookups; add your own TURN for strict NATs).
 
+### Gifts
+
+A small built-in catalogue instead of uploads: every gift is a key, and the
+server sends the icon name and colour so the client draws the tile itself.
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| GET | `/api/gifts` | `user`, `before`, `limit` | `{ gifts[], total, unseen, hasMore, next, canSend }` |
+| GET | `/api/gifts/sent` | `before`, `limit` | `{ gifts[], hasMore, next }` |
+| POST | `/api/gifts/send` | `to`, `kind`, `message`, `anonymous` | `{ gift }` |
+| POST | `/api/gifts/seen` | `id` (0 = all) | `{ unseen }` |
+| POST | `/api/gifts/delete` | `id` | `{ total }` |
+
+`kind` must be one of the catalogue keys (`heart`, `cake`, `rocket`, ...), which
+the SPA receives in the site payload. An anonymous gift carries `"from": null`
+for everybody — including the recipient — and the notification shows "Someone",
+so the promise holds on the server side and not just in the UI. Only the
+recipient can hide a gift from their wall; the sender keeps it in `/api/gifts/sent`.
+A profile payload gains `gifts` (the last six), `giftCount` and `canGift`.
+
+Limits: `limits.giftPerHour` (default 30, 0 = off) per sender,
+`limits.maxGiftMessage` (default 300) for the note, and `ui.giftsEnabled` to hide
+the whole shop.
+
 ### Notifications
 
 | Method | Path | Body / query | Result |

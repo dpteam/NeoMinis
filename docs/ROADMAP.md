@@ -8,7 +8,6 @@ is a promise — it is a parking lot so good ideas do not get lost.
 | Idea | Notes |
 | --- | --- |
 | **Flash games (Ruffle)** | Let people upload `.swf` games that run in the browser through [Ruffle](https://ruffle.rs) — the Flash emulator written in Rust/WASM, so no plugin is needed. Upload goes into the media library as a new `game` kind with its own size cap (`maxGameKB`), count cap (`maxGameFiles`) and a per-user switch, all editable in `config.ini` and Admin → Settings. Ruffle is loaded from `/assets/vendor/ruffle/` (self-hosted, no CDN, so the CSP stays strict) and only started on a dedicated `#/game/<id>` page or inside a post card. `.swf` is *never* served as an executable type: the file is handed to Ruffle as bytes, and the player runs in an iframe with `sandbox`, its own CSP and no access to the session cookie. Ratings, plays counter, comments under a game and a "Games" shelf mirror the music/video library. |
-| **Gifts / stickers** | A small catalogue of images sent from a profile, shown in a "Gifts" block on the wall and in notifications. |
 
 ## Later
 
@@ -33,6 +32,9 @@ Kept here so the list above stays honest.
 - Mentions, hashtags, tag pages, filtered post search.
 - Notifications: live long poll, per-type mutes, filters, desktop notifications.
 - Music and video library with uploads, playlists and configurable limits.
+- "Save to my library": one-click copy of somebody else's track or clip.
+- Gifts: a built-in catalogue sent from a profile, anonymous or signed, with
+  their own block on the wall, a received/sent page and notifications.
 - Voice and video calls plus named conference rooms over WebRTC, with history.
 - Achievements, bookmarks, photo gallery, profiles with interests and moods.
 - Admin board: users, roles, badges, reports, logs, AI panel, settings, backups.

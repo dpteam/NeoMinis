@@ -19,7 +19,7 @@
       SocialStore (in-memory)     SessionManager            StatsStore / CaptchaStore
       JSON tables + atomic IO     session key = PBKDF2       lifetime counters, SVG codes
               │
-      data/*.json  (14 tables + meta + stats)
+      data/*.json  (15 tables + meta + stats)
 ```
 
 Both listeners share one `SocialStore`, one `SessionManager`, one stats store and
@@ -48,7 +48,7 @@ inside `Trace`, which avoids the classic "double output / dead listener" bug.
 
 ## Storage
 
-No database server, no SQLite, no NuGet. Fourteen small JSON tables plus
+No database server, no SQLite, no NuGet. Fifteen small JSON tables plus
 `meta.json` (id counters, install id, last backup) and `stats.json` (visits). Guarantees:
 
 * **atomic replace** — write `*.tmp`, `File.Replace` (or move dance), keep `.bak`
