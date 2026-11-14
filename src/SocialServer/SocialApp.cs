@@ -64,6 +64,8 @@ namespace Social
                 Stats.Load();
                 Stats.OnStart();
                 Stats.NotePeak(Store.CountOnline(Config.OnlineWindowSec));
+                // push needs the store (for subscriptions) and may need to mint a key
+                WebPush.Configure(Config, Store);
 
                 if (!WebPublic.Start())
                 {
@@ -101,6 +103,7 @@ namespace Social
             try { if (_supervisor != null) _supervisor.Stop(); } catch { }
             try { Scheduler.Stop(); } catch { }
             try { AiRunner.Stop(); } catch { }
+            try { WebPush.Stop(); } catch { }
             try { WebPublic.Stop(); } catch { }
             try { if (WebAdmin != null) WebAdmin.Stop(); } catch { }
             try { Store.SaveNow(); } catch (Exception ex) { Log.Error("APP", "final save failed: " + ex.Message); }

@@ -2773,7 +2773,10 @@
         '<div class="hint" style="margin-bottom:6px">' + T('settings.notificationsHint') + '</div>' +
         '<div class="sound-events">' + notifHtml + '</div>' +
         '<label class="check" style="margin-top:10px"><input type="checkbox" id="s-desktop"' + (desktopOn ? ' checked' : '') + '> <span>' + T('settings.desktopNotify') + '</span></label>' +
-        '<div class="hint">' + T('settings.desktopHint') + '</div></div>';
+        '<div class="hint">' + T('settings.desktopHint') + '</div>' +
+        '<hr>' +
+        '<label class="check"><input type="checkbox" id="s-push"> <span>' + T('settings.pushNotify') + '</span></label>' +
+        '<div class="hint" id="s-push-hint">' + T('settings.pushHint') + '</div></div>';
 
       html += '<div class="settings-block"><h3>' + T('settings.password') + '</h3>' +
         '<div class="field"><label>' + T('settings.oldPassword') + '</label><input class="input" type="password" id="p-old" autocomplete="current-password"></div>' +
@@ -2913,6 +2916,44 @@
           }
         });
       });
+
+      // push: the only notification that arrives with the tab closed
+      var pushBox = document.getElementById('s-push');
+      var pushHint = document.getElementById('s-push-hint');
+      if (pushBox && window.PushUI) {
+        var setPushHint = function (state) {
+          if (!pushHint) return;
+          if (state === 'on') pushHint.textContent = T('settings.pushOn');
+          else if (state === 'blocked') pushHint.textContent = T('settings.pushBlocked');
+          else if (state === 'unsupported') pushHint.textContent = T('settings.pushUnsupported');
+          else pushHint.textContent = T('settings.pushHint');
+        };
+        PushUI.state().then(function (state) {
+          pushBox.checked = state === 'on';
+          pushBox.disabled = state === 'unsupported' || state === 'blocked';
+          setPushHint(state);
+        });
+        pushBox.addEventListener('change', function () {
+          if (pushBox.checked) {
+            pushBox.disabled = true;
+            PushUI.enable().then(function () {
+              pushBox.disabled = false;
+              setPushHint('on');
+              UI.toast(T('settings.pushOnToast'), 'ok');
+            }).catch(function (e) {
+              pushBox.disabled = false;
+              pushBox.checked = false;
+              setPushHint('off');
+              UI.toast((e && e.message) || T('settings.pushDenied'), 'err');
+            });
+          } else {
+            PushUI.disable().then(function () {
+              setPushHint('off');
+              UI.toast(T('settings.pushOffToast'), 'info');
+            }).catch(function () { });
+          }
+        });
+      }
 
       // privacy + hide online
       var pr = document.getElementById('s-privacy');
@@ -3773,6 +3814,14 @@
         field('cfg-appbytes', T('admin.appValueBytes'), lim.appValueBytes, 'number', ' min="64" max="65536"') +
         '</div>' +
         '<div class="hint">' + T('admin.appsHint') + '</div>' +
+        '<hr>' +
+        check('cfg-push', T('admin.pushEnabled'), lim.pushEnabled) +
+        field('cfg-pushsubject', T('admin.pushSubject'), lim.pushSubject) +
+        '<div class="inline-fields">' +
+        field('cfg-pushttl', T('admin.pushTtl'), lim.pushTtlSec, 'number', ' min="60"') +
+        field('cfg-pushmax', T('admin.pushMax'), lim.pushMaxPerUser, 'number', ' min="1" max="20"') +
+        '</div>' +
+        '<div class="hint">' + T('admin.pushHint') + '</div>' +
         '<div class="inline-fields">' +
         field('cfg-xfermb', T('admin.maxTransferMB'), lim.maxTransferMB, 'number', ' min="0" max="512"') +
         field('cfg-xferttl', T('admin.transferTtlMin'), lim.transferTtlMin, 'number', ' min="1" max="240"') +
@@ -3907,6 +3956,10 @@
             appsEnabled: document.getElementById('cfg-apps').checked,
             appStorageKeys: Number(App.val('cfg-appkeys')),
             appValueBytes: Number(App.val('cfg-appbytes')),
+            pushEnabled: document.getElementById('cfg-push').checked,
+            pushSubject: App.val('cfg-pushsubject'),
+            pushTtlSec: Number(App.val('cfg-pushttl')),
+            pushMaxPerUser: Number(App.val('cfg-pushmax')),
             maxTransferMB: Number(App.val('cfg-xfermb')),
             transferChunkKB: Number(App.val('cfg-xferchunk')),
             transferTtlMin: Number(App.val('cfg-xferttl')),

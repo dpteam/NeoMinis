@@ -245,10 +245,12 @@ namespace Social.Web
             b.Prop("maxAvatarKB", _cfg.MaxAvatarKB);
             b.Prop("maxPostImageKB", _cfg.MaxPostImageKB);
             // peer file transfer: the SPA needs the ceiling and the chunk size up front
-            b.Prop("transfersEnabled", _cfg.MaxTransferMB > 0);
-            b.Prop("maxTransferMB", _cfg.MaxTransferMB);
+            b.Prop("transfersEnabled", _cfg.MaxTransferMB > 0);            b.Prop("maxTransferMB", _cfg.MaxTransferMB);
             b.Prop("transferChunkKB", _cfg.TransferChunkKB);
             b.Prop("transferTtlMin", _cfg.TransferTtlMin);
+            // push: the SPA needs the switch and the VAPID key before it can subscribe
+            b.Prop("pushEnabled", _cfg.PushEnabled && WebPush.Supported);
+            b.Prop("pushKey", _cfg.PushEnabled && WebPush.Supported ? WebPush.PublicKeyBase64Url() : "");
             b.Prop("allowSounds", _cfg.AllowSounds);
             b.Name("themes").BeginArray();
             string[] themes = _cfg.Themes();
@@ -838,6 +840,12 @@ namespace Social.Web
             if (r == "apps/revoke") { RequireMethod(m, "POST"); HandleAppRevoke(ctx); return; }
             if (r == "apps/scores") { RequireMethod(m, "GET"); HandleAppScores(ctx); return; }
             if (r == "apps/score") { RequireMethod(m, "POST"); HandleAppScoreSubmit(ctx); return; }
+
+            if (r == "push") { RequireMethod(m, "GET"); HandlePush(ctx); return; }
+            if (r == "push/subscribe") { RequireMethod(m, "POST"); HandlePushSubscribe(ctx); return; }
+            if (r == "push/unsubscribe") { RequireMethod(m, "POST"); HandlePushUnsubscribe(ctx); return; }
+            if (r == "push/test") { RequireMethod(m, "POST"); HandlePushTest(ctx); return; }
+            if (r == "push/pending") { RequireMethod(m, "GET"); HandlePushPending(ctx); return; }
             if (r == "gifts") { RequireMethod(m, "GET"); HandleGifts(ctx); return; }
             if (r == "gifts/sent") { RequireMethod(m, "GET"); HandleGiftsSent(ctx); return; }
             if (r == "gifts/send") { RequireMethod(m, "POST"); HandleGiftSend(ctx); return; }

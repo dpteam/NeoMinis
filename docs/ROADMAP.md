@@ -100,9 +100,21 @@ What is left:
 
 ### Push notifications
 
-Service Worker + Web Push so likes and messages arrive with the tab closed, on top of
-the current long poll. Needs VAPID keys in `config.ini`, a subscription table, and a
-switch in Settings.
+**Shipped:** VAPID signing with a P-256 key generated on first start, subscriptions
+stored per browser, a service worker at `/sw.js`, and a settings switch that
+degrades honestly (no support, blocked permission, unsupported platform).
+
+Because .NET 4.0 has no AES-GCM, the server sends an **empty tickle** rather than an
+encrypted payload, and the worker fetches `/api/push/pending`. That is a deliberate
+trade: same user-visible result, no home-made crypto.
+
+What is left:
+
+1. **Encrypted payloads** if the server ever moves to a framework with AES-GCM, so
+   the push service never learns even the fact that something happened.
+2. **Per-type preferences** for push, separate from the in-app notification mutes.
+3. **A badge count** on the app icon (`navigator.setAppBadge`) from the same pending
+   call.
 
 ## Later
 
@@ -200,6 +212,9 @@ Kept here so the list above stays honest.
   where the user ticks a subset, a one-time code exchanged for a bearer token, a
   plain-JSON token surface an external app can call, per-user app storage with a
   quota, and leaderboards. HTML apps stay administrator-only.
+- Push notifications: VAPID signing with a generated P-256 key, per-browser
+  subscriptions, a service worker that shows what is waiting, and a settings switch
+  that explains itself when the browser blocks notifications.
 - Groups with editable settings, pictures and member management.
 - Communities: owner / editor / member roles, join requests for closed groups and a
   moderation queue ("members post, editors approve").

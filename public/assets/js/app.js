@@ -86,6 +86,9 @@ var App = (function () {
           startBadgePoll();
           startNotifyStream();
           if (window.CallUI) CallUI.init();
+          // an existing subscription is re-posted silently, so a wiped server
+          // does not leave the browser pushing into a void
+          if (window.PushUI) PushUI.sync();
           updateTitle((state.me && state.me.unreadNotifications) || 0);
         }
       } else {

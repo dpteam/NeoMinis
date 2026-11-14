@@ -45,13 +45,14 @@ namespace Social.Core
         private readonly List<AppGrant> _appGrants = new List<AppGrant>();
         private readonly List<AppData> _appData = new List<AppData>();
         private readonly List<AppScore> _appScores = new List<AppScore>();
+        private readonly List<PushSub> _pushSubs = new List<PushSub>();
         private Meta _meta = new Meta();
 
         private readonly Dictionary<long, User> _userById = new Dictionary<long, User>();
         private readonly Dictionary<string, User> _userByName = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
 
         private bool _dirtyUsers, _dirtyPosts, _dirtyComments, _dirtyFriends, _dirtyMessages;
-        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts, _dirtyAlbums, _dirtyStories, _dirtyChannels, _dirtyApps, _dirtyAppGrants, _dirtyAppData, _dirtyAppScores;
+        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts, _dirtyAlbums, _dirtyStories, _dirtyChannels, _dirtyApps, _dirtyAppGrants, _dirtyAppData, _dirtyAppScores, _dirtyPush;
         private bool _readOnly;
         private string _saveError = "";
         private DateTime _lastSave = DateTime.MinValue;
@@ -79,7 +80,7 @@ namespace Social.Core
                     return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
                            _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
                            _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls || _dirtyGifts || _dirtyAlbums || _dirtyStories || _dirtyChannels ||
-                           _dirtyApps || _dirtyAppGrants || _dirtyAppData || _dirtyAppScores;
+                           _dirtyApps || _dirtyAppGrants || _dirtyAppData || _dirtyAppScores || _dirtyPush;
                 }
             }
         }
@@ -154,6 +155,8 @@ namespace Social.Core
                 _appData.AddRange(LoadTable("appdata.json", AppDataFromDict));
                 _appScores.Clear();
                 _appScores.AddRange(LoadTable("appscores.json", AppScoreFromDict));
+                _pushSubs.Clear();
+                _pushSubs.AddRange(LoadTable("push.json", PushSubFromDict));
 
                 // sort newest first, keeping the hot queries cheap
                 _posts.Sort(delegate(Post a, Post b) { return b.Id.CompareTo(a.Id); });
@@ -166,6 +169,7 @@ namespace Social.Core
                 _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
                 _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = _dirtyStories = _dirtyChannels = false;
                 _dirtyApps = _dirtyAppGrants = _dirtyAppData = _dirtyAppScores = false;
+                _dirtyPush = false;
 
                 Log.Info("DATA", "loaded users=" + _users.Count + " posts=" + _posts.Count +
                                   " comments=" + _comments.Count + " friends=" + _friends.Count +
@@ -263,6 +267,9 @@ namespace Social.Core
             long maxAppScore = 0;
             for (int i = 0; i < _appScores.Count; i++) if (_appScores[i].Id > maxAppScore) maxAppScore = _appScores[i].Id;
             if (_meta.NextAppScoreId <= maxAppScore) _meta.NextAppScoreId = maxAppScore + 1;
+            long maxPush = 0;
+            for (int i = 0; i < _pushSubs.Count; i++) if (_pushSubs[i].Id > maxPush) maxPush = _pushSubs[i].Id;
+            if (_meta.NextPushId <= maxPush) _meta.NextPushId = maxPush + 1;
         }
 
         private string ReadJson(string path)
@@ -378,10 +385,12 @@ namespace Social.Core
                     if (force || _dirtyAppGrants) WriteTable("appgrants.json", AppGrantsToArray());
                     if (force || _dirtyAppData) WriteTable("appdata.json", AppDataToArray());
                     if (force || _dirtyAppScores) WriteTable("appscores.json", AppScoresToArray());
+                    if (force || _dirtyPush) WriteTable("push.json", PushSubsToArray());
 
                     _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
                     _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = _dirtyStories = _dirtyChannels = false;
                     _dirtyApps = _dirtyAppGrants = _dirtyAppData = _dirtyAppScores = false;
+                    _dirtyPush = false;
                     _lastSave = DateTime.UtcNow;
                     _saveError = "";
                     if (_readOnly)
@@ -1744,6 +1753,9 @@ namespace Social.Core
                     }
                 }
                 MarkNotifications();
+                // a push is only a nudge: if it cannot go out, the notification is
+                // still in the list when the user comes back
+                try { WebPush.Enqueue(userId); } catch { }
                 return n;
             }
         }
@@ -3372,6 +3384,144 @@ namespace Social.Core
             s.Score = Json.GetLong(d, "score", 0);
             s.Updated = Json.GetDate(d, "updated", DateTime.UtcNow);
             if (s.Id <= 0) return null;
+            return s;
+        }
+
+        // ============================================================== push
+
+        /// <summary>Every subscription this user has, newest first.</summary>
+        public List<PushSub> PushSubsFor(long userId)
+        {
+            lock (_sync)
+            {
+                List<PushSub> list = new List<PushSub>();
+                for (int i = 0; i < _pushSubs.Count; i++)
+                    if (_pushSubs[i].User == userId) list.Add(_pushSubs[i]);
+                list.Sort(delegate(PushSub a, PushSub b) { return b.Id.CompareTo(a.Id); });
+                return list;
+            }
+        }
+
+        public List<PushSub> AllPushSubs()
+        {
+            lock (_sync) { return new List<PushSub>(_pushSubs); }
+        }
+
+        /// <summary>
+        /// Stores a subscription. The same endpoint twice is the same browser
+        /// subscribing again, so it replaces the old row instead of stacking.
+        /// </summary>
+        public PushSub SavePushSub(long userId, string endpoint, string p256dh, string auth, string agent)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                PushSub sub = null;
+                for (int i = 0; i < _pushSubs.Count; i++)
+                {
+                    if (!string.Equals(_pushSubs[i].Endpoint, endpoint, StringComparison.Ordinal)) continue;
+                    sub = _pushSubs[i];
+                    break;
+                }
+                if (sub == null)
+                {
+                    sub = new PushSub();
+                    sub.Id = _meta.NextPushId++;
+                    sub.Created = DateTime.UtcNow;
+                    _pushSubs.Add(sub);
+                }
+                sub.User = userId;
+                sub.Endpoint = endpoint;
+                sub.P256dh = p256dh ?? "";
+                sub.Auth = auth ?? "";
+                sub.Agent = agent ?? "";
+                sub.Fails = 0;
+                MarkPush();
+                return sub;
+            }
+        }
+
+        public bool RemovePushSub(long userId, string endpoint)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _pushSubs.Count; i++)
+                {
+                    PushSub s = _pushSubs[i];
+                    if (s.User != userId) continue;
+                    if (!string.IsNullOrEmpty(endpoint) &&
+                        !string.Equals(s.Endpoint, endpoint, StringComparison.Ordinal)) continue;
+                    _pushSubs.RemoveAt(i);
+                    MarkPush();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        public void RemovePushSubById(long id)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _pushSubs.Count; i++)
+                {
+                    if (_pushSubs[i].Id != id) continue;
+                    _pushSubs.RemoveAt(i);
+                    MarkPush();
+                    return;
+                }
+            }
+        }
+
+        public void MarkPushResult(long id, bool ok)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _pushSubs.Count; i++)
+                {
+                    if (_pushSubs[i].Id != id) continue;
+                    _pushSubs[i].LastTry = DateTime.UtcNow;
+                    if (ok) { _pushSubs[i].LastOk = DateTime.UtcNow; _pushSubs[i].Fails = 0; }
+                    else _pushSubs[i].Fails++;
+                    MarkPush();
+                    return;
+                }
+            }
+        }
+
+        private void MarkPush() { _dirtyPush = true; }
+
+        private List<object> PushSubsToArray()
+        {
+            List<object> list = new List<object>(_pushSubs.Count);
+            for (int i = 0; i < _pushSubs.Count; i++)
+            {
+                PushSub s = _pushSubs[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = s.Id; d["user"] = s.User; d["endpoint"] = s.Endpoint;
+                d["p256dh"] = s.P256dh; d["auth"] = s.Auth; d["agent"] = s.Agent;
+                d["created"] = s.Created; d["lastOk"] = s.LastOk; d["lastTry"] = s.LastTry;
+                d["fails"] = s.Fails;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static PushSub PushSubFromDict(Dictionary<string, object> d)
+        {
+            PushSub s = new PushSub();
+            s.Id = Json.GetLong(d, "id", 0);
+            s.User = Json.GetLong(d, "user", 0);
+            s.Endpoint = Json.GetString(d, "endpoint", "");
+            s.P256dh = Json.GetString(d, "p256dh", "");
+            s.Auth = Json.GetString(d, "auth", "");
+            s.Agent = Json.GetString(d, "agent", "");
+            s.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            s.LastOk = Json.GetDate(d, "lastOk", DateTime.MinValue);
+            s.LastTry = Json.GetDate(d, "lastTry", DateTime.MinValue);
+            s.Fails = Json.GetInt(d, "fails", 0);
+            if (s.Id <= 0 || string.IsNullOrEmpty(s.Endpoint)) return null;
             return s;
         }
 

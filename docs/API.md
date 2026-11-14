@@ -419,6 +419,49 @@ account; only a hashed IP is kept for abuse handling.
 Moderators can read feedback; the message, contact, page, user agent, an internal
 note and who handled it are all shown in the admin board.
 
+### Push notifications
+
+A notification that arrives with the site closed. The server sends an **empty
+signed push** (a "tickle") and the service worker fetches what is waiting: a push
+message with an encrypted payload would need ECDH P-256 plus AES-128-GCM, and GCM
+does not exist in .NET 4.0. A hand-written GCM is the kind of thing that looks
+fine and then leaks, so it is not written.
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| GET | `/api/push` | — | `{ enabled, supported, publicKey, subscriptions[] }` |
+| POST | `/api/push/subscribe` | `endpoint`, `p256dh`, `auth`, `agent` | `{ subscription }` |
+| POST | `/api/push/unsubscribe` | `endpoint` (empty = all) | `{ removed }` |
+| POST | `/api/push/test` | — | `{ sent, total }` |
+| GET | `/api/push/pending` | `limit` | `{ items[], unread }` |
+
+`publicKey` is the VAPID key as base64url — the `applicationServerKey` the browser
+subscribes with. It is the uncompressed P-256 point (`0x04 || X || Y`), derived from
+the private key in `[push] privateKey`, which is generated on first start.
+
+`/api/push/pending` is what the service worker calls after a tickle. It arrives with
+the session cookie like any other request, so there is no second token to leak, and
+it returns only **unread** notifications. The worker skips anything it is already
+showing by tag, so a repeated tickle cannot stack duplicates.
+
+Delivery rules, from `Core/WebPush.cs`:
+
+* an endpoint that answers `404` or `410` is deleted immediately — that is a
+  browser that threw the subscription away;
+* twelve consecutive failures also remove it, so a dead push service does not
+  retry forever;
+* the endpoint is a capability, so `GET /api/push` never returns it;
+* a platform without CNG (Windows XP) reports `supported: false` instead of
+  failing at the first message, and the settings page disables the switch with an
+  explanation.
+
+The VAPID token is an ES256 JWT signed with `ECDsaCng`. Note that CNG returns the
+raw `R||S` signature while some runtimes wrap it in a DER SEQUENCE, so both forms
+are accepted — the self-test signs and then verifies the token to prove the chain.
+
+Config (`[push]`): `enabled`, `subject` (a `mailto:` or `https:` contact for the
+push service), `ttlSec` and `maxPerUser`.
+
 ### Applications API
 
 Third-party apps with OAuth-style consent. An app is registered by a developer,

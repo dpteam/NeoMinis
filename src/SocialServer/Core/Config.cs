@@ -170,6 +170,16 @@ namespace Social.Core
         public int AppStorageKeys = 100;
         public int AppValueBytes = 4096;
 
+        // Web Push. The private key is a P-256 CNG blob in base64 and is generated
+        // on first start; the public half is derived from it. Empty subject means
+        // "no contact address", which some push services are relaxed about and
+        // some are not, so set it in production.
+        public bool PushEnabled = true;
+        public string PushSubject = "";
+        public string PushPrivateKey = "";
+        public int PushTtlSec = 3600;
+        public int PushMaxPerUser = 5;
+
         // Peer file transfer between friends: the server only relays chunks in        // memory, so nothing is ever written to data/media and nothing survives a
         // restart. 0 disables the whole feature.
         public int MaxTransferMB = 32;
@@ -558,6 +568,14 @@ namespace Social.Core
                     else if (key == "valuebytes") AppValueBytes = Int(val, AppValueBytes);
                     break;
 
+                case "push":
+                    if (key == "enabled") PushEnabled = Bool(val, PushEnabled);
+                    else if (key == "subject") PushSubject = val;
+                    else if (key == "privatekey") PushPrivateKey = val;
+                    else if (key == "ttlsec") PushTtlSec = Int(val, PushTtlSec);
+                    else if (key == "maxperuser") PushMaxPerUser = Int(val, PushMaxPerUser);
+                    break;
+
                 case "storage":
                     if (key == "datadir") DataDirRaw = val;
                     else if (key == "webroot") WebRootRaw = val;
@@ -659,7 +677,11 @@ namespace Social.Core
             if (AppStorageKeys < 1) AppStorageKeys = 1;
             if (AppStorageKeys > 10000) AppStorageKeys = 10000;
             if (AppValueBytes < 64) AppValueBytes = 64;
-            if (AppValueBytes > 65536) AppValueBytes = 65536;            if (MaxTransferMB > 512) MaxTransferMB = 512;
+            if (AppValueBytes > 65536) AppValueBytes = 65536;
+            if (PushTtlSec < 60) PushTtlSec = 60;
+            if (PushTtlSec > 2419200) PushTtlSec = 2419200;
+            if (PushMaxPerUser < 1) PushMaxPerUser = 1;
+            if (PushMaxPerUser > 20) PushMaxPerUser = 20;            if (MaxTransferMB > 512) MaxTransferMB = 512;
             if (TransferChunkKB < 32) TransferChunkKB = 32;
             if (TransferChunkKB > 2048) TransferChunkKB = 2048;
             if (TransferTtlMin < 1) TransferTtlMin = 1;

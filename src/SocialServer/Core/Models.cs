@@ -247,6 +247,25 @@ namespace Social.Core
     /// true only for as long as the browsers stay connected and persisting it would
     /// be a lie after a restart.
     /// </summary>
+    /// <summary>
+    /// One browser's Web Push subscription. The endpoint is a URL at Google's or
+    /// Mozilla's push service; the two keys are what a payload would be encrypted
+    /// with, kept so a future version can send one without a schema change.
+    /// </summary>
+    public sealed class PushSub
+    {
+        public long Id;
+        public long User;
+        public string Endpoint = "";
+        public string P256dh = "";
+        public string Auth = "";
+        public string Agent = "";        // short user-agent hint, for the settings list
+        public DateTime Created = DateTime.UtcNow;
+        public DateTime LastOk = DateTime.MinValue;
+        public DateTime LastTry = DateTime.MinValue;
+        public int Fails;
+    }
+
     public sealed class Channel
     {
         public long Id;
@@ -456,6 +475,7 @@ namespace Social.Core
         public long NextAppGrantId = 1;
         public long NextAppDataId = 1;
         public long NextAppScoreId = 1;
+        public long NextPushId = 1;
         public long TotalRegistrations;
         public DateTime LastBackup = DateTime.MinValue;
         public string InstallId = "";

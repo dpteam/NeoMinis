@@ -156,6 +156,8 @@ Plain ES5, no framework, no build step. Files are loaded in order:
 | `ui.js` | DOM helpers, escaping, toasts, modals, themes, file→dataURL |
 | `api.js` | transport: handshake, login/register/recover/guest, signed+sealed calls |
 | `apps.js` | app catalogue, consent screen, developer panel |
+| `push.js` | service worker registration and the push subscription switch |
+| `sw.js` | the service worker: shows what a tickle announced |
 | `app.js` | shell, router, feed, post, profile, composer, comment/like logic |
 | `app.more.js` | friends, people, messages, groups, notifications, settings, admin, search |
 

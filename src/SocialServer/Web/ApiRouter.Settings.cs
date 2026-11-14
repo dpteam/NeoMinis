@@ -85,9 +85,12 @@ namespace Social.Web
                 .Prop("storyPerDay", _cfg.StoryPerDay)
                 .Prop("maxStoryCaption", _cfg.MaxStoryCaption)
                 .Prop("maxMessageVideoKB", _cfg.MaxMessageVideoKB)
-                .Prop("maxTransferMB", _cfg.MaxTransferMB)
-                .Prop("transferChunkKB", _cfg.TransferChunkKB)
+                .Prop("maxTransferMB", _cfg.MaxTransferMB)                .Prop("transferChunkKB", _cfg.TransferChunkKB)
                 .Prop("transferTtlMin", _cfg.TransferTtlMin)
+                .Prop("pushEnabled", _cfg.PushEnabled)
+                .Prop("pushSubject", _cfg.PushSubject)
+                .Prop("pushTtlSec", _cfg.PushTtlSec)
+                .Prop("pushMaxPerUser", _cfg.PushMaxPerUser)
                 .Prop("appsEnabled", _cfg.AppsEnabled)
                 .Prop("appStorageKeys", _cfg.AppStorageKeys)
                 .Prop("appValueBytes", _cfg.AppValueBytes)
@@ -377,6 +380,18 @@ namespace Social.Web
                 }
                 ApplyLimit(limits, "appStorageKeys", _cfg.AppStorageKeys, 1, delegate(int v) { _cfg.AppStorageKeys = v; });
                 ApplyLimit(limits, "appValueBytes", _cfg.AppValueBytes, 64, delegate(int v) { _cfg.AppValueBytes = v; });
+                if (limits.ContainsKey("pushEnabled"))
+                {
+                    _cfg.PushEnabled = Json.GetBool(limits, "pushEnabled", _cfg.PushEnabled);
+                    _cfg.SetIniValue("push", "enabled", _cfg.PushEnabled ? "true" : "false");
+                }
+                if (limits.ContainsKey("pushSubject"))
+                {
+                    _cfg.PushSubject = Util.SingleLine(Json.GetString(limits, "pushSubject", ""), 200);
+                    _cfg.SetIniValue("push", "subject", _cfg.PushSubject);
+                }
+                ApplyLimit(limits, "pushTtlSec", _cfg.PushTtlSec, 60, delegate(int v) { _cfg.PushTtlSec = v; });
+                ApplyLimit(limits, "pushMaxPerUser", _cfg.PushMaxPerUser, 1, delegate(int v) { _cfg.PushMaxPerUser = v; });
                 ApplyLimit(limits, "maxTransferMB", _cfg.MaxTransferMB, 1, delegate(int v) { _cfg.MaxTransferMB = v; });
                 ApplyLimit(limits, "transferChunkKB", _cfg.TransferChunkKB, 32, delegate(int v) { _cfg.TransferChunkKB = v; });
                 ApplyLimit(limits, "transferTtlMin", _cfg.TransferTtlMin, 1, delegate(int v) { _cfg.TransferTtlMin = v; });

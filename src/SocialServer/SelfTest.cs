@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
 using Social.Core;
 
@@ -30,6 +31,7 @@ namespace Social
             TestJson();
             TestCaptcha();
             TestUploadLimits();
+            TestWebPush();
             TestStore();
 
             Console.WriteLine("-----------------------");
@@ -144,6 +146,120 @@ namespace Social
             {
                 try { Directory.Delete(dir, true); } catch { }
             }
+        }
+
+        /// <summary>
+        /// A push message is only accepted if the VAPID token verifies against the
+        /// key the browser subscribed with, so the whole chain is checked here:
+        /// key generation, the uncompressed public point, DER→R||S conversion and a
+        /// real signature verification.
+        /// </summary>
+        private static void TestWebPush()
+        {
+            Config cfg = new Config();
+            cfg.PushEnabled = true;
+            WebPush.Configure(cfg, null);
+            Check("a VAPID key pair is generated", !string.IsNullOrEmpty(cfg.PushPrivateKey), "");
+            if (string.IsNullOrEmpty(cfg.PushPrivateKey)) return;
+
+            string pub = WebPush.PublicKeyBase64Url();
+            Check("the public key is an uncompressed P-256 point", pub.Length > 80 && pub.IndexOf('+') < 0 &&
+                  pub.IndexOf('/') < 0, pub.Substring(0, 8) + "…");
+
+            string header = WebPush.VapidHeader("https://fcm.googleapis.com/wp/abc123");
+            Check("a VAPID header is produced", header.StartsWith("vapid t=", StringComparison.Ordinal) &&
+                  header.IndexOf(", k=") > 0, header.Length + " chars");
+
+            if (header.StartsWith("vapid t=", StringComparison.Ordinal))
+            {
+                int comma = header.IndexOf(", k=", StringComparison.Ordinal);
+                string token = header.Substring(8, comma - 8);
+                string[] parts = token.Split('.');
+                Check("the token has three parts", parts.Length == 3, String.Join(".", parts).Length.ToString());
+
+                if (parts.Length == 3)
+                {
+                    string head = Encoding.UTF8.GetString(FromBase64Url(parts[0]));
+                    string body = Encoding.UTF8.GetString(FromBase64Url(parts[1]));
+                    Check("the token header says ES256", head.IndexOf("\"alg\":\"ES256\"", StringComparison.Ordinal) >= 0, head);
+                    Check("the token audience is the push origin",
+                          body.IndexOf("\"aud\":\"https://fcm.googleapis.com\"", StringComparison.Ordinal) >= 0, body);
+                    Check("the token has an expiry", body.IndexOf("\"exp\":", StringComparison.Ordinal) >= 0, "");
+
+                    byte[] raw = FromBase64Url(parts[2]);
+                    Check("the signature is 64 bytes", raw != null && raw.Length == 64,
+                          raw == null ? "null" : raw.Length.ToString());
+
+                    // and it really verifies against the same key
+                    bool verified = false;
+                    try
+                    {
+                        byte[] priv = Convert.FromBase64String(cfg.PushPrivateKey);
+                        using (CngKey key = CngKey.Import(priv, CngKeyBlobFormat.EccPrivateBlob))
+                        using (ECDsaCng ecdsa = new ECDsaCng(key))
+                        {
+                            byte[] hash = Crypto.Sha256(Encoding.UTF8.GetBytes(parts[0] + "." + parts[1]));
+                            // CNG verifies the raw form; a runtime that produces DER
+                            // needs the DER form, so try both
+                            verified = ecdsa.VerifyHash(hash, raw);
+                            if (!verified)
+                            {
+                                byte[] der = RawToDer(raw);
+                                if (der != null) verified = ecdsa.VerifyHash(hash, der);
+                            }
+                        }
+                    }
+                    catch { verified = false; }
+                    Check("the signature verifies against the public key", verified, "");
+                }
+            }
+        }
+
+        private static byte[] FromBase64Url(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return null;
+            string b = s.Replace('-', '+').Replace('_', '/');
+            switch (b.Length % 4)
+            {
+                case 2: b += "=="; break;
+                case 3: b += "="; break;
+            }
+            try { return Convert.FromBase64String(b); }
+            catch { return null; }
+        }
+
+        /// <summary>R||S back to a DER SEQUENCE, so VerifyHash can read it.</summary>
+        private static byte[] RawToDer(byte[] raw)
+        {
+            if (raw == null || raw.Length != 64) return null;
+            byte[] r = TrimInt(raw, 0);
+            byte[] s = TrimInt(raw, 32);
+            int len = 2 + r.Length + 2 + s.Length;
+            byte[] der = new byte[2 + len];
+            der[0] = 0x30;
+            der[1] = (byte)len;
+            int pos = 2;
+            der[pos++] = 0x02;
+            der[pos++] = (byte)r.Length;
+            Buffer.BlockCopy(r, 0, der, pos, r.Length);
+            pos += r.Length;
+            der[pos++] = 0x02;
+            der[pos++] = (byte)s.Length;
+            Buffer.BlockCopy(s, 0, der, pos, s.Length);
+            return der;
+        }
+
+        private static byte[] TrimInt(byte[] raw, int offset)
+        {
+            int start = offset;
+            int end = offset + 32;
+            while (start < end - 1 && raw[start] == 0) start++;
+            bool highBit = (raw[start] & 0x80) != 0;
+            int length = end - start + (highBit ? 1 : 0);
+            byte[] outBytes = new byte[length];
+            int pad = length - (end - start);
+            Buffer.BlockCopy(raw, start, outBytes, pad, end - start);
+            return outBytes;
         }
 
         private static void TestStore()

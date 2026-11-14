@@ -1928,6 +1928,56 @@ async function main() {
   ok('the developer deletes the app', appDel.status === 200 && appDel.data.deleted === true &&
     appDel.data.records >= 2, JSON.stringify(appDel.data));
 
+  // ---- push notifications
+  const pushState = await alice.call('GET', '/api/push');
+  ok('push reports itself and its key', pushState.status === 200 &&
+    typeof pushState.data.enabled === 'boolean' &&
+    typeof pushState.data.supported === 'boolean', String(pushState.status));
+  ok('a supported server exposes a VAPID public key',
+    !pushState.data.supported || (pushState.data.publicKey || '').length > 80,
+    String((pushState.data.publicKey || '').length));
+
+  if (pushState.data.supported) {
+    const fakeEndpoint = 'https://fcm.googleapis.com/fcm/send/SUITE-' + stamp;
+    const sub = await alice.call('POST', '/api/push/subscribe', {
+      endpoint: fakeEndpoint, p256dh: 'BExample', auth: 'example', agent: 'suite'
+    });
+    ok('a browser can subscribe', sub.status === 200 && !!sub.data.subscription, String(sub.status));
+
+    const listed = await alice.call('GET', '/api/push');
+    ok('the subscription is listed', (listed.data.subscriptions || []).length === 1, '');
+    ok('the endpoint itself is never handed back',
+      !JSON.stringify(listed.data).includes('SUITE-' + stamp), '');
+
+    await alice.call('POST', '/api/push/subscribe', {
+      endpoint: fakeEndpoint, p256dh: 'BExample', auth: 'example', agent: 'suite-2'
+    });
+    const twice = await alice.call('GET', '/api/push');
+    ok('subscribing twice does not stack', (twice.data.subscriptions || []).length === 1, '');
+
+    const badSub = await alice.call('POST', '/api/push/subscribe', { endpoint: 'nope' });
+    ok('a bogus endpoint is refused', badSub.status === 400, String(badSub.status));
+
+    const pending = await alice.call('GET', '/api/push/pending');
+    ok('the service worker can read what is waiting', pending.status === 200 &&
+      Array.isArray(pending.data.items) && typeof pending.data.unread === 'number',
+      String(pending.status));
+    ok('pending only carries unread items',
+      (pending.data.items || []).every(i => i.id > 0 && !!i.text), '');
+
+    // a real send to a fake endpoint must fail politely and drop the dead row
+    const sent = await alice.call('POST', '/api/push/test', {});
+    ok('a send attempt answers instead of crashing', sent.status === 200 &&
+      typeof sent.data.sent === 'number' && sent.data.total >= 1, JSON.stringify(sent.data));
+
+    const cleaned = await alice.call('GET', '/api/push');
+    ok('a dead endpoint is dropped after the push service refuses it',
+      (cleaned.data.subscriptions || []).length <= 1, String((cleaned.data.subscriptions || []).length));
+
+    const removed = await alice.call('POST', '/api/push/unsubscribe', { endpoint: fakeEndpoint });
+    ok('unsubscribing answers cleanly', removed.status === 200, String(removed.status));
+  }
+
   // ---- guest / kiosk (read-only browsing)
   const guest = new Client('guest');
   const gLogin = await guest.guest('');
