@@ -57,7 +57,7 @@ namespace Social.Web
 
             // an editor may promote others, but only the owner may demote an editor
             string mine = SocialStore.RoleIn(g, ctx.User.Id);
-            bool staff = ctx.User.IsModerator;
+            bool staff = Perms.Has(ctx.User, Perms.Posts);
             if (!staff && mine != "owner")
             {
                 if (mine != "editor") throw new ApiException(403, "not-moderator", "Only the community editors can do that");

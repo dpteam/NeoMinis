@@ -125,6 +125,12 @@ only ever walks conversations the viewer is part of.
 `CanMessageUser`). Privacy is enforced server-side: a private profile returns
 fields as empty strings, not as missing keys, so the SPA stays simple.
 
+Staff checks go through `Core/Perms.cs`. `Perms.Has(user, flag)` answers one granular
+right, `Perms.SeesAll(user)` answers "may look at anything" and is what per-area
+privacy and the full profile view consult. An administrator always passes; a
+moderator with an empty set keeps every right, which is the behaviour that existed
+before janitors were a feature.
+
 ## Fault tolerance ("dynamic resilience")
 
 | Failure | Reaction |

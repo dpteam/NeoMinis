@@ -66,6 +66,13 @@ namespace Social.Core
         // per-area privacy switches, see Core/Privacy.cs (empty = everything open)
         public string PrivacyPrefs = "";
 
+        // granular moderator rights, see Core/Perms.cs (empty = every right)
+        public string Perms = "";
+
+        // chat mute: messages are refused until this moment (MinValue = not muted)
+        public DateTime MutedUntil = DateTime.MinValue;
+        public string MuteReason = "";
+
         public bool IsAdmin { get { return Role == "admin"; } }
         public bool IsModerator { get { return Role == "admin" || Role == "moderator"; } }
         public bool IsBannedNow { get { return Banned && (BannedUntil == DateTime.MinValue || BannedUntil > DateTime.UtcNow); } }

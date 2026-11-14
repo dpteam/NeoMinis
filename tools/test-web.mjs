@@ -1495,6 +1495,85 @@ async function main() {
     }
     const fbBad = await admin.call('POST', '/api/admin/feedback/update', { id: 999999, action: 'status', status: 'read' });
     ok('unknown feedback rejected', fbBad.status === 404, String(fbBad.status));
+
+    // ---- janitors: a moderator is no longer all-or-nothing
+    const jan = new Client('janitor');
+    await jan.register('jan_' + stamp, 'janitor-pass-1', 'Jan Itor');
+    await jan.call('POST', '/api/messages/send', { to: alice.user.id, body: 'before the mute' });
+
+    const promoted = await admin.call('POST', '/api/admin/user',
+      { id: jan.user.id, action: 'role', role: 'moderator' });
+    ok('moderator promoted', promoted.status === 200 && promoted.data.user.role === 'moderator',
+      String(promoted.status));
+    ok('a fresh moderator keeps every right', Array.isArray(promoted.data.user.perms) &&
+      promoted.data.user.perms.length === 8, JSON.stringify(promoted.data.user.perms));
+
+    // narrowing the set must actually take the other tools away
+    const narrowed = await admin.call('POST', '/api/admin/user',
+      { id: jan.user.id, action: 'perms', perms: ['reports'] });
+    ok('rights can be narrowed', narrowed.status === 200 &&
+      narrowed.data.user.perms.length === 1 && narrowed.data.user.perms[0] === 'reports',
+      JSON.stringify(narrowed.data.user.perms));
+
+    const janLogin = new Client('janitor2', adminBase);
+    const janIn = await janLogin.login('jan_' + stamp, 'janitor-pass-1');
+    ok('janitor can sign in to the admin board', janIn.status === 200, String(janIn.status));
+
+    const janReports = await janLogin.call('GET', '/api/admin/reports');
+    ok('janitor reads the report queue', janReports.status === 200, String(janReports.status));
+    const janUsers = await janLogin.call('GET', '/api/admin/users');
+    ok('janitor without "users" cannot list users', janUsers.status === 403, String(janUsers.status));
+    const janSettings = await janLogin.call('GET', '/api/admin/settings');
+    ok('janitor cannot read the settings', janSettings.status === 403, String(janSettings.status));
+    const janAi = await janLogin.call('GET', '/api/admin/ai');
+    ok('janitor cannot read the AI panel', janAi.status === 403, String(janAi.status));
+    const janFeedback = await janLogin.call('GET', '/api/admin/feedback');
+    ok('janitor without "feedback" cannot read feedback', janFeedback.status === 403, String(janFeedback.status));
+    const janRole = await janLogin.call('POST', '/api/admin/user',
+      { id: bob.user.id, action: 'role', role: 'admin' });
+    ok('janitor cannot promote anybody', janRole.status === 403, String(janRole.status));
+    const janBan = await janLogin.call('POST', '/api/admin/user',
+      { id: bob.user.id, action: 'ban', days: 1 });
+    ok('janitor cannot ban', janBan.status === 403, String(janBan.status));
+
+    // the "posts" right is what unlocks deleting somebody else's post
+    // (a fresh account, so the suite's post rate limit is not in the way)
+    const victim = new Client('victim');
+    await victim.register('vic_' + stamp, 'victim-pass-1', 'Victim');
+    const victimPost = await victim.call('POST', '/api/post', { body: 'delete me if you dare' });
+    const victimPostId = victimPost.data && victimPost.data.post ? victimPost.data.post.id : 0;
+    ok('prepared a post for the janitor to delete', victimPostId > 0,
+      String(victimPost.status) + ' ' + JSON.stringify(victimPost.data && victimPost.data.error));
+    const janDeleteNo = await janLogin.call('POST', '/api/post/delete', { id: victimPostId });
+    ok('janitor without "posts" cannot delete a post', janDeleteNo.status === 403, String(janDeleteNo.status));
+    await admin.call('POST', '/api/admin/user', { id: jan.user.id, action: 'perms', perms: ['posts'] });
+    const janDeleteYes = await janLogin.call('POST', '/api/post/delete', { id: victimPostId });
+    ok('janitor with "posts" may delete a post', janDeleteYes.status === 200, String(janDeleteYes.status));
+
+    // ---- chat mute
+    const muteOn = await admin.call('POST', '/api/admin/mute',
+      { id: jan.user.id, hours: 2, reason: 'spamming the suite' });
+    ok('admin can mute in chat', muteOn.status === 200 && !!muteOn.data.user.mutedUntil,
+      String(muteOn.status));
+    const mutedSend = await jan.call('POST', '/api/messages/send',
+      { to: alice.user.id, body: 'should not arrive' });
+    ok('a muted account cannot send messages', mutedSend.status === 403 && mutedSend.data.error === 'muted',
+      String(mutedSend.status));
+    const mutedPost = await jan.call('POST', '/api/post', { body: 'a mute is chat only' });
+    ok('a muted account may still post', mutedPost.status === 200, String(mutedPost.status));
+    const muteSeen = await jan.call('GET', '/api/me');
+    ok('the mute is visible to its victim', muteSeen.status === 200 && !!muteSeen.data.me.mutedUntil, '');
+    const muteOff = await admin.call('POST', '/api/admin/mute', { id: jan.user.id, hours: 0 });
+    ok('admin can lift a mute', muteOff.status === 200 && !muteOff.data.user.mutedUntil,
+      String(muteOff.status));
+    const afterMute = await jan.call('POST', '/api/messages/send',
+      { to: alice.user.id, body: 'unmuted, back to normal' });
+    ok('messages flow again after the mute', afterMute.status === 200, String(afterMute.status));
+
+    // put the janitor back where we found them
+    await admin.call('POST', '/api/admin/user', { id: jan.user.id, action: 'role', role: 'user' });
+    const demotedUsers = await janLogin.call('GET', '/api/admin/users');
+    ok('a demoted janitor loses the board', demotedUsers.status === 403, String(demotedUsers.status));
   }
 
   // ---- guest / kiosk (read-only browsing)

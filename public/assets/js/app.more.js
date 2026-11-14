@@ -2957,25 +2957,39 @@
     }
     var sub = r.parts[1] || 'overview';
     if (state.adminLogs.timer) { clearInterval(state.adminLogs.timer); state.adminLogs.timer = null; }
+    // a janitor sees only the tabs their rights cover
     var tabs = '<div class="feed-tabs" style="margin-bottom:10px">' +
       adminTab('overview', 'chart-pie', T('admin.overview'), sub) +
-      adminTab('users', 'users', T('admin.users'), sub) +
-      adminTab('ai', 'robot', T('admin.ai'), sub) +
-      adminTab('reports', 'flag', T('admin.reports'), sub) +
-      adminTab('feedback', 'comment-dots', T('admin.feedback'), sub) +
-      adminTab('settings', 'sliders', T('admin.settings'), sub) +
-      adminTab('logs', 'terminal', T('admin.logs'), sub) +
+      (hasPerm('users') ? adminTab('users', 'users', T('admin.users'), sub) : '') +
+      (isAdminUser() ? adminTab('ai', 'robot', T('admin.ai'), sub) : '') +
+      (hasPerm('reports') ? adminTab('reports', 'flag', T('admin.reports'), sub) : '') +
+      (hasPerm('feedback') ? adminTab('feedback', 'comment-dots', T('admin.feedback'), sub) : '') +
+      (isAdminUser() ? adminTab('settings', 'sliders', T('admin.settings'), sub) : '') +
+      (hasPerm('logs') ? adminTab('logs', 'terminal', T('admin.logs'), sub) : '') +
       '</div>';
     main.innerHTML = tabs + '<div id="admin-body">' + spinnerCard() + '</div>';
     var body = document.getElementById('admin-body');
-    if (sub === 'users') adminUsers(body);
-    else if (sub === 'ai') adminAi(body);
-    else if (sub === 'settings') adminSettings(body);
-    else if (sub === 'reports') adminReports(body);
-    else if (sub === 'feedback') adminFeedback(body);
-    else if (sub === 'logs') adminLogs(body);
+    if (sub === 'users' && hasPerm('users')) adminUsers(body);
+    else if (sub === 'ai' && isAdminUser()) adminAi(body);
+    else if (sub === 'settings' && isAdminUser()) adminSettings(body);
+    else if (sub === 'reports' && hasPerm('reports')) adminReports(body);
+    else if (sub === 'feedback' && hasPerm('feedback')) adminFeedback(body);
+    else if (sub === 'logs' && hasPerm('logs')) adminLogs(body);
     else adminOverview(body);
   };
+
+  /// True when the signed-in account holds one granular right. The server also
+  /// enforces this; here it only decides what to draw.
+  function hasPerm(flag) {
+    if (isAdminUser()) return true;
+    var list = (state.me && state.me.perms) || [];
+    for (var i = 0; i < list.length; i++) if (list[i] === flag) return true;
+    return false;
+  }
+
+  function isAdminUser() {
+    return !!(state.me && state.me.isAdmin) || (state.user && state.user.role === 'admin');
+  }
 
   function adminTab(key, iconName, label, active) {
     return '<a class="tab2' + (active === key ? ' active' : '') + '" href="#/admin/' + key + '">' + UI.icon(iconName) + ' ' + UI.esc(label) + '</a>';
@@ -3214,6 +3228,38 @@
             ? '<button class="btn btn-ok btn-sm" id="au-unban">' + UI.icon('unlock') + ' ' + T('admin.unban') + '</button>'
             : '<button class="btn btn-danger btn-sm" id="au-ban">' + UI.icon('ban') + ' ' + T('admin.ban') + '</button>') +
           '</div>';
+
+        // chat mute: its own little row, because it has its own duration
+        var mutedNow = !!u.mutedUntil;
+        body += '<div class="inline-fields" style="margin-top:8px">' +
+          '<div class="field"><label>' + T('admin.muteHours') + '</label>' +
+          '<input class="input" id="au-mute-hours" type="number" min="0" max="720" value="' + (mutedNow ? 0 : 24) + '"></div>' +
+          '<div class="field"><label>&nbsp;</label>' +
+          '<button class="btn btn-sm' + (mutedNow ? ' btn-ok' : '') + '" id="au-mute">' + UI.icon('volume-xmark') + ' ' +
+          (mutedNow ? T('admin.unmute') : T('admin.mute')) + '</button></div></div>';
+        if (mutedNow) {
+          body += '<div class="hint">' + UI.icon('volume-xmark') + ' ' + T('admin.mutedUntil') + ' ' +
+            UI.formatDate(u.mutedUntil, true) + (u.muteReason ? ' · ' + UI.esc(u.muteReason) : '') + '</div>';
+        }
+
+        // granular moderator rights ("janitors"): empty = the old full set
+        if (u.role === 'moderator') {
+          var flags = ['posts', 'reports', 'warn', 'mute', 'feedback', 'users', 'logs', 'games'];
+          var mine = {};
+          var plist = u.perms || [];
+          for (var pf = 0; pf < plist.length; pf++) mine[plist[pf]] = true;
+          body += '<hr><div class="field"><label>' + UI.icon('user-shield') + ' ' + T('admin.perms') + '</label><div class="badge-picker">';
+          for (var ff = 0; ff < flags.length; ff++) {
+            body += '<label class="check"><input type="checkbox" class="au-perm" value="' + flags[ff] + '"' +
+              (mine[flags[ff]] ? ' checked' : '') + '> <span>' + T('perm.' + flags[ff]) + '</span></label>';
+          }
+          body += '</div><div class="hint">' + T('admin.permsHint') + '</div>' +
+            '<button class="btn btn-sm btn-primary" id="au-perms-save" style="margin-top:6px">' +
+            UI.icon('floppy-disk') + ' ' + T('admin.permsSave') + '</button></div>';
+        } else if (u.role === 'admin') {
+          body += '<div class="hint" style="margin-top:8px">' + UI.icon('user-shield') + ' ' + T('admin.permsAdmin') + '</div>';
+        }
+
         body += '<hr>';
         body += '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
           '<button class="btn btn-danger btn-sm" id="au-purge">' + UI.icon('trash') + ' ' + T('admin.deleteForever') + '</button>' +
@@ -3333,6 +3379,36 @@
 
       var unban = box.querySelector('#au-unban');
       if (unban) unban.addEventListener('click', function () { send('unban'); });
+
+      var muteBtn = box.querySelector('#au-mute');
+      if (muteBtn) muteBtn.addEventListener('click', function () {
+        var hours = Number(App.val('au-mute-hours')) || 0;
+        Api.request('POST', '/api/admin/mute', {
+          id: Number(u.id), hours: hours, reason: App.val('au-reason')
+        }, function (e2) {
+          if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+          UI.toast(hours > 0 ? T('admin.mutedOk', hours) : T('admin.unmutedOk'), 'ok');
+          SoundFX.play('success');
+          if (close) close();
+          App.route();
+        });
+      });
+
+      var permsSave = box.querySelector('#au-perms-save');
+      if (permsSave) permsSave.addEventListener('click', function () {
+        var picked = [];
+        var boxes = box.querySelectorAll('.au-perm');
+        for (var k = 0; k < boxes.length; k++) if (boxes[k].checked) picked.push(boxes[k].value);
+        Api.request('POST', '/api/admin/user', {
+          id: Number(u.id), action: 'perms', perms: picked
+        }, function (e2) {
+          if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+          UI.toast(T('admin.permsSaved'), 'ok');
+          SoundFX.play('success');
+          if (close) close();
+          App.route();
+        });
+      });
 
       var purge = box.querySelector('#au-purge');
       if (purge) purge.addEventListener('click', function () {

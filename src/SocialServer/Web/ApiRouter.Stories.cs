@@ -196,7 +196,7 @@ namespace Social.Web
             long id = BodyLong(ctx, "id", 0);
             Story s = _store.FindStory(id);
             if (s == null) throw new ApiException(404, "no-story", "Story not found");
-            if (s.Author != ctx.User.Id && !ctx.User.IsModerator)
+            if (s.Author != ctx.User.Id && !Perms.Has(ctx.User, Perms.Posts))
                 throw new ApiException(403, "not-mine", "That is not your story");
 
             List<string> urls = _store.RemoveStory(id, s.Author);

@@ -29,7 +29,7 @@ namespace Social.Web
         {
             if (u == null) return "null";
             bool self = viewer != null && viewer.Id == u.Id;
-            bool staff = viewer != null && viewer.IsModerator;
+            bool staff = viewer != null && StaffSeesAll(viewer);
             bool friend = viewer != null && !self && _store.AreFriends(viewer.Id, u.Id);
             FriendLink link = viewer != null && !self ? _store.Friendship(viewer.Id, u.Id) : null;
             bool online = !u.HideOnline && (DateTime.UtcNow - u.LastSeen).TotalSeconds <= _cfg.OnlineWindowSec;
@@ -56,7 +56,7 @@ namespace Social.Web
             b.Prop("mood", u.Mood);
             b.Prop("legacySource", u.LegacySource);
             if (!string.IsNullOrEmpty(u.Badges)) b.Prop("badges", u.Badges);
-            if (self || staff) b.Prop("canGames", u.CanGames || u.IsAdmin);
+            if (self || staff) b.Prop("canGames", u.CanGames || u.IsAdmin || Perms.Has(u, Perms.Games));
             b.Prop("vip", u.Vip);
             b.Prop("cover", u.Cover);
             if (self || staff)
@@ -66,6 +66,13 @@ namespace Social.Web
                 for (int i = 0; i < Privacy.Scopes.Length; i++)
                     b.Prop(Privacy.Scopes[i], prefs[Privacy.Scopes[i]]);
                 b.EndObject();
+            }
+            if (self || staff)
+            {
+                List<string> perms = Perms.Effective(u);
+                b.Name("perms").BeginArray();
+                for (int i = 0; i < perms.Count; i++) b.Str(perms[i]);
+                b.EndArray();
             }
             if (self || staff) b.Prop("lastSeen", Util.Iso(u.LastSeen));
             else if (!u.HideOnline) b.Prop("lastSeen", Util.Iso(u.LastSeen));
@@ -117,10 +124,17 @@ namespace Social.Web
             b.Prop("sessions", _sessions.CountForUser(u.Id));
             b.Prop("isAdmin", u.Role == "admin");
             b.Prop("isModerator", u.IsModerator);
+            // the granular set, so the SPA can hide the tabs a janitor cannot open
+            List<string> perms = Perms.Effective(u);
+            b.Name("perms").BeginArray();
+            for (int i = 0; i < perms.Count; i++) b.Str(perms[i]);
+            b.EndArray();
             b.Prop("storageReadOnly", _store.IsReadOnly);
             b.Prop("lastSave", _store.LastSaveUtc == DateTime.MinValue ? "" : Util.Iso(_store.LastSaveUtc));
             b.Prop("online", _store.CountOnline(_cfg.OnlineWindowSec));
             b.Prop("sessionCreated", Util.Iso(s == null ? DateTime.UtcNow : s.Created));
+            b.Prop("mutedUntil", u.MutedUntil == DateTime.MinValue ? "" : Util.Iso(u.MutedUntil));
+            b.Prop("muteReason", u.MuteReason);
             b.EndObject();
             return b.ToString();
         }
@@ -386,16 +400,25 @@ namespace Social.Web
         private bool CanViewProfile(User viewer, User target)
         {
             if (target == null || target.Deleted) return false;
-            if (viewer != null && (viewer.Id == target.Id || viewer.IsModerator)) return true;
+            if (viewer != null && (viewer.Id == target.Id || StaffSeesAll(viewer))) return true;
             if (target.Privacy == "public" || string.IsNullOrEmpty(target.Privacy)) return true;
             if (viewer != null && _store.AreFriends(viewer.Id, target.Id)) return true;
             return false;
         }
 
+        /// <summary>
+        /// True when the account may look at anything. Delegates to
+        /// <see cref="Perms.SeesAll"/>, which knows the granular rights.
+        /// </summary>
+        private static bool StaffSeesAll(User u)
+        {
+            return Perms.SeesAll(u);
+        }
+
         private bool CanDeletePost(User viewer, Post p)
         {
             if (viewer == null || p == null) return false;
-            if (viewer.IsModerator) return true;
+            if (Perms.Has(viewer, Perms.Posts)) return true;
             if (viewer.Id == p.Author) return true;
             if (p.Wall > 0 && viewer.Id == p.Wall) return true;
             return false;
@@ -404,13 +427,13 @@ namespace Social.Web
         private bool CanEditPost(User viewer, Post p)
         {
             if (viewer == null || p == null || p.Deleted) return false;
-            return viewer.IsModerator || viewer.Id == p.Author;
+            return Perms.Has(viewer, Perms.Posts) || viewer.Id == p.Author;
         }
 
         private bool CanPinPost(User viewer, Post p)
         {
             if (viewer == null || p == null || p.Deleted) return false;
-            if (viewer.IsModerator || viewer.Id == p.Author) return true;
+            if (Perms.Has(viewer, Perms.Posts) || viewer.Id == p.Author) return true;
             if (p.Wall > 0 && viewer.Id == p.Wall) return true;
             if (p.Group > 0)
             {
@@ -423,7 +446,7 @@ namespace Social.Web
         private bool CanDeleteComment(User viewer, Comment c)
         {
             if (viewer == null || c == null) return false;
-            if (viewer.IsModerator) return true;
+            if (Perms.Has(viewer, Perms.Posts)) return true;
             if (viewer.Id == c.Author) return true;
             Post p = _store.FindPost(c.Post);
             if (p == null) return false;

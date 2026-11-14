@@ -1901,11 +1901,11 @@ namespace Social.Core
             return "";
         }
 
-        /// <summary>Owner, an appointed editor, or a site administrator.</summary>
+        /// <summary>Owner, an appointed editor, or site staff who may police posts.</summary>
         public static bool CanModerate(Group g, User viewer)
         {
             if (g == null || viewer == null) return false;
-            if (viewer.IsModerator) return true;
+            if (Perms.Has(viewer, Perms.Posts)) return true;
             string role = RoleIn(g, viewer.Id);
             return role == "owner" || role == "editor";
         }
@@ -3619,6 +3619,23 @@ namespace Social.Core
 
         // ============================================================= admin
 
+        /// <summary>
+        /// Replaces the granular right set. An empty string clears it, which puts a
+        /// moderator back to the old "everything" default.
+        /// </summary>
+        public bool SetPerms(long userId, string perms)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                User u = FindUser(userId);
+                if (u == null) return false;
+                u.Perms = Perms.Serialize(Perms.Parse(perms));
+                MarkUsers();
+                return true;
+            }
+        }
+
         public bool SetRole(long userId, string role)
         {
             lock (_sync)
@@ -3643,6 +3660,25 @@ namespace Social.Core
                 u.Banned = banned;
                 u.BanReason = banned ? (reason ?? "") : "";
                 u.BannedUntil = banned ? until : DateTime.MinValue;
+                MarkUsers();
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Silences an account's messages until the given moment. Passing
+        /// DateTime.MinValue lifts the mute. Chat only: posting and commenting
+        /// are governed by bans, which are a different, heavier tool.
+        /// </summary>
+        public bool SetMuted(long userId, DateTime until, string reason)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                User u = FindUser(userId);
+                if (u == null) return false;
+                u.MutedUntil = until;
+                u.MuteReason = until == DateTime.MinValue ? "" : (reason ?? "");
                 MarkUsers();
                 return true;
             }
@@ -4047,6 +4083,9 @@ namespace Social.Core
             if (u.Vip) d["vip"] = true;
             if (!string.IsNullOrEmpty(u.Cover)) d["cover"] = u.Cover;
             if (!string.IsNullOrEmpty(u.PrivacyPrefs)) d["privacyPrefs"] = u.PrivacyPrefs;
+            if (!string.IsNullOrEmpty(u.Perms)) d["perms"] = u.Perms;
+            if (u.MutedUntil != DateTime.MinValue) d["mutedUntil"] = u.MutedUntil;
+            if (!string.IsNullOrEmpty(u.MuteReason)) d["muteReason"] = u.MuteReason;
             return d;
         }
 
@@ -4103,6 +4142,9 @@ namespace Social.Core
             u.Vip = Json.GetBool(d, "vip", false);
             u.Cover = Json.GetString(d, "cover", "");
             u.PrivacyPrefs = Json.GetString(d, "privacyPrefs", "");
+            u.Perms = Json.GetString(d, "perms", "");
+            u.MutedUntil = Json.GetDate(d, "mutedUntil", DateTime.MinValue);
+            u.MuteReason = Json.GetString(d, "muteReason", "");
             return u;
         }
 

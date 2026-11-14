@@ -407,7 +407,7 @@ namespace Social.Web
             long id = BodyLong(ctx, "id", 0);
             Post p = RequirePost(id);
             if (!CanEditPost(ctx.User, p)) throw new ApiException(403, "forbidden", "You cannot edit this post");
-            if (!ctx.User.IsModerator && _cfg.EditWindowMin > 0 &&
+            if (!Perms.Has(ctx.User, Perms.Posts) && _cfg.EditWindowMin > 0 &&
                 (DateTime.UtcNow - p.Created).TotalMinutes > _cfg.EditWindowMin)
                 throw new ApiException(403, "edit-window", "The edit window has expired");
 
@@ -1488,6 +1488,10 @@ namespace Social.Web
             long to = BodyLong(ctx, "to", 0);
             User target = RequireUser(to);
             if (!CanMessageUser(ctx.User, target)) throw new ApiException(403, "cannot-message", "You cannot message this user");
+            if (ctx.User.MutedUntil != DateTime.MinValue && ctx.User.MutedUntil > DateTime.UtcNow)
+                throw new ApiException(403, "muted", string.IsNullOrEmpty(ctx.User.MuteReason)
+                    ? "You are muted in chat until " + Util.Iso(ctx.User.MutedUntil)
+                    : "You are muted in chat: " + ctx.User.MuteReason);
             if (!Allow(ctx.User.Id, "message", _cfg.MessagesPerMin, 60))
                 throw new ApiException(429, "slow-down", "You are sending messages too fast");
             string text = Util.CleanText(BodyStr(ctx, "body", ""), _cfg.MaxMessageLength);

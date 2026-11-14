@@ -13,34 +13,36 @@ namespace Social.Web
             if (_web == null || !_web.IsAdminBoard)
                 throw new ApiException(404, "unknown-endpoint", "Unknown endpoint");
             if (sub == "overview") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminOverview(ctx); return; }
-            if (sub == "users") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminUsers(ctx); return; }
+            if (sub == "users") { RequireMethod(ctx.Req.Method, "GET"); RequirePermission(ctx.User, Perms.Users); HandleAdminUsers(ctx); return; }
             if (sub == "badges/recalc") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminBadgesRecalc(ctx); return; }
             if (sub == "notify-test") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminNotifyTest(ctx); return; }
             if (sub == "user")
             {
-                if (IsMethod(ctx.Req, "GET")) { RequireModerator(ctx.User); HandleAdminUserGet(ctx); return; }
+                if (IsMethod(ctx.Req, "GET")) { RequireAnyPermission(ctx.User, Perms.Users, Perms.Warn); HandleAdminUserGet(ctx); return; }
                 RequireMethod(ctx.Req.Method, "POST");
                 RequireAdmin(ctx.User);
                 HandleAdminUser(ctx);
                 return;
             }
-            if (sub == "reports") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminReports(ctx); return; }
-            if (sub == "report") { RequireMethod(ctx.Req.Method, "POST"); RequireModerator(ctx.User); HandleAdminReport(ctx); return; }
+            if (sub == "reports") { RequireMethod(ctx.Req.Method, "GET"); RequirePermission(ctx.User, Perms.Reports); HandleAdminReports(ctx); return; }
+            if (sub == "report") { RequireMethod(ctx.Req.Method, "POST"); RequirePermission(ctx.User, Perms.Reports); HandleAdminReport(ctx); return; }
             if (sub == "broadcast") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminBroadcast(ctx); return; }
-            if (sub == "logs") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminLogs(ctx); return; }
+            if (sub == "logs") { RequireMethod(ctx.Req.Method, "GET"); RequirePermission(ctx.User, Perms.Logs); HandleAdminLogs(ctx); return; }
             if (sub == "reload") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminReload(ctx); return; }
             if (sub == "backup") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminBackup(ctx); return; }
             if (sub == "repair") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminRepair(ctx); return; }
-            if (sub == "ai") { HandleAdminAi(ctx); return; }
+            if (sub == "ai") { RequireMethod(ctx.Req.Method, "GET"); RequireAdmin(ctx.User); HandleAdminAi(ctx); return; }
             if (sub == "ai/config") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminAiConfig(ctx); return; }
             if (sub == "ai/test") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminAiTest(ctx); return; }
             if (sub == "ai/step") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminAiStep(ctx); return; }
             if (sub == "ai/persona") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminAiPersona(ctx); return; }
             if (sub == "import") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminImport(ctx); return; }
-            if (sub == "settings") { HandleAdminSettings(ctx); return; }
+            if (sub == "settings") { RequireMethod(ctx.Req.Method, "GET"); RequireAdmin(ctx.User); HandleAdminSettings(ctx); return; }
             if (sub == "settings/save") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminSettingsSave(ctx); return; }
-            if (sub == "feedback") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminFeedback(ctx); return; }
-            if (sub == "feedback/update") { RequireMethod(ctx.Req.Method, "POST"); RequireModerator(ctx.User); HandleAdminFeedbackUpdate(ctx); return; }
+            if (sub == "feedback") { RequireMethod(ctx.Req.Method, "GET"); RequirePermission(ctx.User, Perms.Feedback); HandleAdminFeedback(ctx); return; }
+            if (sub == "feedback/update") { RequireMethod(ctx.Req.Method, "POST"); RequirePermission(ctx.User, Perms.Feedback); HandleAdminFeedbackUpdate(ctx); return; }
+            if (sub == "warn") { RequireMethod(ctx.Req.Method, "POST"); RequirePermission(ctx.User, Perms.Warn); HandleAdminWarn(ctx); return; }
+            if (sub == "mute") { RequireMethod(ctx.Req.Method, "POST"); RequirePermission(ctx.User, Perms.Mute); HandleAdminMute(ctx); return; }
             throw new ApiException(404, "unknown-endpoint", "Unknown admin endpoint");
         }
 
@@ -148,7 +150,15 @@ namespace Social.Web
             b.Prop("posts", _store.CountPosts(u.Id));
             b.Prop("friends", _store.CountFriends(u.Id));
             b.Prop("isSelf", viewer != null && viewer.Id == u.Id);
-            b.Prop("canGames", u.CanGames || u.IsAdmin);
+            b.Prop("canGames", u.CanGames || u.IsAdmin || Perms.Has(u, Perms.Games));
+            // the granular set, expanded, so the panel needs no second request
+            List<string> perms = Perms.Effective(u);
+            b.Name("perms").BeginArray();
+            for (int i = 0; i < perms.Count; i++) b.Str(perms[i]);
+            b.EndArray();
+            b.Prop("permsExplicit", !string.IsNullOrEmpty(u.Perms));
+            b.Prop("mutedUntil", u.MutedUntil == DateTime.MinValue ? "" : Util.Iso(u.MutedUntil));
+            b.Prop("muteReason", u.MuteReason);
             b.EndObject();
             return b.ToString();
         }
@@ -433,17 +443,102 @@ namespace Social.Web
                 Log.Warn("ADMIN", "@" + ctx.User.Username + " reset recovery code for @" + target.Username);
                 return;
             }
+            else if (action == "perms")
+            {
+                if (!_cfg.AllowRoleChange)
+                    throw new ApiException(403, "role-locked", "Role changes are disabled in the configuration");
+                List<object> list = Json.Get(ctx.Body, "perms") as List<object>;
+                List<string> flags = new List<string>();
+                if (list != null)
+                {
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        string flag = Convert.ToString(list[i], CultureInfo.InvariantCulture).Trim().ToLowerInvariant();
+                        if (Perms.Known(flag) && !flags.Contains(flag)) flags.Add(flag);
+                    }
+                }
+                _store.SetPerms(target.Id, Perms.Serialize(flags));
+                _store.MarkUserDirty(target);
+                _store.Notify(target.Id, ctx.User.Id, "admin",
+                    flags.Count == 0
+                        ? "your moderator rights were reset to the full set"
+                        : "your moderator rights: " + Perms.Serialize(flags),
+                    "#/notifications");
+                Log.Info("ADMIN", "@" + ctx.User.Username + " set rights of @" + target.Username +
+                         " to [" + Perms.Serialize(flags) + "]");
+            }
             else if (action == "warn")
             {
-                target.Warnings++;
-                _store.MarkUserDirty(target);
-                string note = Util.SingleLine(BodyStr(ctx, "reason", ""), 300);
-                _store.Notify(target.Id, ctx.User.Id, "admin", "warning: " + note, "#/notifications");
-                Log.Info("ADMIN", "@" + ctx.User.Username + " warned @" + target.Username + " (" + target.Warnings + ")");
+                WarnUser(ctx, target);
             }
             else throw new ApiException(400, "bad-action", "Unknown user action");
 
             JsonBuilder b = new JsonBuilder(1024);
+            b.BeginObject();
+            b.Name("user").Raw(AdminUserJson(target, ctx.User));
+            SendOk(ctx, b);
+        }
+
+        // ====================================================== warn and mute
+
+        /// <summary>
+        /// The "warn" tool, shared by the full user editor and the janitor
+        /// endpoint. A warning is a counter plus a notification, nothing more.
+        /// </summary>
+        private void WarnUser(ApiCtx ctx, User target)
+        {
+            string note = Util.SingleLine(BodyStr(ctx, "reason", ""), 300);
+            target.Warnings++;
+            _store.MarkUserDirty(target);
+            _store.Notify(target.Id, ctx.User.Id, "admin",
+                "warning: " + (note.Length == 0 ? "a moderator warned you" : note), "#/notifications");
+            Log.Info("ADMIN", "@" + ctx.User.Username + " warned @" + target.Username + " (" + target.Warnings + ")");
+        }
+
+        private void HandleAdminWarn(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            User target = _store.FindUser(id);
+            if (target == null) throw new ApiException(404, "no-user", "User not found");
+            if (target.Id == ctx.User.Id) throw new ApiException(400, "self", "You cannot warn yourself");
+            if (target.Role == "admin" && ctx.User.Role != "admin")
+                throw new ApiException(403, "forbidden", "You cannot warn an administrator");
+            WarnUser(ctx, target);
+
+            JsonBuilder b = new JsonBuilder(512);
+            b.BeginObject();
+            b.Name("user").Raw(AdminUserJson(target, ctx.User));
+            SendOk(ctx, b);
+        }
+
+        /// <summary>
+        /// Chat mute. Hours 0 lifts it; anything else silences messages until then.
+        /// Posting and commenting are untouched — a ban is the tool for those.
+        /// </summary>
+        private void HandleAdminMute(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            User target = _store.FindUser(id);
+            if (target == null) throw new ApiException(404, "no-user", "User not found");
+            if (target.Id == ctx.User.Id) throw new ApiException(400, "self", "You cannot mute yourself");
+            if (target.Role == "admin" && ctx.User.Role != "admin")
+                throw new ApiException(403, "forbidden", "You cannot mute an administrator");
+
+            int hours = Json.GetInt(ctx.Body, "hours", 1);
+            if (hours < 0) hours = 0;
+            if (hours > 720) hours = 720;
+            string reason = Util.SingleLine(BodyStr(ctx, "reason", ""), 300);
+            DateTime until = hours == 0 ? DateTime.MinValue : DateTime.UtcNow.AddHours(hours);
+            _store.SetMuted(target.Id, until, reason);
+            _store.Notify(target.Id, ctx.User.Id, "admin",
+                hours == 0 ? "your chat mute was lifted"
+                           : "you are muted in chat for " + hours + "h" + (reason.Length == 0 ? "" : ": " + reason),
+                "#/notifications");
+            Log.Warn("ADMIN", "@" + ctx.User.Username + (hours == 0 ? " unmuted " : " muted ") +
+                     "@" + target.Username + (hours == 0 ? "" : " for " + hours + "h") +
+                     (reason.Length == 0 ? "" : ": " + reason));
+
+            JsonBuilder b = new JsonBuilder(512);
             b.BeginObject();
             b.Name("user").Raw(AdminUserJson(target, ctx.User));
             SendOk(ctx, b);

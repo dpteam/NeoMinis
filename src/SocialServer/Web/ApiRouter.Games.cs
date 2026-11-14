@@ -78,7 +78,7 @@ namespace Social.Web
             b.EndArray();
             b.Prop("total", _store.CountGames());
             b.Prop("hasMore", hasMore);
-            b.Prop("canUpload", ctx.User.IsAdmin || ctx.User.CanGames);
+            b.Prop("canUpload", ctx.User.IsAdmin || ctx.User.CanGames || Perms.Has(ctx.User, Perms.Games));
             b.Prop("next", games.Count > 0 ? games[games.Count - 1].Id : 0);
             SendOk(ctx, b);
         }
@@ -98,7 +98,7 @@ namespace Social.Web
         {
             if (!GamesAvailable()) throw new ApiException(403, "games-off", "Games are switched off here");
             // uploading a .swf is a privilege granted in the admin board
-            if (!ctx.User.IsAdmin && !ctx.User.CanGames)
+            if (!ctx.User.IsAdmin && !ctx.User.CanGames && !Perms.Has(ctx.User, Perms.Games))
                 throw new ApiException(403, "no-permission",
                     "Only approved authors may upload games. Ask an administrator for permission.");
 
@@ -144,7 +144,7 @@ namespace Social.Web
         {
             long id = BodyLong(ctx, "id", 0);
             MediaItem m = RequireGame(id);
-            if (m.Owner != ctx.User.Id && !ctx.User.IsModerator)
+            if (m.Owner != ctx.User.Id && !Perms.Has(ctx.User, Perms.Posts))
                 throw new ApiException(403, "not-mine", "That is not your game");
 
             string data = BodyStr(ctx, "data", "");
@@ -188,7 +188,7 @@ namespace Social.Web
         {
             long id = BodyLong(ctx, "id", 0);
             MediaItem m = RequireGame(id);
-            if (m.Owner != ctx.User.Id && !ctx.User.IsModerator)
+            if (m.Owner != ctx.User.Id && !Perms.Has(ctx.User, Perms.Posts))
                 throw new ApiException(403, "not-mine", "That is not your game");
 
             string url = _store.RemoveMedia(id, m.Owner);

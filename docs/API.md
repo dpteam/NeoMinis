@@ -725,14 +725,42 @@ Administrator: additionally `user` (destructive actions), `broadcast`, `reload`,
 | POST | `/api/admin/settings/save` | grouped config | `{ warnings[] }` (written back to `config.ini`) |
 | POST | `/api/admin/badges/recalc` | — | `{ granted, users }` |
 | POST | `/api/admin/notify-test` | — | `{ id }` (sends a system notification to yourself, handy to verify live delivery) |
+| POST | `/api/admin/warn` | `id`, `reason` | `{ user }` — needs the `warn` right |
+| POST | `/api/admin/mute` | `id`, `hours` (0 = lift), `reason` | `{ user }` — needs the `mute` right |
 
 `action`: `ban` (`days` 0 = forever) · `unban` · `role` (`user|moderator|admin`) ·
 `grant-admin` · `revoke-admin` · `grant-mod` · `badge` (`badge`, `on`) ·
-`warn` · `reset` (new recovery code) · `delete` (soft delete) · `purge` (hard delete).
+`warn` · `perms` (`perms[]`) · `reset` (new recovery code) · `delete` (soft delete) ·
+`purge` (hard delete).
 
 Guards: the last administrator cannot be banned, demoted or deleted; nobody can
 ban or delete themselves; role changes respect `allowRoleChange`, `allowSelfDemote`
-and `protectLastAdmin` from the config.
+and `protectLastAdmin` from the config. A janitor can never act on an administrator.
+
+### Janitors (granular moderator rights)
+
+`moderator` used to be all-or-nothing. A moderator now carries a set of flags in
+`user.perms` (one flat comma separated string, so there is no schema to migrate):
+
+| Flag | Unlocks |
+| --- | --- |
+| `posts` | remove or edit anybody's post, comment, story or game; pin on any wall |
+| `reports` | `GET /api/admin/reports`, `POST /api/admin/report` |
+| `warn` | `POST /api/admin/warn` |
+| `mute` | `POST /api/admin/mute` |
+| `feedback` | `GET /api/admin/feedback`, `POST /api/admin/feedback/update` |
+| `users` | `GET /api/admin/users`, `GET /api/admin/user` |
+| `logs` | `GET /api/admin/logs` |
+| `games` | upload `.swf` files, exactly like `canGames` |
+
+An administrator always passes every check. A moderator with an **empty** set keeps
+every right, which is exactly how moderators behaved before this feature — only a
+moderator somebody deliberately narrowed is limited. `MeView` and `UserView` return
+the effective set as `perms[]`, and the admin UI hides the tabs a janitor cannot open.
+
+A mute (`POST /api/admin/mute`) is chat-only: `/api/messages/send` answers
+`403 muted` with the reason until the moment passes, while posting and commenting
+stay available. The victim sees `mutedUntil` and `muteReason` in `/api/me`.
 
 ---
 

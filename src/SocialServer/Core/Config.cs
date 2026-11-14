@@ -790,6 +790,15 @@ namespace Social.Core
         /// <summary>Kiosk is guest mode with the training wheels off.</summary>
         public bool GuestEnabled { get { return GuestMode || KioskMode; } }
 
+        /// <summary>
+        /// True when this board serves guests. The admin board never does: it is
+        /// where a kiosk gets unlocked, so it must keep its login form.
+        /// </summary>
+        public bool GuestOnBoard(bool isAdminBoard)
+        {
+            return GuestEnabled && !isAdminBoard;
+        }
+
         /// <summary>A kiosk never asks for a password, or it would lock itself out.</summary>
         public bool GuestPasswordRequired
         {

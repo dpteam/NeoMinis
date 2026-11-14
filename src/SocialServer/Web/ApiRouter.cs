@@ -183,8 +183,8 @@ namespace Social.Web
             b.Prop("baseUrl", _cfg.BaseUrl);
             b.Prop("registration", _cfg.Registration);
             b.Prop("inviteOnly", _cfg.InviteOnly);
-            b.Prop("guestMode", _cfg.GuestEnabled);
-            b.Prop("kioskMode", _cfg.KioskMode);
+            b.Prop("guestMode", _cfg.GuestOnBoard(_web != null && _web.IsAdminBoard));
+            b.Prop("kioskMode", _cfg.KioskMode && _cfg.GuestOnBoard(_web != null && _web.IsAdminBoard));
             b.Prop("guestPasswordRequired", _cfg.GuestPasswordRequired);
             b.Prop("kioskIdleSec", _cfg.KioskIdleSec);
             // tells the SPA whether the admin board is reachable from this origin
@@ -503,7 +503,8 @@ namespace Social.Web
         private void HandleGuest(HttpRequest req, HttpResponse resp, string ip)
         {
             if (!IsMethod(req, "POST")) throw new ApiException(405, "method", "POST only");
-            if (!_cfg.GuestEnabled) throw new ApiException(403, "guest-off", "Guest access is switched off here");
+            if (!_cfg.GuestOnBoard(_web != null && _web.IsAdminBoard))
+                throw new ApiException(403, "guest-off", "Guest access is switched off here");
             if (_web.AuthBlocked(ip)) throw new ApiException(429, "locked", "Too many attempts, try later");
 
             string verifier = req.Header("X-Auth-Guest");
@@ -1072,6 +1073,24 @@ namespace Social.Web
         {
             if (u == null || (u.Role != "admin" && u.Role != "moderator"))
                 throw new ApiException(403, "forbidden", "Moderator rights required");
+        }
+
+        /// <summary>
+        /// One granular right, e.g. <c>Perms.Reports</c>. Administrators always pass;
+        /// a moderator passes only when the set includes the flag (or when the set is
+        /// empty, which is the old "full moderator" default).
+        /// </summary>
+        private void RequirePermission(User u, string flag)
+        {
+            if (Perms.Has(u, flag)) return;
+            throw new ApiException(403, "forbidden", "You do not have the \"" + flag + "\" permission");
+        }
+
+        /// <summary>Passes when the account holds at least one of the flags.</summary>
+        private void RequireAnyPermission(User u, params string[] flags)
+        {
+            for (int i = 0; i < flags.Length; i++) if (Perms.Has(u, flags[i])) return;
+            throw new ApiException(403, "forbidden", "You do not have the rights for that");
         }
 
         private int LimitParam(ApiCtx ctx, int def, int max)

@@ -88,7 +88,9 @@ namespace Social.Core
         {
             if (target == null) return false;
             if (viewer != null && viewer.Id == target.Id) return true;
-            if (viewer != null && viewer.IsModerator) return true;
+            // only staff who may police content bypass a privacy switch; a janitor
+            // with just "feedback" is still an ordinary reader here
+            if (Perms.SeesAll(viewer)) return true;
             if (viewer == null) return false;
 
             string rule = Value(target, scope);
