@@ -472,6 +472,63 @@ async function main() {
   const searchMiss = await bob.call('GET', '/api/messages/search?q=' + encodeURIComponent('zzz-nothing-here'));
   ok('search miss returns nothing', searchMiss.status === 200 && searchMiss.data.results.length === 0, '');
 
+  // ---- calls (signalling only; media is peer to peer)
+  const callStart = await alice.call('POST', '/api/call/start', { with: bob.user.id, video: false });
+  ok('call started', callStart.status === 200 && callStart.data.call.id > 0 &&
+    callStart.data.call.kind === 'audio', String(callStart.status));
+  const callId = callStart.data && callStart.data.call.id;
+
+  const bobRing = await bob.call('GET', '/api/call/wait?after=0&timeout=5');
+  const incoming = (bobRing.data.events || []).filter(e => e.type === 'incoming');
+  ok('callee gets the ring', bobRing.status === 200 && incoming.length === 1 &&
+    incoming[0].call === callId, JSON.stringify(bobRing.data.events && bobRing.data.events.map(e => e.type)));
+
+  const answer = await bob.call('POST', '/api/call/answer', { id: callId, accept: true });
+  ok('call answered', answer.status === 200 && answer.data.call.members.some(m => m.id === bob.user.id && m.accepted), '');
+  const aliceAccepted = await alice.call('GET', '/api/call/wait?after=0&timeout=5');
+  ok('caller sees the answer', (aliceAccepted.data.events || []).some(e => e.type === 'accepted' && e.from === bob.user.id), '');
+
+  const signal = await alice.call('POST', '/api/call/signal', {
+    id: callId, to: bob.user.id, payload: JSON.stringify({ kind: 'offer', data: { type: 'offer', sdp: 'v=0 test' } })
+  });
+  ok('signal relayed', signal.status === 200, String(signal.status));
+  const bobSignal = await bob.call('GET', '/api/call/wait?after=0&timeout=5');
+  const gotSignal = (bobSignal.data.events || []).filter(e => e.type === 'signal');
+  ok('peer receives the offer', gotSignal.length === 1 && gotSignal[0].from === alice.user.id &&
+    gotSignal[0].payload && gotSignal[0].payload.kind === 'offer', JSON.stringify(gotSignal[0] && gotSignal[0].payload));
+
+  const badSignal = await bob.call('POST', '/api/call/signal', { id: callId, to: alice.user.id, payload: 'not json' });
+  ok('garbage signal rejected', badSignal.status === 400, String(badSignal.status));
+
+  const outsider = await new Client('outsider');
+  const outsiderReg = await outsider.register('outsider_' + stamp, 'outsider-pass-1');
+  if (outsiderReg.status === 200) {
+    const outsiderSignal = await outsider.call('POST', '/api/call/signal', {
+      id: callId, to: alice.user.id, payload: JSON.stringify({ kind: 'offer', data: {} })
+    });
+    ok('outsiders cannot inject signalling', outsiderSignal.status === 403, String(outsiderSignal.status));
+  }
+
+  const leave = await bob.call('POST', '/api/call/leave', { id: callId });
+  ok('call left', leave.status === 200, String(leave.status));
+  const aliceLeft = await alice.call('GET', '/api/call/wait?after=0&timeout=5');
+  ok('caller is told about the hangup',
+    (aliceLeft.data.events || []).some(e => e.type === 'left' || e.type === 'ended'), '');
+  const history = await alice.call('GET', '/api/call/history');
+  ok('call history recorded', history.data.calls.some(c => c.id === callId), '');
+
+  // conference room: two people join the same name
+  const roomJoin = await alice.call('POST', '/api/call/start', { room: 'team_' + stamp, video: true });
+  ok('room opened', roomJoin.status === 200 && roomJoin.data.call.room === 'team_' + stamp, String(roomJoin.status));
+  const roomId = roomJoin.data.call.id;
+  const roomJoin2 = await bob.call('POST', '/api/call/start', { room: 'team_' + stamp, video: false });
+  ok('second person joins the same room', roomJoin2.status === 200 && roomJoin2.data.call.id === roomId &&
+    roomJoin2.data.call.members.length === 2, JSON.stringify(roomJoin2.data.call.members.length));
+  const badRoom = await alice.call('POST', '/api/call/start', { room: 'x' });
+  ok('too short room name rejected', badRoom.status === 400, String(badRoom.status));
+  await alice.call('POST', '/api/call/leave', { id: roomId });
+  await bob.call('POST', '/api/call/leave', { id: roomId });
+
   // ---- file attachments
   const TXT = 'data:text/plain;base64,' + Buffer.from('attachment body').toString('base64');
   const fileMsg = await bob.call('POST', '/api/messages/send', {

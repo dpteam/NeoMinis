@@ -205,7 +205,9 @@ namespace Social.Web
                 .Prop("maxVideoKB", _cfg.MaxVideoKB)
                 .Prop("maxAudioFiles", _cfg.MaxAudioFiles)
                 .Prop("maxVideoFiles", _cfg.MaxVideoFiles)
-                .Prop("feedbackPerHour", _cfg.FeedbackPerHour);
+                .Prop("feedbackPerHour", _cfg.FeedbackPerHour)
+                .Prop("maxCallMembers", _cfg.MaxCallMembers)
+                .Prop("callStun", _cfg.CallStun);
             b.Prop("maxStatusLength", _cfg.MaxStatusLength);
             b.Prop("maxBioLength", _cfg.MaxBioLength);
             b.Prop("maxNameLength", _cfg.MaxNameLength);
@@ -643,6 +645,14 @@ namespace Social.Web
             if (r == "playlist/save") { RequireMethod(m, "POST"); HandlePlaylistSave(ctx); return; }
             if (r == "playlist/delete") { RequireMethod(m, "POST"); HandlePlaylistDelete(ctx); return; }
             if (r == "playlist/item") { RequireMethod(m, "POST"); HandlePlaylistItem(ctx); return; }
+            if (r == "call/start") { RequireMethod(m, "POST"); HandleCallStart(ctx); return; }
+            if (r == "call/answer") { RequireMethod(m, "POST"); HandleCallAnswer(ctx); return; }
+            if (r == "call/leave") { RequireMethod(m, "POST"); HandleCallLeave(ctx); return; }
+            if (r == "call/signal") { RequireMethod(m, "POST"); HandleCallSignal(ctx); return; }
+            if (r == "call/media") { RequireMethod(m, "POST"); HandleCallMedia(ctx); return; }
+            if (r == "call/wait") { RequireMethod(m, "GET"); HandleCallWait(ctx); return; }
+            if (r == "call/active") { RequireMethod(m, "GET"); HandleCallActive(ctx); return; }
+            if (r == "call/history") { RequireMethod(m, "GET"); HandleCallHistory(ctx); return; }
             if (r == "friends") { RequireMethod(m, "GET"); HandleFriends(ctx); return; }
             if (r == "friend") { RequireMethod(m, "POST"); HandleFriendAction(ctx); return; }
             if (r == "messages/threads") { RequireMethod(m, "GET"); HandleThreads(ctx); return; }

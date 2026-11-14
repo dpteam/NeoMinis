@@ -450,6 +450,8 @@
         '<div class="chat-head-main"><div class="name">' + UI.esc(other.displayName) + '</div>' +
         '<div class="tiny muted" id="chat-presence">' + (other.online ? T('profile.online') : '@' + UI.esc(other.username)) + '</div>' +
         '<div class="tiny muted chat-read hidden" id="chat-read"></div></div>' +
+        '<button class="btn btn-sm" id="chat-call-audio" title="' + UI.attr(T('calls.audioCall')) + '">' + UI.icon('phone') + '</button>' +
+        '<button class="btn btn-sm" id="chat-call-video" title="' + UI.attr(T('calls.videoCall')) + '">' + UI.icon('video') + '</button>' +
         '<a class="btn btn-sm right" href="#/profile/' + other.id + '">' + T('nav.profile') + '</a></div>';
       body += '<div class="chat-body" id="chat-body">';
       if (data.hasMore) body += '<div class="center" style="padding:6px"><button type="button" class="btn btn-xs" id="chat-older">' + T('messages.loadOlder') + '</button></div>';
@@ -489,6 +491,10 @@
       if (newText) autoGrow(newText);
 
       bindChat(withId, other);
+      var ca = document.getElementById('chat-call-audio');
+      if (ca) ca.addEventListener('click', function () { CallUI.start(withId, false); });
+      var cv = document.getElementById('chat-call-video');
+      if (cv) cv.addEventListener('click', function () { CallUI.start(withId, true); });
       if (!silent) refreshThreads();
       startMessageLoop(withId);
     });
@@ -3028,6 +3034,8 @@
         '</div>' +
         field('cfg-editwin', T('admin.editWindow'), lim.editWindowMin, 'number', ' min="0"') +
         field('cfg-fbph', T('admin.feedbackPerHour'), lim.feedbackPerHour, 'number', ' min="1"') +
+        field('cfg-callmembers', T('admin.maxCallMembers'), lim.maxCallMembers, 'number', ' min="2"') +
+        field('cfg-callstun', T('admin.callStun'), lim.callStun) +
         '</div>';
 
       // ui + logging + storage
@@ -3127,7 +3135,9 @@
             maxAvatarKB: Number(App.val('cfg-avatarkb')),
             maxPostImageKB: Number(App.val('cfg-imagekb')),
             editWindowMin: Number(App.val('cfg-editwin')),
-            feedbackPerHour: Number(App.val('cfg-fbph'))
+            feedbackPerHour: Number(App.val('cfg-fbph')),
+            maxCallMembers: Number(App.val('cfg-callmembers')),
+            callStun: App.val('cfg-callstun')
           },
           ui: {
             refreshMs: Number(App.val('cfg-refresh')),

@@ -302,6 +302,40 @@ account; only a hashed IP is kept for abuse handling.
 Moderators can read feedback; the message, contact, page, user agent, an internal
 note and who handled it are all shown in the admin board.
 
+### Calls
+
+Voice and video calls plus conference rooms. The server never touches the media:
+the browsers open a WebRTC peer connection to each other and the server only
+relays the signalling (SDP offers/answers and ICE candidates) through the same
+long-poll channel the chat uses.
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| POST | `/api/call/start` | `with` (1:1) or `room` (conference), `video` | `{ call }` |
+| POST | `/api/call/answer` | `id`, `accept` | `{ call }` |
+| POST | `/api/call/leave` | `id` | `{ ended }` |
+| POST | `/api/call/signal` | `id`, `to`, `payload` | `{ ok }` |
+| POST | `/api/call/media` | `id`, `muted`, `video` | `{ ok }` |
+| GET | `/api/call/wait` | `after`, `timeout` | `{ events[], latest, busy }` |
+| GET | `/api/call/active` | — | `{ calls[] }` |
+| GET | `/api/call/history` | `limit` | `{ calls[] }` |
+
+`with` starts a 1:1 call: the callee gets an `incoming` event and answers with
+`/api/call/answer`. `room` joins a named conference instead — everybody who types
+the same name lands in the same call, the first one opens it and the rest get a
+`joined` event so the others can offer to them. `payload` is an opaque JSON object
+(`{kind, data}`) relayed verbatim to the peer; anything that is not a JSON object,
+or is larger than 64 KB, is rejected. Only members of a call may signal inside it,
+so a stranger cannot inject an offer.
+
+`/api/call/wait` is a long poll over the caller's event queue (`incoming`,
+`accepted`, `declined`, `joined`, `left`, `ended`, `media`, `signal`) and shares
+the `maxActiveWaits` budget with the other long polls. Calls live only in memory:
+a restart drops them, while the history (`calls.json`, last 500 records) survives
+and is what `#/calls` shows. `limits.maxCallMembers` (default 8) caps a call, and
+`limits.callStun` holds the comma-separated ICE servers the browsers use (empty =
+LAN only, no external lookups; add your own TURN for strict NATs).
+
 ### Notifications
 
 | Method | Path | Body / query | Result |

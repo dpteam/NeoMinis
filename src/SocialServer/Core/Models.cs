@@ -135,6 +135,20 @@ namespace Social.Core
     }
 
     /// <summary>
+    /// Finished call, kept for the history list. Live calls live only in memory.
+    /// </summary>
+    public sealed class CallRecord
+    {
+        public long Id;
+        public string Kind = "audio";
+        public string Room = "";
+        public long Initiator;
+        public List<long> Participants = new List<long>();
+        public DateTime Started = DateTime.UtcNow;
+        public DateTime Ended = DateTime.MinValue;
+    }
+
+    /// <summary>
     /// An unfinished post. Drafts keep text, video link, visibility, wall/group and
     /// a poll; pictures are deliberately not stored so the JSON tables stay small.
     /// </summary>
@@ -268,6 +282,7 @@ namespace Social.Core
         public long NextMediaId = 1;
         public long NextPlaylistId = 1;
         public long NextFeedbackId = 1;
+        public long NextCallId = 1;
         public long TotalRegistrations;
         public DateTime LastBackup = DateTime.MinValue;
         public string InstallId = "";

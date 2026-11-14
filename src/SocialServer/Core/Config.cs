@@ -153,6 +153,11 @@ namespace Social.Core
         // anonymous feedback to the operators
         public int FeedbackPerHour = 5;
 
+        // voice and video calls
+        public int MaxCallMembers = 8;
+        // comma separated ICE servers; empty = LAN only, no external lookups
+        public string CallStun = "stun:stun.l.google.com:19302";
+
         // personal media library (music / clips)
         public int MaxAudioKB = 4096;
         public int MaxVideoKB = 5120;
@@ -440,6 +445,8 @@ namespace Social.Core
                     else if (key == "maxvoicesec") MaxVoiceSec = Int(val, MaxVoiceSec);
                     else if (key == "maxfilekb") MaxFileKB = Int(val, MaxFileKB);
                     else if (key == "feedbackperhour") FeedbackPerHour = Int(val, FeedbackPerHour);
+                    else if (key == "maxcallmembers") MaxCallMembers = Int(val, MaxCallMembers);
+                    else if (key == "callstun") CallStun = val;
                     else if (key == "maxaudiokb") MaxAudioKB = Int(val, MaxAudioKB);
                     else if (key == "maxvideokb") MaxVideoKB = Int(val, MaxVideoKB);
                     else if (key == "maxaudiofiles") MaxAudioFiles = Int(val, MaxAudioFiles);

@@ -34,13 +34,14 @@ namespace Social.Core
         private readonly List<MediaItem> _media = new List<MediaItem>();
         private readonly List<Playlist> _playlists = new List<Playlist>();
         private readonly List<Feedback> _feedback = new List<Feedback>();
+        private readonly List<CallRecord> _calls = new List<CallRecord>();
         private Meta _meta = new Meta();
 
         private readonly Dictionary<long, User> _userById = new Dictionary<long, User>();
         private readonly Dictionary<string, User> _userByName = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
 
         private bool _dirtyUsers, _dirtyPosts, _dirtyComments, _dirtyFriends, _dirtyMessages;
-        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback;
+        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls;
         private bool _readOnly;
         private string _saveError = "";
         private DateTime _lastSave = DateTime.MinValue;
@@ -67,7 +68,7 @@ namespace Social.Core
                 {
                     return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
                            _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
-                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback;
+                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls;
                 }
             }
         }
@@ -120,6 +121,11 @@ namespace Social.Core
                 _playlists.AddRange(LoadTable("playlists.json", PlaylistFromDict));
                 _feedback.Clear();
                 _feedback.AddRange(LoadTable("feedback.json", FeedbackFromDict));
+                _calls.Clear();
+                _calls.AddRange(LoadTable("calls.json", CallRecordFromDict));
+                // a restart means every call that was still open is over
+                for (int i = 0; i < _calls.Count; i++)
+                    if (_calls[i].Ended == DateTime.MinValue) _calls[i].Ended = _calls[i].Started;
 
                 // sort newest first, keeping the hot queries cheap
                 _posts.Sort(delegate(Post a, Post b) { return b.Id.CompareTo(a.Id); });
@@ -130,7 +136,7 @@ namespace Social.Core
                 EnsureCounters();
                 _loaded = true;
                 _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = false;
+                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = false;
 
                 Log.Info("DATA", "loaded users=" + _users.Count + " posts=" + _posts.Count +
                                   " comments=" + _comments.Count + " friends=" + _friends.Count +
@@ -161,6 +167,7 @@ namespace Social.Core
                 m.NextMediaId = Json.GetLong(d, "nextMediaId", 1);
                 m.NextPlaylistId = Json.GetLong(d, "nextPlaylistId", 1);
                 m.NextFeedbackId = Json.GetLong(d, "nextFeedbackId", 1);
+                m.NextCallId = Json.GetLong(d, "nextCallId", 1);
                 m.TotalRegistrations = Json.GetLong(d, "totalRegistrations", 0);
                 m.LastBackup = Json.GetDate(d, "lastBackup", DateTime.MinValue);
                 m.InstallId = Json.GetString(d, "installId", "");
@@ -176,7 +183,7 @@ namespace Social.Core
 
         private void EnsureCounters()
         {
-            long maxUser = 0, maxPost = 0, maxComment = 0, maxMessage = 0, maxNotif = 0, maxGroup = 0, maxReport = 0, maxDraft = 0, maxMedia = 0, maxPlaylist = 0, maxFeedback = 0;
+            long maxUser = 0, maxPost = 0, maxComment = 0, maxMessage = 0, maxNotif = 0, maxGroup = 0, maxReport = 0, maxDraft = 0, maxMedia = 0, maxPlaylist = 0, maxFeedback = 0, maxCall = 0;
             for (int i = 0; i < _users.Count; i++) if (_users[i].Id > maxUser) maxUser = _users[i].Id;
             for (int i = 0; i < _posts.Count; i++) if (_posts[i].Id > maxPost) maxPost = _posts[i].Id;
             for (int i = 0; i < _comments.Count; i++) if (_comments[i].Id > maxComment) maxComment = _comments[i].Id;
@@ -188,6 +195,7 @@ namespace Social.Core
             for (int i = 0; i < _media.Count; i++) if (_media[i].Id > maxMedia) maxMedia = _media[i].Id;
             for (int i = 0; i < _playlists.Count; i++) if (_playlists[i].Id > maxPlaylist) maxPlaylist = _playlists[i].Id;
             for (int i = 0; i < _feedback.Count; i++) if (_feedback[i].Id > maxFeedback) maxFeedback = _feedback[i].Id;
+            for (int i = 0; i < _calls.Count; i++) if (_calls[i].Id > maxCall) maxCall = _calls[i].Id;
             if (_meta.NextUserId <= maxUser) _meta.NextUserId = maxUser + 1;
             if (_meta.NextPostId <= maxPost) _meta.NextPostId = maxPost + 1;
             if (_meta.NextCommentId <= maxComment) _meta.NextCommentId = maxComment + 1;
@@ -199,6 +207,7 @@ namespace Social.Core
             if (_meta.NextMediaId <= maxMedia) _meta.NextMediaId = maxMedia + 1;
             if (_meta.NextPlaylistId <= maxPlaylist) _meta.NextPlaylistId = maxPlaylist + 1;
             if (_meta.NextFeedbackId <= maxFeedback) _meta.NextFeedbackId = maxFeedback + 1;
+            if (_meta.NextCallId <= maxCall) _meta.NextCallId = maxCall + 1;
         }
 
         private string ReadJson(string path)
@@ -305,9 +314,10 @@ namespace Social.Core
                     if (force || _dirtyMedia) WriteTable("media.json", MediaToArray());
                     if (force || _dirtyPlaylists) WriteTable("playlists.json", PlaylistsToArray());
                     if (force || _dirtyFeedback) WriteTable("feedback.json", FeedbackToArray());
+                    if (force || _dirtyCalls) WriteTable("calls.json", CallsToArray());
 
                     _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = false;
+                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = false;
                     _lastSave = DateTime.UtcNow;
                     _saveError = "";
                     if (_readOnly)
@@ -384,6 +394,7 @@ namespace Social.Core
         private void MarkMedia() { _dirtyMedia = true; }
         private void MarkPlaylists() { _dirtyPlaylists = true; }
         private void MarkFeedback() { _dirtyFeedback = true; }
+        private void MarkCalls() { _dirtyCalls = true; }
 
         // ============================================================== users
 
@@ -2337,6 +2348,104 @@ namespace Social.Core
             }
         }
 
+        // =============================================================== calls
+
+        public long NextCallId()
+        {
+            lock (_sync)
+            {
+                long id = _meta.NextCallId++;
+                _dirtyMeta = true;
+                return id;
+            }
+        }
+
+        public CallRecord AddCallRecord(long id, string kind, string room, long initiator, List<long> participants)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                CallRecord r = new CallRecord();
+                r.Id = id;
+                r.Kind = kind;
+                r.Room = room ?? "";
+                r.Initiator = initiator;
+                r.Participants = new List<long>(participants);
+                r.Started = DateTime.UtcNow;
+                _calls.Insert(0, r);
+                if (_calls.Count > 500) _calls.RemoveRange(500, _calls.Count - 500);
+                MarkCalls();
+                return r;
+            }
+        }
+
+        public void EndCallRecord(long id)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _calls.Count; i++)
+                {
+                    if (_calls[i].Id != id) continue;
+                    _calls[i].Ended = DateTime.UtcNow;
+                    MarkCalls();
+                    return;
+                }
+            }
+        }
+
+        /// <summary>Recent calls the user took part in.</summary>
+        public List<CallRecord> CallsFor(long userId, int limit)
+        {
+            List<CallRecord> list = new List<CallRecord>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _calls.Count && list.Count < limit; i++)
+                    if (_calls[i].Participants.Contains(userId)) list.Add(_calls[i]);
+            }
+            return list;
+        }
+
+        private List<object> CallsToArray()
+        {
+            List<object> list = new List<object>(_calls.Count);
+            for (int i = 0; i < _calls.Count; i++)
+            {
+                CallRecord r = _calls[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = r.Id; d["kind"] = r.Kind; d["room"] = r.Room; d["initiator"] = r.Initiator;
+                List<object> ids = new List<object>(r.Participants.Count);
+                for (int k = 0; k < r.Participants.Count; k++) ids.Add(r.Participants[k]);
+                d["participants"] = ids;
+                d["started"] = r.Started; d["ended"] = r.Ended;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static CallRecord CallRecordFromDict(Dictionary<string, object> d)
+        {
+            CallRecord r = new CallRecord();
+            r.Id = Json.GetLong(d, "id", 0);
+            r.Kind = Json.GetString(d, "kind", "audio");
+            r.Room = Json.GetString(d, "room", "");
+            r.Initiator = Json.GetLong(d, "initiator", 0);
+            r.Started = Json.GetDate(d, "started", DateTime.UtcNow);
+            r.Ended = Json.GetDate(d, "ended", DateTime.MinValue);
+            List<object> ids = Json.Get(d, "participants") as List<object>;
+            if (ids != null)
+            {
+                for (int i = 0; i < ids.Count; i++)
+                {
+                    long id;
+                    if (ids[i] is long) id = (long)ids[i];
+                    else if (!long.TryParse(Convert.ToString(ids[i]), out id)) continue;
+                    if (id > 0) r.Participants.Add(id);
+                }
+            }
+            if (r.Id <= 0 || r.Initiator <= 0) return null;
+            return r;
+        }
+
         // ============================================================= feedback
 
         public Feedback AddFeedback(string kind, string message, string contact, string page,
@@ -2835,6 +2944,7 @@ namespace Social.Core
             d["nextMediaId"] = m.NextMediaId;
             d["nextPlaylistId"] = m.NextPlaylistId;
             d["nextFeedbackId"] = m.NextFeedbackId;
+            d["nextCallId"] = m.NextCallId;
             d["totalRegistrations"] = m.TotalRegistrations;
             d["lastBackup"] = m.LastBackup;
             d["installId"] = m.InstallId;

@@ -82,6 +82,7 @@ var App = (function () {
         route();
         startBadgePoll();
         startNotifyStream();
+        if (window.CallUI) CallUI.init();
         updateTitle((state.me && state.me.unreadNotifications) || 0);
       } else {
         renderAuth('login');
@@ -338,6 +339,7 @@ var App = (function () {
     html += side('#/drafts', 'file-pen', T('nav.drafts'), 'drafts');
     html += side('#/music', 'music', T('nav.music'), 'music');
     html += side('#/video', 'film', T('nav.video'), 'video');
+    html += side('#/calls', 'phone', T('nav.calls'), 'calls');
     html += '<div class="side-sep"></div>';
     html += side('#/profile/' + u.id, 'id-card', T('nav.profile'), 'profile');
     html += side('#/settings', 'gear', T('nav.settings'), 'settings');
@@ -736,6 +738,7 @@ var App = (function () {
     stopNotifyStream();
     startNotifyStream();
     startBadgePoll();
+    if (window.CallUI) CallUI.init();
     updateTitle((state.me && state.me.unreadNotifications) || 0);
     SoundFX.play('login');
     if (isRegister && data.recoveryCode) {
@@ -763,6 +766,7 @@ var App = (function () {
       stopTimers();
       stopNotifyStream();
       stopBadgePoll();
+      if (window.CallUI) CallUI.stop();
       state.notify.last = 0;
       updateTitle(0);
       SoundFX.play('logout');
@@ -2206,6 +2210,7 @@ var App = (function () {
       stopTimers();
       stopNotifyStream();
       stopBadgePoll();
+      if (window.CallUI) CallUI.stop();
       renderAuth('login');
       UI.toast(T('errors.session'), 'err');
     };

@@ -19,7 +19,7 @@
       SocialStore (in-memory)     SessionManager            StatsStore / CaptchaStore
       JSON tables + atomic IO     session key = PBKDF2       lifetime counters, SVG codes
               │
-      data/{users,posts,comments,friends,messages,notifications,groups,reports,meta}.json
+      data/*.json  (14 tables + meta + stats)
 ```
 
 Both listeners share one `SocialStore`, one `SessionManager`, one stats store and
@@ -48,8 +48,8 @@ inside `Trace`, which avoids the classic "double output / dead listener" bug.
 
 ## Storage
 
-No database server, no SQLite, no NuGet. Nine small JSON tables plus `meta.json`
-(id counters, install id, last backup). Guarantees:
+No database server, no SQLite, no NuGet. Fourteen small JSON tables plus
+`meta.json` (id counters, install id, last backup) and `stats.json` (visits). Guarantees:
 
 * **atomic replace** — write `*.tmp`, `File.Replace` (or move dance), keep `.bak`
 * **self-healing load** — main file → `.bak` → quarantine `*.bad-*` and start empty
@@ -62,6 +62,11 @@ No database server, no SQLite, no NuGet. Nine small JSON tables plus `meta.json`
 All mutations happen under one lock (`SocialStore.Sync`); reads that touch several
 tables use the same lock, so no torn views. Content is kept newest-first in memory
 to make feeds cheap.
+
+Live calls are the one thing that is *not* persisted: `CallRegistry` keeps them in
+memory together with a small per-user event queue, because a call only exists while
+the browsers are connected. Only the finished record (who, when, how long) lands in
+`calls.json` for the history list.
 
 ## Request pipeline
 

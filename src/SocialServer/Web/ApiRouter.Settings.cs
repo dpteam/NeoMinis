@@ -65,6 +65,8 @@ namespace Social.Web
                 .Prop("maxAudioFiles", _cfg.MaxAudioFiles)
                 .Prop("maxVideoFiles", _cfg.MaxVideoFiles)
                 .Prop("feedbackPerHour", _cfg.FeedbackPerHour)
+                .Prop("maxCallMembers", _cfg.MaxCallMembers)
+                .Prop("callStun", _cfg.CallStun)
                 .Prop("maxAvatarKB", _cfg.MaxAvatarKB)
                 .Prop("maxPostImageKB", _cfg.MaxPostImageKB)
                 .Prop("editWindowMin", _cfg.EditWindowMin)
@@ -298,6 +300,12 @@ namespace Social.Web
                 ApplyLimit(limits, "maxAudioFiles", _cfg.MaxAudioFiles, 1, delegate(int v) { _cfg.MaxAudioFiles = v; });
                 ApplyLimit(limits, "maxVideoFiles", _cfg.MaxVideoFiles, 1, delegate(int v) { _cfg.MaxVideoFiles = v; });
                 ApplyLimit(limits, "feedbackPerHour", _cfg.FeedbackPerHour, 1, delegate(int v) { _cfg.FeedbackPerHour = v; });
+                ApplyLimit(limits, "maxCallMembers", _cfg.MaxCallMembers, 2, delegate(int v) { _cfg.MaxCallMembers = v; });
+                if (limits.ContainsKey("callStun"))
+                {
+                    _cfg.CallStun = Util.SingleLine(Json.GetString(limits, "callStun", _cfg.CallStun), 400);
+                    _cfg.SetIniValue("limits", "callStun", _cfg.CallStun);
+                }
                 ApplyLimit(limits, "maxAvatarKB", _cfg.MaxAvatarKB, 16, delegate(int v) { _cfg.MaxAvatarKB = v; });
                 ApplyLimit(limits, "maxPostImageKB", _cfg.MaxPostImageKB, 64, delegate(int v) { _cfg.MaxPostImageKB = v; });
                 ApplyLimit(limits, "editWindowMin", _cfg.EditWindowMin, 0, delegate(int v) { _cfg.EditWindowMin = v; });
