@@ -36,177 +36,235 @@ var AppsUI = (function () {
     return 'globe';
   }
 
-  // ------------------------------------------------------------- catalogue
+  // ------------------------------------------------------------- the hub
 
-  App.views.apps = function (main) {
-    main.innerHTML =
+  /// <summary>
+  /// Games and apps are one place with tabs, not two menu entries: a game is an
+  /// app that happens to run in a frame. Both #/games and #/apps render this
+  /// shell, so an old link still lands somewhere sensible.
+  /// </summary>
+  function hub(main, active) {
+    var gamesOn = !(App.state.site && App.state.site.gamesEnabled === false);
+    var tabs = '<div class="feed-tabs hub-tabs">' +
+      (gamesOn ? '<a class="tab2' + (active === 'games' ? ' active' : '') + '" href="#/games">' +
+        UI.icon('gamepad') + ' ' + T('apps.tabGames') + '</a>' : '') +
+      '<a class="tab2' + (active === 'apps' ? ' active' : '') + '" href="#/apps">' +
+      UI.icon('puzzle-piece') + ' ' + T('apps.tabApps') + '</a>' +
+      '<a class="tab2' + (active === 'mine' ? ' active' : '') + '" href="#/apps?tab=mine">' +
+      UI.icon('key') + ' ' + T('apps.tabMine') + '</a>' +
+      '</div>';
+
+    main.innerHTML = tabs + '<div id="hub-body"></div>';
+    var body = byId('hub-body');
+    if (!body) return;
+
+    if (active === 'games') {
+      if (!window.GamesUI || !GamesUI.ready()) {
+        body.innerHTML = '<div class="card"><div class="card-b">' +
+          UI.empty('gamepad', T('games.off'), T('games.offHint')) + '</div></div>';
+        return;
+      }
+      body.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('gamepad') + ' ' +
+        T('games.title') +
+        '<span class="right"><button type="button" class="btn btn-xs btn-primary hidden" id="game-upload">' +
+        UI.icon('upload') + ' ' + T('games.upload') + '</button></span></div>' +
+        '<div class="card-b" id="game-shelf"></div></div>';
+      GamesUI.shelf(byId('game-shelf'), App.qs('q') || '');
+      return;
+    }
+
+    if (active === 'mine') { mineTab(body); return; }
+    appsTab(body);
+  }
+
+  App.views.apps = function (main, r) {
+    var tab = App.qs('tab') === 'mine' ? 'mine' : 'apps';
+    hub(main, tab);
+  };
+
+  // #/games shows the same shell with the games tab on, so the two are one place
+  App.views.games = function (main) { hub(main, 'games'); };
+
+  // --------------------------------------------------------------- catalogue
+
+  var state = { apps: [], grants: [], scopes: [], canHtml: false };
+
+  function loadApps() {
+    Api.request('GET', '/api/apps/mine', null, function (err, data) {
+      if (err) {
+        var box = byId('apps-list');
+        if (box) box.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>';
+        var own = byId('apps-own');
+        if (own) own.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>';
+        return;
+      }
+      state.apps = (data && data.apps) || [];
+      state.grants = (data && data.grants) || [];
+      state.scopes = (data && data.scopes) || [];
+      state.canHtml = !!(data && data.canPublishHtml);
+      // the catalogue is what everybody may install, so fetch it separately
+      Api.request('GET', '/api/apps', null, function (e2, d2) {
+        var published = (e2 || !d2) ? [] : (d2.apps || []);
+        renderCatalogue(published);
+        renderGrants();
+        renderOwn();
+      });
+    });
+  }
+
+  function isInstalled(appId) {
+    for (var i = 0; i < state.grants.length; i++) if (state.grants[i].appId === appId) return state.grants[i];
+    return null;
+  }
+
+  function findApp(list, id) {
+    for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(id)) return list[i];
+    return null;
+  }
+
+  /// The catalogue tab: what anybody may install, plus what this account allowed.
+  function appsTab(body) {
+    body.innerHTML =
       '<div class="card"><div class="card-h">' + UI.icon('puzzle-piece') + ' ' + T('apps.title') +
       '<span class="right"><button type="button" class="btn btn-xs" id="apps-new">' +
       UI.icon('plus') + ' ' + T('apps.new') + '</button></span></div>' +
       '<div class="card-b"><div class="tiny muted" style="margin-bottom:10px">' + T('apps.hint') + '</div>' +
       '<div id="apps-list"><div class="center" style="padding:18px">' + UI.spinner() + '</div></div></div></div>' +
       '<div class="card"><div class="card-h">' + UI.icon('key') + ' ' + T('apps.installed') + '</div>' +
-      '<div class="card-b" id="apps-grants"><div class="center" style="padding:14px">' + UI.spinner() + '</div></div></div>' +
-      '<div class="card"><div class="card-h">' + UI.icon('code') + ' ' + T('apps.mine') + '</div>' +
-      '<div class="card-b" id="apps-own"><div class="center" style="padding:14px">' + UI.spinner() + '</div></div></div>';
-
-    var state = { apps: [], grants: [], scopes: [], canHtml: false };
-
-    function load() {
-      Api.request('GET', '/api/apps/mine', null, function (err, data) {
-        if (err) {
-          var box = byId('apps-list');
-          if (box) box.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>';
-          return;
-        }
-        state.apps = (data && data.apps) || [];
-        state.grants = (data && data.grants) || [];
-        state.scopes = (data && data.scopes) || [];
-        state.canHtml = !!(data && data.canPublishHtml);
-        // the catalogue is what everybody may install, so fetch it separately
-        Api.request('GET', '/api/apps', null, function (e2, d2) {
-          var published = (e2 || !d2) ? [] : (d2.apps || []);
-          renderCatalogue(published);
-          renderGrants();
-          renderOwn();
-        });
-      });
-    }
-
-    function isInstalled(appId) {
-      for (var i = 0; i < state.grants.length; i++) if (state.grants[i].appId === appId) return state.grants[i];
-      return null;
-    }
-
-    function renderCatalogue(published) {
-      var box = byId('apps-list');
-      if (!box) return;
-      if (!published.length) {
-        box.innerHTML = UI.empty('puzzle-piece', T('apps.empty'), T('apps.emptyHint'));
-        return;
-      }
-      var html = '<div class="app-grid">';
-      for (var i = 0; i < published.length; i++) {
-        var a = published[i];
-        var grant = isInstalled(a.id);
-        html += '<div class="app-card">' +
-          '<div class="app-head">' + UI.icon(typeIcon(a.type)) + ' <b>' + UI.esc(a.name) + '</b></div>' +
-          '<div class="app-desc tiny muted">' + UI.esc(a.description || '') + '</div>' +
-          '<div class="app-meta tiny muted">' + T('apps.by', a.ownerName) +
-          (a.installs ? ' · ' + T('apps.installs', String(a.installs)) : '') + '</div>' +
-          '<div class="app-actions">' +
-          (grant
-            ? '<span class="badge ok">' + UI.icon('check') + ' ' + T('apps.granted') + '</span>' +
-              '<button type="button" class="btn btn-xs btn-danger app-revoke" data-id="' + a.id + '">' +
-              T('apps.revoke') + '</button>'
-            : '<button type="button" class="btn btn-xs btn-primary app-install" data-id="' + a.id + '">' +
-              T('apps.install') + '</button>') +
-          (a.url && (grant || a.mine)
-            ? '<a class="btn btn-xs" href="' + UI.attr(UI.safeUrl(a.url)) + '" target="_blank" rel="noopener noreferrer">' +
-              T('apps.open') + '</a>'
-            : '') +
-          '</div></div>';
-      }
-      box.innerHTML = html + '</div>';
-
-      var installs = box.querySelectorAll('.app-install');
-      for (var k = 0; k < installs.length; k++) {
-        installs[k].addEventListener('click', function () {
-          var app = findApp(published, this.getAttribute('data-id'));
-          if (app) consentModal(app, load);
-        });
-      }
-      var revokes = box.querySelectorAll('.app-revoke');
-      for (var m = 0; m < revokes.length; m++) {
-        revokes[m].addEventListener('click', function () {
-          var id = Number(this.getAttribute('data-id'));
-          UI.confirm(T('apps.revoke'), T('apps.revokeConfirm'), T('apps.revoke'), function () {
-            Api.request('POST', '/api/apps/revoke', { id: id }, function (err) {
-              if (err) { UI.toast(Api.errorText(err), 'err'); return; }
-              UI.toast(T('apps.revoked'), 'ok');
-              load();
-            });
-          }, true);
-        });
-      }
-    }
-
-    function findApp(list, id) {
-      for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(id)) return list[i];
-      return null;
-    }
-
-    function renderGrants() {
-      var box = byId('apps-grants');
-      if (!box) return;
-      if (!state.grants.length) {
-        box.innerHTML = '<div class="tiny muted">' + T('apps.noGrants') + '</div>';
-        return;
-      }
-      var html = '';
-      for (var i = 0; i < state.grants.length; i++) {
-        var g = state.grants[i];
-        var scopes = String(g.scopes || '').split(',').filter(function (s) { return s.length > 0; });
-        var chips = '';
-        for (var k = 0; k < scopes.length; k++)
-          chips += '<span class="scope-chip">' + UI.esc(scopeLabel(scopes[k])) + '</span>';
-        html += '<div class="app-grant-row">' + UI.icon(typeIcon(g.type)) +
-          '<div class="app-grant-main"><b>' + UI.esc(g.name) + '</b><div class="scope-chips">' + chips + '</div>' +
-          '<div class="tiny muted">' + (g.lastUsed ? T('apps.lastUsed', UI.timeAgo(g.lastUsed)) : T('apps.neverUsed')) +
-          '</div></div>' +
-          '<button type="button" class="btn btn-xs btn-danger app-revoke" data-id="' + g.appId + '">' +
-          T('apps.revoke') + '</button></div>';
-      }
-      box.innerHTML = html;
-      var revokes = box.querySelectorAll('.app-revoke');
-      for (var r = 0; r < revokes.length; r++) {
-        revokes[r].addEventListener('click', function () {
-          var id = Number(this.getAttribute('data-id'));
-          UI.confirm(T('apps.revoke'), T('apps.revokeConfirm'), T('apps.revoke'), function () {
-            Api.request('POST', '/api/apps/revoke', { id: id }, function (err) {
-              if (err) { UI.toast(Api.errorText(err), 'err'); return; }
-              UI.toast(T('apps.revoked'), 'ok');
-              load();
-            });
-          }, true);
-        });
-      }
-    }
-
-    function renderOwn() {
-      var box = byId('apps-own');
-      if (!box) return;
-      var html = '';
-      if (!state.apps.length) {
-        html += '<div class="tiny muted" style="margin-bottom:8px">' + T('apps.noOwn') + '</div>';
-      } else {
-        for (var i = 0; i < state.apps.length; i++) {
-          var a = state.apps[i];
-          html += '<div class="app-own-row">' + UI.icon(typeIcon(a.type)) +
-            '<div class="app-grant-main"><b>' + UI.esc(a.name) + '</b>' +
-            (a.published ? ' <span class="badge ok">' + T('apps.published') + '</span>'
-                         : ' <span class="badge">' + T('apps.draft') + '</span>') +
-            '<div class="tiny muted mono">' + UI.esc(a.clientId) + '</div>' +
-            '<div class="tiny muted">' + T('apps.installs', String(a.installs || 0)) + '</div></div>' +
-            '<button type="button" class="btn btn-xs app-edit" data-id="' + a.id + '">' +
-            T('common.edit') + '</button></div>';
-        }
-      }
-      box.innerHTML = html;
-      var edits = box.querySelectorAll('.app-edit');
-      for (var k = 0; k < edits.length; k++) {
-        edits[k].addEventListener('click', function () {
-          var app = findApp(state.apps, this.getAttribute('data-id'));
-          if (app) editModal(app, load);
-        });
-      }
-    }
+      '<div class="card-b" id="apps-grants"><div class="center" style="padding:14px">' + UI.spinner() + '</div></div></div>';
 
     var newBtn = byId('apps-new');
-    if (newBtn) newBtn.addEventListener('click', function () { registerModal(load); });
+    if (newBtn) newBtn.addEventListener('click', function () { registerModal(loadApps); });
+    loadApps();
+  }
 
-    load();
-  };
+  /// The developer tab: my own apps and the permissions this account granted.
+  function mineTab(body) {
+    body.innerHTML =
+      '<div class="card"><div class="card-h">' + UI.icon('code') + ' ' + T('apps.mine') +
+      '<span class="right"><button type="button" class="btn btn-xs" id="apps-new">' +
+      UI.icon('plus') + ' ' + T('apps.new') + '</button></span></div>' +
+      '<div class="card-b" id="apps-own"><div class="center" style="padding:14px">' + UI.spinner() + '</div></div></div>' +
+      '<div class="card"><div class="card-h">' + UI.icon('key') + ' ' + T('apps.installed') + '</div>' +
+      '<div class="card-b" id="apps-grants"><div class="center" style="padding:14px">' + UI.spinner() + '</div></div></div>';
+
+    var newBtn = byId('apps-new');
+    if (newBtn) newBtn.addEventListener('click', function () { registerModal(loadApps); });
+    loadApps();
+  }
+
+  function renderCatalogue(published) {
+    var box = byId('apps-list');
+    if (!box) return;
+    if (!published.length) {
+      box.innerHTML = UI.empty('puzzle-piece', T('apps.empty'), T('apps.emptyHint'));
+      return;
+    }
+    var html = '<div class="app-grid">';
+    for (var i = 0; i < published.length; i++) {
+      var a = published[i];
+      var grant = isInstalled(a.id);
+      html += '<div class="app-card">' +
+        '<div class="app-head">' + UI.icon(typeIcon(a.type)) + ' <b>' + UI.esc(a.name) + '</b></div>' +
+        '<div class="app-desc tiny muted">' + UI.esc(a.description || '') + '</div>' +
+        '<div class="app-meta tiny muted">' + T('apps.by', a.ownerName) +
+        (a.installs ? ' · ' + T('apps.installs', String(a.installs)) : '') + '</div>' +
+        '<div class="app-actions">' +
+        (grant
+          ? '<span class="badge ok">' + UI.icon('check') + ' ' + T('apps.granted') + '</span>' +
+            '<button type="button" class="btn btn-xs btn-danger app-revoke" data-id="' + a.id + '">' +
+            T('apps.revoke') + '</button>'
+          : '<button type="button" class="btn btn-xs btn-primary app-install" data-id="' + a.id + '">' +
+            T('apps.install') + '</button>') +
+        (a.url && (grant || a.mine)
+          ? '<a class="btn btn-xs" href="' + UI.attr(UI.safeUrl(a.url)) + '" target="_blank" rel="noopener noreferrer">' +
+            T('apps.open') + '</a>'
+          : '') +
+        '</div></div>';
+    }
+    box.innerHTML = html + '</div>';
+
+    var installs = box.querySelectorAll('.app-install');
+    for (var k = 0; k < installs.length; k++) {
+      installs[k].addEventListener('click', function () {
+        var app = findApp(published, this.getAttribute('data-id'));
+        if (app) consentModal(app, loadApps);
+      });
+    }
+    bindRevokes(box);
+  }
+
+  function bindRevokes(box) {
+    var revokes = box.querySelectorAll('.app-revoke');
+    for (var r = 0; r < revokes.length; r++) {
+      if (revokes[r].getAttribute('data-bound')) continue;
+      revokes[r].setAttribute('data-bound', '1');
+      revokes[r].addEventListener('click', function () {
+        var id = Number(this.getAttribute('data-id'));
+        UI.confirm(T('apps.revoke'), T('apps.revokeConfirm'), T('apps.revoke'), function () {
+          Api.request('POST', '/api/apps/revoke', { id: id }, function (err) {
+            if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+            UI.toast(T('apps.revoked'), 'ok');
+            loadApps();
+          });
+        }, true);
+      });
+    }
+  }
+
+  function renderGrants() {
+    var box = byId('apps-grants');
+    if (!box) return;
+    if (!state.grants.length) {
+      box.innerHTML = '<div class="tiny muted">' + T('apps.noGrants') + '</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < state.grants.length; i++) {
+      var g = state.grants[i];
+      var scopes = String(g.scopes || '').split(',').filter(function (s) { return s.length > 0; });
+      var chips = '';
+      for (var k = 0; k < scopes.length; k++)
+        chips += '<span class="scope-chip">' + UI.esc(scopeLabel(scopes[k])) + '</span>';
+      html += '<div class="app-grant-row">' + UI.icon(typeIcon(g.type)) +
+        '<div class="app-grant-main"><b>' + UI.esc(g.name) + '</b><div class="scope-chips">' + chips + '</div>' +
+        '<div class="tiny muted">' + (g.lastUsed ? T('apps.lastUsed', UI.timeAgo(g.lastUsed)) : T('apps.neverUsed')) +
+        '</div></div>' +
+        '<button type="button" class="btn btn-xs btn-danger app-revoke" data-id="' + g.appId + '">' +
+        T('apps.revoke') + '</button></div>';
+    }
+    box.innerHTML = html;
+    bindRevokes(box);
+  }
+
+  function renderOwn() {
+    var box = byId('apps-own');
+    if (!box) return;
+    var html = '';
+    if (!state.apps.length) {
+      html += '<div class="tiny muted" style="margin-bottom:8px">' + T('apps.noOwn') + '</div>';
+    } else {
+      for (var i = 0; i < state.apps.length; i++) {
+        var a = state.apps[i];
+        html += '<div class="app-own-row">' + UI.icon(typeIcon(a.type)) +
+          '<div class="app-grant-main"><b>' + UI.esc(a.name) + '</b>' +
+          (a.published ? ' <span class="badge ok">' + T('apps.published') + '</span>'
+                       : ' <span class="badge">' + T('apps.draft') + '</span>') +
+          '<div class="tiny muted mono">' + UI.esc(a.clientId) + '</div>' +
+          '<div class="tiny muted">' + T('apps.installs', String(a.installs || 0)) + '</div></div>' +
+          '<button type="button" class="btn btn-xs app-edit" data-id="' + a.id + '">' +
+          T('common.edit') + '</button></div>';
+      }
+    }
+    box.innerHTML = html;
+    var edits = box.querySelectorAll('.app-edit');
+    for (var k = 0; k < edits.length; k++) {
+      edits[k].addEventListener('click', function () {
+        var app = findApp(state.apps, this.getAttribute('data-id'));
+        if (app) editModal(app, loadApps);
+      });
+    }
+  }
 
   // --------------------------------------------------------------- consent
 

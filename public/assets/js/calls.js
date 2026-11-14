@@ -18,6 +18,8 @@ var CallUI = (function () {
   var ringClose = null;       // closes the ring modal
   var startedAt = 0;
   var tickTimer = null;
+  var audioCtx = null;         // one AudioContext for every level meter
+  var levels = {};             // tileId -> interval id
 
   function T(k, a, b) { return I18N.t(k, a, b); }
   function byId(id) { return document.getElementById(id); }
@@ -162,15 +164,83 @@ var CallUI = (function () {
     t.id = id;
     t.className = 'call-tile' + (isLocal ? ' local' : '');
     t.innerHTML = '<video autoplay playsinline' + (isLocal ? ' muted' : '') + '></video>' +
-      '<div class="call-name">' + UI.esc(user.displayName || user.username || '?') + '</div>' +
-      '<div class="call-state tiny"></div>';
-    byId('call-grid').appendChild(t);
+      '<div class="call-name">' + UI.esc(isLocal ? T('calls.you') : (user.displayName || user.username || '?')) + '</div>' +
+      '<div class="call-state tiny"></div>' +
+      '<div class="call-mic-off hidden" title="' + UI.attr(T('calls.mutedUser')) + '">' + UI.icon('microphone-slash') + '</div>';
+    var grid = byId('call-grid');
+    grid.appendChild(t);
+    syncGridSize(grid);
     return t;
+  }
+
+  /// <summary>
+  /// One tile should not stretch across the whole panel: a single remote person
+  /// gets a sensible width, and the local picture becomes a small inset rather
+  /// than a second half of the screen.
+  /// </summary>
+  function syncGridSize(grid) {
+    if (!grid) return;
+    var tiles = grid.querySelectorAll('.call-tile');
+    var n = tiles.length;
+    var cls = grid.className.replace(/\s*(solo|duo|many)\b/g, '');
+    cls += n <= 1 ? ' solo' : n === 2 ? ' duo' : ' many';
+    grid.className = cls;
+  }
+
+  /// <summary>
+  /// Marks a tile as "this person is talking" using an audio level meter. The
+  /// level is sampled from an AnalyserNode on that peer's stream, so a silent
+  /// room stays quiet instead of blinking at random.
+  /// </summary>
+  function watchLevel(userId, stream, isLocal) {
+    if (!stream || !stream.getAudioTracks || !stream.getAudioTracks().length) return;
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    try {
+      if (!audioCtx) audioCtx = new Ctx();
+      var src = audioCtx.createMediaStreamSource(stream);
+      var analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.6;
+      src.connect(analyser);
+      var buf = new Uint8Array(analyser.frequencyBinCount);
+      var tileId = 'call-tile-' + (isLocal ? 'me' : userId);
+      var speaking = false;
+
+      var tick = setInterval(function () {
+        var el = byId(tileId);
+        if (!el) { clearInterval(tick); return; }
+        analyser.getByteTimeDomainData(buf);
+        var sum = 0;
+        for (var i = 0; i < buf.length; i++) {
+          var v = (buf[i] - 128) / 128;
+          sum += v * v;
+        }
+        var rms = Math.sqrt(sum / buf.length);
+        // a low threshold: real speech sits well above room noise, and a high one
+        // makes the ring feel broken on a quiet microphone
+        var now = rms > 0.045;
+        if (now !== speaking) {
+          speaking = now;
+          el.className = el.className.replace(/\s*speaking\b/g, '') + (now ? ' speaking' : '');
+        }
+      }, 220);
+      levels[tileId] = tick;
+    } catch (e) { }
+  }
+
+  function stopLevel(userId, isLocal) {
+    var tileId = 'call-tile-' + (isLocal ? 'me' : userId);
+    if (levels[tileId]) { clearInterval(levels[tileId]); delete levels[tileId]; }
   }
 
   function removeTile(userId) {
     var t = byId('call-tile-' + userId);
-    if (t && t.parentNode) t.parentNode.removeChild(t);
+    if (t && t.parentNode) {
+      var grid = t.parentNode;
+      grid.removeChild(t);
+      syncGridSize(grid);
+    }
   }
 
   function attach(stream, user, isLocal) {
@@ -181,6 +251,7 @@ var CallUI = (function () {
     if (v && v.srcObject !== stream) {
       try { v.srcObject = stream; } catch (e) { }
     }
+    watchLevel(isLocal ? 'me' : user.id, stream, isLocal);
     if (!isLocal) paintState(user.id);
   }
 
@@ -243,17 +314,55 @@ var CallUI = (function () {
     for (var i = 0; i < tracks.length; i++) tracks[i].enabled = !muted;
     var b = byId('call-mic');
     if (b) b.className = 'call-btn' + (muted ? ' off' : '');
+    // the local tile says it too, so "am I muted?" needs no guesswork
+    var badge = byId('call-tile-me');
+    if (badge) {
+      var off = badge.querySelector('.call-mic-off');
+      if (off) off.className = 'call-mic-off' + (muted ? '' : ' hidden');
+    }
     if (call) Api.request('POST', '/api/call/media', { id: call.id, muted: muted }, function () { });
   }
 
   function toggleCam() {
     if (!local) return;
-    camOff = !camOff;
     var tracks = local.getVideoTracks ? local.getVideoTracks() : [];
+    if (!tracks.length) { startCamera(); return; }
+    camOff = !camOff;
     for (var i = 0; i < tracks.length; i++) tracks[i].enabled = !camOff;
     var b = byId('call-cam');
     if (b) b.className = 'call-btn' + (camOff ? ' off' : '');
     if (call) Api.request('POST', '/api/call/media', { id: call.id, video: !camOff }, function () { });
+  }
+
+  /// <summary>
+  /// Adds a camera to a call that started as audio-only. The track is appended to
+  /// the local stream and then every peer is re-offered, because adding a track
+  /// mid-call changes the SDP and WebRTC will not discover it on its own.
+  /// </summary>
+  function startCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    navigator.mediaDevices.getUserMedia({ video: true }).then(function (stream) {
+      var video = stream.getVideoTracks()[0];
+      if (!video) return;
+      local.addTrack(video);
+      var me = byId('call-tile-me');
+      var v = me ? me.querySelector('video') : null;
+      if (v) { try { v.srcObject = local; } catch (e) { } }
+      camOff = false;
+      var b = byId('call-cam');
+      if (b) b.className = 'call-btn';
+      if (call) call.kind = 'video';
+      var ids = [];
+      for (var k in peers) if (peers.hasOwnProperty(k) && peers[k] && peers[k].pc) ids.push(k);
+      for (var i = 0; i < ids.length; i++) {
+        var p = peers[ids[i]];
+        try { p.pc.addTrack(video, local); } catch (e) { }
+        offerTo(Number(ids[i]), p.user);
+      }
+      if (call) Api.request('POST', '/api/call/media', { id: call.id, video: true }, function () { });
+    }).catch(function (e) {
+      UI.toast(mediaErrorText(e), 'err');
+    });
   }
 
   // ----------------------------------------------------------- signalling
@@ -606,8 +715,12 @@ var CallUI = (function () {
     if (payload.id) call = payload;
     if (!call || !call.members) return;
     var count = 0;
+    var total = 0;
     for (var i = 0; i < call.members.length; i++) {
       var m = call.members[i];
+      // a declined invitee is not "in the call", so it should not pad the total
+      if (m.declined) continue;
+      total++;
       if (m.accepted) count++;
       if (m.mine) continue;
       var p = peers[m.id];
@@ -616,9 +729,15 @@ var CallUI = (function () {
       else if (!m.video && call.kind === 'video') p.med = T('calls.camOffUser');
       else p.med = '';
       paintState(m.id);
+      // and the tile itself shows a microphone-slash badge
+      var tileEl = byId('call-tile-' + m.id);
+      if (tileEl) {
+        var offBadge = tileEl.querySelector('.call-mic-off');
+        if (offBadge) offBadge.className = 'call-mic-off' + (m.muted ? '' : ' hidden');
+      }
     }
     var el = byId('call-count');
-    if (el) el.textContent = count + ' / ' + call.members.length;
+    if (el) el.textContent = count + ' / ' + Math.max(total, 1);
 
     // a 1:1 call is titled after the person on the other end
     if (!call.room) {
@@ -633,6 +752,7 @@ var CallUI = (function () {
   function closePeer(userId) {
     var p = peers[userId];
     if (!p) return;
+    stopLevel(userId, false);
     if (p.pc) { try { p.pc.close(); } catch (e) { } }
     peers[userId] = null;
     delete peers[userId];
@@ -648,7 +768,11 @@ var CallUI = (function () {
     var t = byId('call-title');
     if (t) t.textContent = title || (kind === 'video' ? T('calls.videoCall') : T('calls.audioCall'));
     var camBtn = byId('call-cam');
-    if (camBtn) camBtn.style.display = kind === 'video' ? '' : 'none';
+    // shown in audio calls too: the camera can be switched on mid-call
+    if (camBtn) camBtn.style.display = '';
+    var micBtn = byId('call-mic');
+    if (micBtn) micBtn.className = 'call-btn' + (muted ? ' off' : '');
+    if (camBtn) camBtn.className = 'call-btn' + (camOff ? ' off' : '');
     startedAt = Date.now();
     if (tickTimer) clearInterval(tickTimer);
     tickTimer = setInterval(function () {
@@ -661,9 +785,11 @@ var CallUI = (function () {
 
   function teardown() {
     closeRing();
+    stopLevel('me', true);
     for (var k in peers) if (peers.hasOwnProperty(k) && peers[k]) closePeer(k);
     peers = {};
     stopLocal();
+    levels = {};
     if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
     var o = overlay();
     if (o) {

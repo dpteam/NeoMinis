@@ -69,7 +69,8 @@ poll) but they are the minimum.
 | --- | --- |
 | **Screen sharing** | `getDisplayMedia` plus a second track per peer; `display-capture` is already allowed in `Permissions-Policy`. Needs renegotiation, because adding a track mid-call changes the SDP. |
 | **Calls that survive a reload** | `/api/call/active` exists; the overlay has to restore the peer connections from `sessionStorage` too. |
-| **Discord-style call page** | Done: `#/calls` is a channel sidebar plus a room view, backed by `/api/channels`. Still open from the original idea: a Web Audio level meter so the avatar of whoever is talking gets a green ring, and drag-to-reorder channels. |
+| **Discord-style call page** | Done: `#/calls` is a channel sidebar plus a room view, backed by `/api/channels`. Still open: drag-to-reorder channels. |
+| **Noise suppression / echo cancel** | `getUserMedia({ audio: { echoCancellation, noiseSuppression, autoGainControl } })` as toggles. The speaking ring is in, so the level meter is already there to build on. |
 | **Ringing when the tab is closed** | Web Push with a `call` payload, a ringtone, and an "answer" action in the notification. |
 | **Group layout** | Grid that switches to speaker view, mute-all, "raise hand", per-member volume. |
 | **Noise suppression / echo cancel** | `getUserMedia({ audio: { echoCancellation, noiseSuppression, autoGainControl } })` as toggles. |
@@ -216,6 +217,11 @@ Kept here so the list above stays honest.
 - "Delete for everyone" with a time window, and pinned messages inside a chat.
   A revoke leaves a tombstone and deletes the files; a pin shows in a small bar
   above the conversation for both sides.
+- Games and apps as one hub with tabs, so a game is an app that runs in a frame.
+- Calls that feel less raw: a speaking ring driven by a real audio level meter, a
+  microphone badge on muted tiles, the camera switchable on mid-call (with
+  renegotiation), a tile layout that does not stretch one person across the screen,
+  and a participant count that ignores people who declined.
 - Groups with editable settings, pictures and member management.
 - Communities: owner / editor / member roles, join requests for closed groups and a
   moderation queue ("members post, editors approve").

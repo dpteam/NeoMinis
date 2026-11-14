@@ -545,6 +545,21 @@ Rules:
 Everything is off with `[apps] enabled=false`: the catalogue, the consent screen
 and every app endpoint answer `403 apps-off`.
 
+### Games and apps (one hub)
+
+Games and apps are one place with tabs, not two menu entries: a game is an app
+that happens to run in a frame. `#/games` and `#/apps` both render the same shell
+(`AppsUI.hub`), so an old link still lands somewhere sensible:
+
+| Tab | Shows |
+| --- | --- |
+| Games | the Flash shelf (`GamesUI.shelf`), searchable, with upload for authors |
+| Apps | the published catalogue, plus what this account allowed |
+| My apps | apps this account registered, with client ids and install counts |
+
+The sidebar has one entry, not two. `GamesUI.shelf(container, query)` is exported
+so the hub can drop the shelf into a tab; the standalone route still works.
+
 ### Voice channels
 
 Named rooms, Discord-style. The row is only the sign on the wall; who is inside

@@ -950,6 +950,11 @@ img { max-width: 100%; }
 }
 .app-card .badge.ok { background: var(--ok); color: #fff; }
 
+/* games and apps are one hub: the tab strip sits above both */
+.hub-tabs { margin-bottom: 10px; }
+.hub-tabs .tab2 { display: inline-flex; align-items: center; gap: 5px; }
+.hub-tabs .tab2 i { opacity: .75; }
+
 @media (max-width: 720px) {
   .chan-layout { grid-template-columns: 1fr; }
   .chan-side { position: static; }
@@ -1831,12 +1836,28 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
   display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 8px; padding: 10px; background: #0b1119;
 }
+/* One person on screen: a sensible width, centred, not a wall of pixels. */
+.call-grid.solo { grid-template-columns: minmax(0, 560px); justify-content: center; }
+.call-grid.solo .call-tile { aspect-ratio: 4 / 3; }
+/* Two people: side by side, and the local one stays the same size as the other. */
+.call-grid.duo { grid-template-columns: 1fr 1fr; }
+.call-grid.duo .call-tile { aspect-ratio: 4 / 3; }
 .call-tile {
   position: relative; border-radius: 10px; overflow: hidden;
   background: #101821; min-height: 150px; display: flex;
 }
 .call-tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .call-tile.local video { transform: scaleX(-1); }
+/* whoever is talking gets a ring; the level comes from an AnalyserNode */
+.call-tile.speaking { box-shadow: inset 0 0 0 3px var(--ok, #51b579); }
+.call-tile.speaking .call-name { background: rgba(47, 143, 87, .92); }
+.call-mic-off {
+  position: absolute; right: 7px; top: 7px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--err); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 10px;
+}
+.call-mic-off.hidden { display: none; }
 .call-name {
   position: absolute; left: 7px; bottom: 7px;
   padding: 2px 8px; border-radius: 999px;

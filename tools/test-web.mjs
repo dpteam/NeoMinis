@@ -2040,6 +2040,24 @@ async function main() {
   const pinForeign = await pinOutsider.call('POST', '/api/messages/pin', { id: pinId, on: true });
   ok('a stranger cannot pin somebody else\'s message', pinForeign.status === 403, String(pinForeign.status));
 
+  // ---- profile cover: the client used to pass kilobytes where the helper
+  // wanted bytes, so anything over 1 KB silently never uploaded
+  const coverPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const coverSet = await alice.call('POST', '/api/profile/cover', { data: coverPng });
+  ok('a cover can be uploaded', coverSet.status === 200 && !!coverSet.data &&
+    (coverSet.data.cover || '').indexOf('/media/avatars/') === 0, JSON.stringify(coverSet.data));
+  const coverSeen = await alice.call('GET', '/api/profile?user=' + alice.user.id);
+  ok('the new cover is what the profile returns', !!coverSeen.data && !!coverSeen.data.user &&
+    coverSeen.data.user.cover === (coverSet.data && coverSet.data.cover),
+    JSON.stringify(coverSeen.data && coverSeen.data.user && coverSeen.data.user.cover));
+  const coverUrl = coverSet.data && coverSet.data.cover ? await fetch(BASE + coverSet.data.cover) : null;
+  ok('the cover is actually served', !!coverUrl && coverUrl.status === 200 &&
+    (coverUrl.headers.get('content-type') || '').indexOf('image/') === 0,
+    coverUrl ? String(coverUrl.status) : 'no cover');
+  const coverGone = await alice.call('POST', '/api/profile/cover', { data: '' });
+  ok('a cover can be cleared', coverGone.status === 200 && !!coverGone.data &&
+    coverGone.data.cover === '', JSON.stringify(coverGone.data));
+
   // ---- guest / kiosk (read-only browsing)
   const guest = new Client('guest');
   const gLogin = await guest.guest('');

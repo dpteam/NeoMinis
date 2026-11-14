@@ -40,27 +40,28 @@ var GamesUI = (function () {
 
   // ------------------------------------------------------------- shelf page
 
-  App.views.games = function (main, r) {
+  /// <summary>
+  /// Draws the shelf into `container`. Kept separate from the route so the merged
+  /// Apps hub can put it in a tab; #/games still works as a deep link.
+  /// </summary>
+  function shelf(container, query) {
+    if (!container) return;
     if (!ready()) {
-      main.innerHTML = '<div class="card"><div class="card-b">' +
-        UI.empty('gamepad', T('games.off'), T('games.offHint')) + '</div></div>';
+      container.innerHTML = UI.empty('gamepad', T('games.off'), T('games.offHint'));
       return;
     }
 
-    var query = App.qs('q') || '';
-    main.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('gamepad') + ' ' + T('games.title') +
-      '<span class="right"><button type="button" class="btn btn-xs btn-primary hidden" id="game-upload">' +
-      UI.icon('upload') + ' ' + T('games.upload') + '</button></span></div>' +
-      '<div class="card-b"><div class="inline-fields">' +
+    var search = String(query || '');
+    container.innerHTML = '<div class="inline-fields">' +
       '<div class="field" style="flex:1"><input class="input" id="game-search" placeholder="' +
-      UI.attr(T('games.search')) + '" value="' + UI.attr(query) + '"></div>' +
+      UI.attr(T('games.search')) + '" value="' + UI.attr(search) + '"></div>' +
       '<div class="field" style="flex:0 0 auto"><button class="btn" id="game-search-go">' +
       UI.icon('magnifying-glass') + '</button></div>' +
-      '</div></div><div class="card-b flush" id="game-list">' +
-      '<div class="center" style="padding:20px">' + UI.spinner() + '</div></div></div>';
+      '</div><div id="game-list">' +
+      '<div class="center" style="padding:20px">' + UI.spinner() + '</div></div>';
 
     function load(before) {
-      var url = '/api/games?limit=24' + (query ? '&q=' + encodeURIComponent(query) : '') +
+      var url = '/api/games?limit=24' + (search ? '&q=' + encodeURIComponent(search) : '') +
         (before ? '&before=' + before : '');
       Api.request('GET', url, null, function (err, data) {
         var box = byId('game-list');
@@ -94,10 +95,11 @@ var GamesUI = (function () {
       });
     }
 
-    byId('game-upload').addEventListener('click', openUpload);
+    var uploadBtn = byId('game-upload');
+    if (uploadBtn) uploadBtn.addEventListener('click', openUpload);
     byId('game-search-go').addEventListener('click', function () {
       var v = (byId('game-search') || {}).value || '';
-      location.hash = '#/games' + (v ? '?q=' + encodeURIComponent(v) : '');
+      App.go('#/games' + (v ? '?q=' + encodeURIComponent(v) : ''));
     });
     var box = byId('game-search');
     if (box) box.addEventListener('keydown', function (e) {
@@ -105,6 +107,20 @@ var GamesUI = (function () {
     });
 
     load(0);
+  }
+
+  /// The standalone route, kept for old links and for the play page's "all games".
+  App.views.games = function (main) {
+    if (!ready()) {
+      main.innerHTML = '<div class="card"><div class="card-b">' +
+        UI.empty('gamepad', T('games.off'), T('games.offHint')) + '</div></div>';
+      return;
+    }
+    main.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('gamepad') + ' ' + T('games.title') +
+      '<span class="right"><button type="button" class="btn btn-xs btn-primary hidden" id="game-upload">' +
+      UI.icon('upload') + ' ' + T('games.upload') + '</button></span></div>' +
+      '<div class="card-b" id="game-shelf"></div></div>';
+    shelf(byId('game-shelf'), App.qs('q') || '');
   };
 
   // ----------------------------------------------------------- upload modal
@@ -253,14 +269,16 @@ var GamesUI = (function () {
                   var input = byId('ge-cover');
                   var file = input && input.files && input.files[0];
                   if (!file) { then(); return; }
-                  var limit = (App.state.site.maxAvatarKB || 512) * 2;
-                  if (file.size > limit * 1024) {
-                    UI.toast(T('games.previewTooBig', String(limit)), 'err');
+                  // the cap is kilobytes, fileToDataUrl counts bytes
+                  var limitKb = (App.state.site.maxAvatarKB || 512) * 2;
+                  var limitBytes = limitKb * 1024;
+                  if (file.size > limitBytes) {
+                    UI.toast(T('games.previewTooBig', String(limitKb)), 'err');
                     then();
                     return;
                   }
-                  UI.fileToDataUrl(file, limit, function (err, dataUrl) {
-                    if (err) { UI.toast(T('games.previewTooBig', String(limit)), 'err'); then(); return; }
+                  UI.fileToDataUrl(file, limitBytes, function (err, dataUrl) {
+                    if (err) { UI.toast(T('games.previewTooBig', String(limitKb)), 'err'); then(); return; }
                     Api.request('POST', '/api/game/cover', { id: g.id, data: dataUrl }, function () { then(); });
                   });
                 }
@@ -291,5 +309,5 @@ var GamesUI = (function () {
     });
   };
 
-  return { ready: ready };
+  return { ready: ready, shelf: shelf, openUpload: openUpload };
 })();

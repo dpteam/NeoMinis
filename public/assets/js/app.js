@@ -363,8 +363,7 @@ var App = (function () {
     html += side('#/calls', 'phone', T('nav.calls'), 'calls');
     if (!App.state.site || App.state.site.giftsEnabled !== false)
       html += side('#/gifts', 'gift', T('nav.gifts'), 'gifts');
-    if (!App.state.site || App.state.site.gamesEnabled !== false)
-      html += side('#/games', 'gamepad', T('nav.games'), 'games');
+    // games and apps are one place with tabs, so one entry, not two
     html += side('#/apps', 'puzzle-piece', T('nav.apps'), 'apps');
     html += '<div class="side-sep"></div>';
     html += side('#/profile/' + u.id, 'id-card', T('nav.profile'), 'profile');
@@ -415,7 +414,7 @@ var App = (function () {
     html += tab('#/feed', 'house', T('nav.feed'), 'feed');
     html += tab('#/people', 'users', T('nav.people'), 'people');
     html += tab('#/groups', 'people-group', T('nav.groups'), 'groups');
-    if (site.gamesEnabled !== false) html += tab('#/games', 'gamepad', T('nav.games'), 'games');
+    if (site.gamesEnabled !== false) html += tab('#/apps', 'puzzle-piece', T('nav.apps'), 'apps');
     html += '</nav>';
     html += '<div class="top-right">';
     html += '<button type="button" class="icon-btn" id="theme-toggle" title="' + UI.attr(T('settings.theme')) + '">' + UI.icon('circle-half-stroke') + '</button>';
@@ -438,7 +437,7 @@ var App = (function () {
     html += side('#/groups', 'people-group', T('nav.groups'), 'groups');
     html += side('#/music', 'music', T('nav.music'), 'music');
     html += side('#/video', 'film', T('nav.video'), 'video');
-    if (site.gamesEnabled !== false) html += side('#/games', 'gamepad', T('nav.games'), 'games');
+    if (site.gamesEnabled !== false) html += side('#/apps', 'puzzle-piece', T('nav.apps'), 'apps');
     html += '</div>';
     html += '<div class="card online-card"><div class="card-h">' + UI.icon('signal') + ' ' + T('online.title') + '</div><div class="online-list" id="online-mini">' + UI.spinner() + '</div></div>';
     html += '</aside>';
@@ -2360,10 +2359,17 @@ var App = (function () {
     input.addEventListener('change', function () {
       var f = input.files && input.files[0];
       if (!f) return;
-      var limit = (state.site.maxAvatarKB || 512) * 2;
-      if (f.size > limit * 1024) { UI.toast(T('profile.coverTooBig', limit), 'err'); return; }
-      UI.fileToDataUrl(f, limit, function (err, dataUrl) {
-        if (err) { UI.toast(T('profile.coverTooBig', limit), 'err'); return; }
+      // fileToDataUrl wants BYTES; the config cap is in kilobytes. Passing the
+      // kilobyte figure straight through rejected anything over 1 KB, which is
+      // why a real photo silently never uploaded.
+      var limitKb = (state.site.maxAvatarKB || 512) * 2;
+      var limitBytes = limitKb * 1024;
+      if (f.size > limitBytes) { UI.toast(T('profile.coverTooBig', limitKb), 'err'); return; }
+      UI.fileToDataUrl(f, limitBytes, function (err, dataUrl) {
+        if (err) {
+          UI.toast(err === 'bad-type' ? T('profile.coverBadType') : T('profile.coverTooBig', limitKb), 'err');
+          return;
+        }
         Api.request('POST', '/api/profile/cover', { data: dataUrl }, function (e2) {
           if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
           UI.toast(T('common.saved'), 'ok');
