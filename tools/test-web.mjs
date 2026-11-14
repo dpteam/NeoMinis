@@ -168,6 +168,23 @@ class Client {
     return r;
   }
 
+  /// Read-only session. The verifier uses the fixed __guest__ pseudo-username,
+  /// exactly like the SPA does, so the shared secret never travels anywhere.
+  async guest(password) {
+    await this.handshake();
+    const verifier = verifierOf(password || '', '__guest__', this.iterations);
+    const salt = crypto.randomBytes(16).toString('hex');
+    const k0 = pbkdf2(Buffer.from(verifier, 'utf8'), fromHex(salt), this.iterations, 32);
+    const r = await this.authCall('/api/guest', {
+      'X-Auth-Guest': verifier, 'X-Auth-Salt': salt
+    }, k0, {});
+    if (r.status === 200 && r.data) {
+      this.key = pbkdf2(Buffer.from(verifier, 'utf8'), fromHex(r.data.sessionSalt), this.iterations, 32);
+      this.guest = true;
+    }
+    return r;
+  }
+
   async call(method, path, bodyObj, opts) {
     opts = opts || {};
     const ts = String(Math.floor(Date.now() / 1000));
@@ -1479,6 +1496,65 @@ async function main() {
     const fbBad = await admin.call('POST', '/api/admin/feedback/update', { id: 999999, action: 'status', status: 'read' });
     ok('unknown feedback rejected', fbBad.status === 404, String(fbBad.status));
   }
+
+  // ---- guest / kiosk (read-only browsing)
+  const guest = new Client('guest');
+  const gLogin = await guest.guest('');
+  ok('guest session issued', gLogin.status === 200 && !!guest.key && gLogin.data.guest === true,
+    String(gLogin.status));
+
+  const gMe = await guest.call('GET', '/api/me');
+  ok('guest /me reports a guest', gMe.status === 200 && gMe.data.me && gMe.data.me.guest === true, '');
+
+  const gFeed = await guest.call('GET', '/api/feed');
+  ok('guest feed falls back to global', gFeed.status === 200 && gFeed.data.tab === 'global',
+    String(gFeed.status) + ' ' + (gFeed.data && gFeed.data.tab));
+
+  const gPost = await guest.call('GET', '/api/post?id=' + postId);
+  ok('guest may read a public post', gPost.status === 200 && gPost.data.post.id === postId,
+    String(gPost.status));
+
+  const gWrite = await guest.call('POST', '/api/post', { body: 'a guest walks into a bar' });
+  ok('guest may not post', gWrite.status === 403 && gWrite.data.error === 'guest-readonly',
+    String(gWrite.status));
+
+  const gLike = await guest.call('POST', '/api/like', { id: postId });
+  ok('guest may not like', gLike.status === 403, String(gLike.status));
+
+  const gComment = await guest.call('POST', '/api/comment', { post: postId, body: 'hi' });
+  ok('guest may not comment', gComment.status === 403, String(gComment.status));
+
+  const gThreads = await guest.call('GET', '/api/messages/threads');
+  ok('guest may not read messages', gThreads.status === 403, String(gThreads.status));
+
+  const gSettings = await guest.call('POST', '/api/settings', { theme: 'dark' });
+  ok('guest may not change settings', gSettings.status === 403, String(gSettings.status));
+
+  const gUpload = await guest.call('POST', '/api/avatar', { data: PNG });
+  ok('guest may not upload an avatar', gUpload.status === 403, String(gUpload.status));
+
+  // a private profile stays private even for a guest
+  const hermit = new Client('hermit');
+  await hermit.register('hermit_' + stamp, 'hermit-pass-1');
+  await hermit.call('POST', '/api/settings', { privacy: 'private' });
+  const gPrivate = await guest.call('GET', '/api/profile?user=' + hermit.user.id);
+  ok('guest cannot see a private profile', gPrivate.status === 403, String(gPrivate.status));
+
+  // a stranger's wall is readable when it is public, and read-only
+  const gWall = await guest.call('GET', '/api/wall?user=' + alice.user.id);
+  ok('guest may read a public wall', gWall.status === 200 && gWall.data.canPost === false,
+    String(gWall.status));
+
+  const gCanMessage = gWall.data.user && gWall.data.user.canMessage;
+  ok('guest is offered no message button', gCanMessage === false, String(gCanMessage));
+
+  const hsGuest = await (await fetch(BASE + '/api/handshake')).json();
+  ok('handshake advertises guest mode', hsGuest.site && hsGuest.site.guestMode === true &&
+    hsGuest.site.guestPasswordRequired === false, '');
+
+  // a guest session cannot be upgraded into a write by replaying a signed call
+  const gReplay = await guest.call('POST', '/api/post', { body: 'still a guest' });
+  ok('guest writes stay refused', gReplay.status === 403, String(gReplay.status));
 
   // ---- login / recovery / logout
   const alice2 = new Client('alice2');

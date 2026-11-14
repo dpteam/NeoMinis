@@ -13,6 +13,18 @@ namespace Social.Web
 
         private void HandleMe(ApiCtx ctx)
         {
+            if (ctx.Session != null && ctx.Session.IsGuest)
+            {
+                JsonBuilder gb = new JsonBuilder(2048);
+                gb.BeginObject();
+                gb.Name("me").Raw(GuestMeJson());
+                gb.Name("site").Raw(SiteJson());
+                gb.Name("notifications").BeginArray().EndArray();
+                gb.Name("threads").BeginArray().EndArray();
+                SendOk(ctx, gb);
+                return;
+            }
+
             JsonBuilder b = new JsonBuilder(2048);
             b.BeginObject();
             b.Name("me").Raw(MeView(ctx.User, ctx.Session));
@@ -194,6 +206,8 @@ namespace Social.Web
             if (tab == null) tab = "home";
             tab = tab.ToLowerInvariant();
             if (tab != "home" && tab != "global" && tab != "friends") tab = "home";
+            // a guest has no friends, so "home" would always be empty
+            if (ctx.Session != null && ctx.Session.IsGuest && tab == "home") tab = "global";
             int limit = LimitParam(ctx, 20, 50);
             long before = LongQuery(ctx, "before");
 

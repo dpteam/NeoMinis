@@ -78,7 +78,7 @@ namespace Social.Web
             b.Prop("unseen", target.Id == ctx.User.Id ? _store.CountUnseenGifts(target.Id) : 0);
             b.Prop("hasMore", hasMore);
             b.Prop("next", gifts.Count > 0 ? gifts[gifts.Count - 1].Id : 0);
-            b.Prop("canSend", _cfg.GiftsEnabled && target.Id != ctx.User.Id &&
+            b.Prop("canSend", _cfg.GiftsEnabled && ctx.User.Id > 0 && target.Id != ctx.User.Id &&
                               !_store.IsBlocked(target.Id, ctx.User.Id) && CanViewProfile(ctx.User, target) &&
                               Privacy.Allows(target, ctx.User, "gifts", _store.AreFriends(ctx.User.Id, target.Id)));
             SendOk(ctx, b);

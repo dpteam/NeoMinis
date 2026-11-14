@@ -103,10 +103,17 @@ only ever walks conversations the viewer is part of.
    the surface: `WebRole.Public` refuses `/api/admin/…` with 404, `WebRole.Admin`
    serves it (and can enforce `security.adminPrivateOnly`).
 3. `/api/…` → `ApiRouter`:
-   * pre-auth routes (`handshake`, `health`, `register`, `login`, `recover`) use a
-     key derived from the user's verifier, so even a wrong password learns nothing;
+   * pre-auth routes (`handshake`, `health`, `register`, `login`, `recover`, `guest`)
+     use a key derived from the user's verifier, so even a wrong password learns
+     nothing;
    * everything else requires the session cookie → signature → freshness → nonce →
-     optional body decryption, then `Dispatch`.
+     optional body decryption, then `Dispatch`;
+   * a **guest session** (`[site] guestMode`) is a real signed and sealed session
+     with `UserId = 0` and `IsGuest = true`. `HandleAuthenticated` substitutes a
+     throwaway viewer instead of loading a user, `Dispatch` refuses anything that
+     is not a `GET` on `GuestRoutes` with `403 guest-readonly`, and because the
+     viewer id is 0 every existing visibility rule already treats it as a stranger.
+     Kiosk mode is the same thing with no login form and a client-side idle timer.
 4. Static files: path traversal guard (`..`, NUL, root prefix check), ETag/304,
    gzip for text assets, `no-cache` so a deploy never leaves stale JS.
 5. Media: only raster formats (sniffed magic bytes), random names, `nosniff`.
@@ -141,7 +148,7 @@ Plain ES5, no framework, no build step. Files are loaded in order:
 | `i18n.js` | dictionaries (ru/en/uk/lt), `t()`, detection, `data-i18n` |
 | `sound.js` | WebAudio presets, per-event toggles, volume, persistence |
 | `ui.js` | DOM helpers, escaping, toasts, modals, themes, file→dataURL |
-| `api.js` | transport: handshake, login/register/recover, signed+sealed calls |
+| `api.js` | transport: handshake, login/register/recover/guest, signed+sealed calls |
 | `app.js` | shell, router, feed, post, profile, composer, comment/like logic |
 | `app.more.js` | friends, people, messages, groups, notifications, settings, admin, search |
 

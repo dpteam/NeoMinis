@@ -193,14 +193,48 @@ var Api = (function () {
     try { sessionStorage.removeItem(KEY_STORE); } catch (e) { }
   }
 
+  /// Enters the read-only guest session. The key is derived from the shared guest
+  /// secret with the normal verifier recipe, so the transport is signed and sealed
+  /// exactly like a real login; the server just refuses to let it write.
+  function guest(password, cb) {
+    loadHandshake(function (err, hs) {
+      if (err) { cb(err); return; }
+      var iter = hs.kdfIterations || 12000;
+      var verifier;
+      try { verifier = DptCrypto.deriveVerifier(password || '', '__guest__', iter); }
+      catch (e) { cb({ code: 'crypto', message: I18N.t('errors.generic') }); return; }
+      var salt = randomHex(16);
+      var k0 = DptCrypto.deriveKey(verifier, salt, iter);
+      authRequest('/api/guest', {
+        'X-Auth-Salt': salt,
+        'X-Auth-Guest': verifier
+      }, k0, {}, function (err2, data) {
+        if (err2) { cb(err2); return; }
+        storeSession(verifier, data.sessionSalt, data);
+        cb(null, data);
+      });
+    });
+  }
+
+  /// Kiosk and open guest mode drop straight into a guest session; a password
+  /// protected guest mode waits for the login screen instead.
+  function autoGuest(cb) {
+    var site = api.site || {};
+    if (!site.guestMode || site.guestPasswordRequired) { cb(null, false); return; }
+    guest('', function (err) {
+      if (err) { cb(null, false); return; }
+      cb(null, true);
+    });
+  }
+
   function bootstrap(cb) {
     loadHandshake(function (err) {
       if (err) { cb(err, false); return; }
-      if (!restoreSession()) { cb(null, false); return; }
+      if (!restoreSession()) { autoGuest(cb); return; }
       request('GET', '/api/me', null, function (err2, data) {
         if (err2) {
           clearSession();
-          cb(null, false);
+          autoGuest(cb);
           return;
         }
         api.me = data.me || null;
@@ -299,6 +333,8 @@ var Api = (function () {
     if (code === 'auth-required') return I18N.t('errors.session');
     if (code === 'rate-limit' || code === 'slow-down') return I18N.t('errors.rateLimit');
     if (code === 'read-only') return I18N.t('errors.readOnly');
+    if (code === 'guest-readonly') return I18N.t('guest.readonly');
+    if (code === 'bad-guest-password') return I18N.t('guest.badPassword');
     if (code === 'forbidden' || code === 'not-member' || code === 'not-friend') return I18N.t('errors.forbidden');
     if (code === 'notfound' || code === 'no-user' || code === 'no-post' || code === 'no-comment' || code === 'no-group' || code === 'no-message' || code === 'no-report') return I18N.t('errors.notFound');
     if (code === 'captcha') return I18N.t('auth.captchaWrong');
@@ -334,6 +370,8 @@ var Api = (function () {
   api.authRequest = authRequest;
   api.handshake = loadHandshake;
   api.bootstrap = bootstrap;
+  api.guest = guest;
+  api.autoGuest = autoGuest;
   api.login = login;
   api.register = register;
   api.recover = recover;

@@ -114,6 +114,33 @@ Where each scope is enforced: `write` in `CanMessageUser`, `call` in
 `friends` in `/api/friends`. The owner and moderators always pass; a block always
 wins over a permissive setting.
 
+### Guest / kiosk (read-only)
+
+| Method | Path | Headers | Result |
+| --- | --- | --- | --- |
+| POST | `/api/guest` | `X-Auth-Guest` (verifier), `X-Auth-Salt` | `{ sessionSalt, guest: true, me, site }` |
+
+`X-Auth-Guest` is `PBKDF2(guestPassword, "social.login.v1|__guest__", N, 32)` — the
+normal verifier recipe with the fixed pseudo-username `__guest__`. The server
+derives the same value from `[site] guestPassword` and refuses a mismatch with
+`bad-guest-password`; when no password is configured any verifier is accepted, and
+in kiosk mode the password is ignored entirely so a terminal cannot lock itself out.
+
+The resulting session is a real signed and sealed session with `UserId = 0`; the
+router swaps in a throwaway viewer and answers `403 guest-readonly` for everything
+that is not a `GET` on this whitelist: `me`, `feed`, `wall`, `post`, `comments`,
+`likes`, `profile`, `people`, `search`, `search/posts`, `search/all`, `photos`,
+`tag`, `tags`, `media`, `playlists`, `playlist`, `games`, `game`, `gifts`,
+`friends`, `groups`, `group`, `group/feed`, `albums`, `album`, `stories`, `story`,
+`stats`, `online`. Because the viewer has id 0 every existing visibility rule treats
+it as a stranger: private profiles, friends-only walls and closed communities stay
+hidden, `canMessage`/`canCall` are false, and the feed's `home` tab silently becomes
+`global`. `/api/me` returns `{ me: { guest: true, kiosk } }`.
+
+`handshake.site` carries `guestMode`, `kioskMode`, `guestPasswordRequired` and
+`kioskIdleSec` so the SPA knows whether to auto-enter, ask for a password, or hide
+the login form.
+
 ### Feed and posts
 
 | Method | Path | Body / query | Result |

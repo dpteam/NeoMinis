@@ -34,6 +34,13 @@ namespace Social.Core
         public bool Registration = true;
         public bool InviteOnly = false;
         public string InviteCode = "";
+        // Guest / kiosk browsing. guestMode lets a visitor read the public side of
+        // the site without an account; kioskMode is the same thing with no login
+        // form at all and an idle timer that returns to the feed.
+        public bool GuestMode = false;
+        public string GuestPassword = "";
+        public bool KioskMode = false;
+        public int KioskIdleSec = 120;
         public bool FirstUserAdmin = true;
         public string Motd = "";
         public string Footer = "";
@@ -362,6 +369,10 @@ namespace Social.Core
                     else if (key == "registration") Registration = Bool(val, Registration);
                     else if (key == "inviteonly") InviteOnly = Bool(val, InviteOnly);
                     else if (key == "invitecode") InviteCode = val;
+                    else if (key == "guestmode") GuestMode = Bool(val, GuestMode);
+                    else if (key == "guestpassword") GuestPassword = val;
+                    else if (key == "kioskmode") KioskMode = Bool(val, KioskMode);
+                    else if (key == "kioskidlesec") KioskIdleSec = Int(val, KioskIdleSec);
                     else if (key == "firstuseradmin") FirstUserAdmin = Bool(val, FirstUserAdmin);
                     else if (key == "motd") Motd = val;
                     else if (key == "footer") Footer = val;
@@ -774,6 +785,15 @@ namespace Social.Core
         public string CookiePath()
         {
             return string.IsNullOrEmpty(PublicBasePath) ? "/" : PublicBasePath + "/";
+        }
+
+        /// <summary>Kiosk is guest mode with the training wheels off.</summary>
+        public bool GuestEnabled { get { return GuestMode || KioskMode; } }
+
+        /// <summary>A kiosk never asks for a password, or it would lock itself out.</summary>
+        public bool GuestPasswordRequired
+        {
+            get { return GuestEnabled && !KioskMode && !string.IsNullOrEmpty(GuestPassword); }
         }
     }
 }

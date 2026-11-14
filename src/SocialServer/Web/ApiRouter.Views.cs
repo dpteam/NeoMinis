@@ -435,7 +435,8 @@ namespace Social.Web
         private bool CanMessageUser(User viewer, User target)
         {
             if (viewer == null || target == null || target.Deleted || target.Banned) return false;
-            if (viewer.Id == target.Id) return false;
+            // id 0 is the throwaway guest viewer: it may look, never talk
+            if (viewer.Id <= 0 || viewer.Id == target.Id) return false;
             if (_store.IsBlocked(target.Id, viewer.Id) || _store.IsBlocked(viewer.Id, target.Id)) return false;
             if (target.Privacy == "public" || string.IsNullOrEmpty(target.Privacy))
                 return Privacy.Allows(target, viewer, "write", _store.AreFriends(viewer.Id, target.Id));

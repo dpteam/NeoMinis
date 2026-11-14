@@ -793,6 +793,21 @@ img { max-width: 100%; }
 
 .landing-side-note { margin-top: 14px; font-size: 11px; color: var(--muted); text-align: center; }
 
+/* guest / kiosk: a read-only visitor gets a quieter, accent-marked shell */
+.guest-entry { margin-top: 12px; }
+.guest-entry .auth-head h2 { font-size: 15px; }
+.guest-entry .auth-head h2 i { color: var(--accent); margin-right: 4px; }
+.guest-card { padding: 12px 12px 14px; }
+.guest-title { font: 700 13px var(--font-display); color: var(--text); }
+.guest-title i { color: var(--accent); margin-right: 4px; }
+.guest-notice { border-left: 3px solid var(--accent); }
+.guest-notice .card-b { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 12.5px; }
+.guest-notice .card-b i { color: var(--accent); }
+.guest-notice .btn { margin-left: auto; }
+@media (max-width: 720px) {
+  .guest-notice .btn { margin-left: 0; }
+}
+
 /* --------------------------------------------------------------- messages */
 
 .msg-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 520px; }

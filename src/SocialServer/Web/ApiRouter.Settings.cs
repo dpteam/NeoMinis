@@ -29,6 +29,10 @@ namespace Social.Web
                 .Prop("defaultTheme", _cfg.DefaultTheme)
                 .Prop("registration", _cfg.Registration)
                 .Prop("inviteOnly", _cfg.InviteOnly)
+                .Prop("guestMode", _cfg.GuestMode)
+                .Prop("guestPassword", _cfg.GuestPassword)
+                .Prop("kioskMode", _cfg.KioskMode)
+                .Prop("kioskIdleSec", _cfg.KioskIdleSec)
                 .Prop("firstUserAdmin", _cfg.FirstUserAdmin)
                 .EndObject();
 
@@ -219,6 +223,29 @@ namespace Social.Web
                 {
                     _cfg.FirstUserAdmin = Json.GetBool(site, "firstUserAdmin", _cfg.FirstUserAdmin);
                     _cfg.SetIniValue("site", "firstUserAdmin", _cfg.FirstUserAdmin ? "true" : "false");
+                }
+                if (site.ContainsKey("guestMode"))
+                {
+                    _cfg.GuestMode = Json.GetBool(site, "guestMode", _cfg.GuestMode);
+                    _cfg.SetIniValue("site", "guestMode", _cfg.GuestMode ? "true" : "false");
+                }
+                if (site.ContainsKey("guestPassword"))
+                {
+                    _cfg.GuestPassword = Util.SingleLine(Json.GetString(site, "guestPassword", ""), 80);
+                    _cfg.SetIniValue("site", "guestPassword", _cfg.GuestPassword);
+                }
+                if (site.ContainsKey("kioskMode"))
+                {
+                    _cfg.KioskMode = Json.GetBool(site, "kioskMode", _cfg.KioskMode);
+                    _cfg.SetIniValue("site", "kioskMode", _cfg.KioskMode ? "true" : "false");
+                }
+                if (site.ContainsKey("kioskIdleSec"))
+                {
+                    int idle = Json.GetInt(site, "kioskIdleSec", _cfg.KioskIdleSec);
+                    if (idle < 15) idle = 15;
+                    if (idle > 3600) idle = 3600;
+                    _cfg.KioskIdleSec = idle;
+                    _cfg.SetIniValue("site", "kioskIdleSec", idle.ToString(CultureInfo.InvariantCulture));
                 }
             }
 

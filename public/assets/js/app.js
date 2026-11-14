@@ -75,15 +75,19 @@ var App = (function () {
       }
       if (authed) {
         state.me = Api.me;
-        state.user = (Api.me && Api.me.user) || Api.user;
+        state.guest = !!(Api.me && Api.me.guest);
+        state.user = (Api.me && Api.me.user) || Api.user || null;
         state.site = Api.site;
         applyUserPrefs();
         renderShell();
         route();
-        startBadgePoll();
-        startNotifyStream();
-        if (window.CallUI) CallUI.init();
-        updateTitle((state.me && state.me.unreadNotifications) || 0);
+        if (state.guest) startKioskIdle();
+        else {
+          startBadgePoll();
+          startNotifyStream();
+          if (window.CallUI) CallUI.init();
+          updateTitle((state.me && state.me.unreadNotifications) || 0);
+        }
       } else {
         renderAuth('login');
       }
@@ -291,7 +295,15 @@ var App = (function () {
 
   // ------------------------------------------------------------------ shell
 
+  // Routes a guest has no business opening: each one either needs an account
+  // or would only show an error, so the router quietly sends them to the feed.
+  var GUEST_BLOCKED = {
+    settings: 1, notifications: 1, bookmarks: 1, drafts: 1,
+    im: 1, admin: 1, calls: 1, gifts: 1, 'new-post': 1
+  };
+
   function renderShell() {
+    if (state.guest) { renderGuestShell(); return; }
     var me = state.me || {};
     var u = state.user || me.user || {};
     state.site = Api.site || state.site || {};
@@ -380,6 +392,120 @@ var App = (function () {
     loadStats();
     loadTags();
     loadFriendsOnline();
+  }
+
+  /// The read-only shell. Same bones as the member one, minus every control that
+  /// would need an account; a kiosk also drops the sign-in button entirely.
+  function renderGuestShell() {
+    var site = state.site || Api.site || {};
+    var kiosk = !!site.kioskMode;
+    var html = '';
+    html += '<div class="topbar"><div class="topbar-inner">';
+    html += '<a class="brand" href="#/feed">' +
+      '<span class="brand-mark">' + UI.esc(site.shortName || 'S') + '</span>' +
+      '<span class="brand-text"><b>' + UI.esc(site.name || 'Social') + '</b><small>' + UI.esc(site.tagline || '') + '</small></span>' +
+      '</a>';
+    html += '<form class="topsearch" id="top-search" role="search">' + UI.icon('magnifying-glass') +
+      '<input type="search" id="top-search-input" placeholder="' + UI.attr(T('search.placeholder')) + '" autocomplete="off"></form>';
+    html += '<nav class="tabs">';
+    html += tab('#/feed', 'house', T('nav.feed'), 'feed');
+    html += tab('#/people', 'users', T('nav.people'), 'people');
+    html += tab('#/groups', 'people-group', T('nav.groups'), 'groups');
+    if (site.gamesEnabled !== false) html += tab('#/games', 'gamepad', T('nav.games'), 'games');
+    html += '</nav>';
+    html += '<div class="top-right">';
+    html += '<button type="button" class="icon-btn" id="theme-toggle" title="' + UI.attr(T('settings.theme')) + '">' + UI.icon('circle-half-stroke') + '</button>';
+    if (!kiosk) html += '<button type="button" class="btn btn-primary btn-sm" id="guest-signin">' + UI.icon('right-to-bracket') + ' ' + T('auth.signIn') + '</button>';
+    html += '</div>';
+    html += '</div></div>';
+
+    html += '<div class="shell">';
+    html += '<aside class="col-left">';
+    html += '<div class="card"><div class="card-b guest-card">' +
+      '<div class="guest-title">' + UI.icon(kiosk ? 'display' : 'user-secret') + ' ' + T(kiosk ? 'guest.kioskTitle' : 'guest.title') + '</div>' +
+      '<div class="tiny muted" style="margin:6px 0 10px">' + T(kiosk ? 'guest.kioskHint' : 'guest.hint') + '</div>' +
+      (kiosk
+        ? '<a class="tiny" href="#/login" style="opacity:.55">' + T('guest.staff') + '</a>'
+        : '<button type="button" class="btn btn-primary btn-block btn-sm" id="guest-signin-side">' + T('auth.signIn') + '</button>') +
+      '</div></div>';
+    html += '<div class="card side-nav">';
+    html += side('#/feed', 'house', T('nav.feed'), 'feed');
+    html += side('#/people', 'users', T('nav.people'), 'people');
+    html += side('#/groups', 'people-group', T('nav.groups'), 'groups');
+    html += side('#/music', 'music', T('nav.music'), 'music');
+    html += side('#/video', 'film', T('nav.video'), 'video');
+    if (site.gamesEnabled !== false) html += side('#/games', 'gamepad', T('nav.games'), 'games');
+    html += '</div>';
+    html += '<div class="card online-card"><div class="card-h">' + UI.icon('signal') + ' ' + T('online.title') + '</div><div class="online-list" id="online-mini">' + UI.spinner() + '</div></div>';
+    html += '</aside>';
+
+    html += '<main class="col-main" id="main-col"></main>';
+
+    html += '<aside class="col-right">';
+    if (site.motd) html += '<div class="card"><div class="card-h">' + UI.icon('bullhorn') + ' ' + T('motd.title') + '</div><div class="card-b" style="font-size:12px">' + UI.nl2br(site.motd) + '</div></div>';
+    html += '<div class="card"><div class="card-h">' + UI.icon('hashtag') + ' ' + T('tags.title') + '</div><div class="card-b" id="tags-box">' + UI.spinner() + '</div></div>';
+    html += '<div class="card"><div class="card-h">' + UI.icon('chart-simple') + ' ' + T('stats.title') + '</div><div class="card-b" id="stats-box">' + UI.spinner() + '</div></div>';
+    html += '<div class="card"><div class="card-h">' + UI.icon('comments') + ' ' + T('online.title') + '</div><div class="online-list" id="online-list">' + UI.spinner() + '</div></div>';
+    html += '<div class="card"><div class="card-f" style="text-align:center;border-top:0">' + UI.esc(site.footer || T('footer.powered')) + '</div></div>';
+    html += '</aside>';
+    html += '</div>';
+
+    root().innerHTML = html;
+    bindShell();
+    bindGuestButtons();
+    loadOnline();
+    loadStats();
+    loadTags();
+  }
+
+  function bindGuestButtons() {
+    var open = function () { renderAuth('login'); };
+    var a = document.getElementById('guest-signin');
+    var b = document.getElementById('guest-signin-side');
+    if (a) a.addEventListener('click', open);
+    if (b) b.addEventListener('click', open);
+  }
+
+  /// Enters the read-only session from the login screen.
+  function enterGuest(password) {
+    var btn = document.getElementById('guest-enter');
+    if (btn) { btn.disabled = true; btn.innerHTML = UI.spinner(); }
+    Api.guest(password || '', function (err) {
+      if (btn) { btn.disabled = false; btn.innerHTML = UI.icon('user-secret') + ' ' + T('guest.enter'); }
+      if (err) {
+        var box = document.getElementById('guest-error');
+        if (box) box.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>';
+        return;
+      }
+      state.authed = true;
+      state.guest = true;
+      state.me = Api.me;
+      state.user = null;
+      state.site = Api.site;
+      renderShell();
+      route();
+      startKioskIdle();
+    });
+  }
+
+  /// A kiosk hands itself back to the feed after a while, so a stranger never
+  /// walks up to somebody else's half-finished search.
+  function startKioskIdle() {
+    if (!state.guest) return;
+    var site = state.site || Api.site || {};
+    if (!site.kioskMode) return;
+    var ms = Math.max(15, Number(site.kioskIdleSec) || 120) * 1000;
+    var reset = function () {
+      if (state.kioskTimer) clearTimeout(state.kioskTimer);
+      state.kioskTimer = setTimeout(function () {
+        if (!state.guest) return;
+        if (state.route !== 'feed') go('#/feed');
+        try { window.scrollTo(0, 0); } catch (e) { }
+      }, ms);
+    };
+    var events = ['mousedown', 'mousemove', 'keydown', 'touchstart', 'scroll', 'wheel'];
+    for (var i = 0; i < events.length; i++) window.addEventListener(events[i], reset, false);
+    reset();
   }
 
   /// Right column block: friends who are online right now, like VK's "Friends
@@ -513,8 +639,12 @@ var App = (function () {
 
   function route() {
     if (!state.authed) { renderAuth('login'); return; }
+    var r = parseHash();
+    // #/login exists so a kiosk can still be handed to a staff member
+    if (r.path === 'login' && state.guest) { renderAuth('login'); return; }
+    if (state.guest && GUEST_BLOCKED[r.path]) { go('#/feed'); return; }
     stopTimers();
-    var r = parseHash();    state.route = r.path;
+    state.route = r.path;
     state.parts = r.parts;
 
     var view = views[r.path];
@@ -591,6 +721,17 @@ var App = (function () {
     html += '<div class="center" style="margin-top:6px"><button type="button" class="btn btn-ghost btn-xs" id="feedback-btn-auth">' +
       UI.icon('comment-dots') + ' ' + T('feedback.nav') + '</button></div>';
     html += '</div>';
+    if (site.guestMode && !site.kioskMode) {
+      html += '<div class="auth-card guest-entry">' +
+        '<div class="auth-head"><h2>' + UI.icon('user-secret') + ' ' + T('guest.title') + '</h2><p>' + T('guest.hint') + '</p></div>' +
+        '<div class="auth-body">' +
+        (site.guestPasswordRequired
+          ? '<div class="field"><label>' + T('guest.password') + '</label><input class="input" type="password" id="guest-pass" autocomplete="off"></div>'
+          : '') +
+        '<div id="guest-error"></div>' +
+        '<button type="button" class="btn btn-block" id="guest-enter">' + UI.icon('user-secret') + ' ' + T('guest.enter') + '</button>' +
+        '</div></div>';
+    }
     html += '<div class="landing-side-note"><button type="button" class="btn btn-ghost btn-sm" id="theme-toggle-auth">' + UI.icon('circle-half-stroke') + ' ' + T('theme.' + UI.getTheme()) + '</button></div>';
     html += '</div></div>';
 
@@ -607,6 +748,12 @@ var App = (function () {
       tabs[i].addEventListener('click', function () { renderAuth(this.getAttribute('data-auth')); });
     }
     bindAuthForms(mode);
+    var ge = document.getElementById('guest-enter');
+    if (ge) ge.addEventListener('click', function () { enterGuest(val('guest-pass')); });
+    var gp = document.getElementById('guest-pass');
+    if (gp) gp.addEventListener('keydown', function (e) {
+      if (e.keyCode === 13) { e.preventDefault(); enterGuest(val('guest-pass')); }
+    });
   }
 
   function feature(iconName, title, text) {
@@ -745,6 +892,7 @@ var App = (function () {
 
   function onLoggedIn(data, isRegister) {
     state.authed = true;
+    state.guest = false;
     state.me = data.me || null;
     state.user = (data.me && data.me.user) || data.user || null;
     state.site = data.site || Api.site || state.site;
@@ -803,20 +951,36 @@ var App = (function () {
 
   // ------------------------------------------------------------------ feed
 
+  /// Sits where the composer would be: says what a guest may do and offers the
+  /// one thing they actually want, a way in.
+  function guestNotice() {
+    var kiosk = !!(state.site && state.site.kioskMode);
+    return '<div class="card guest-notice"><div class="card-b">' +
+      UI.icon(kiosk ? 'display' : 'user-secret') + ' <b>' + T(kiosk ? 'guest.kioskTitle' : 'guest.title') + '</b> ' +
+      '<span class="muted">' + T(kiosk ? 'guest.kioskFeed' : 'guest.feedHint') + '</span>' +
+      (kiosk ? '' : ' <button type="button" class="btn btn-sm btn-primary" id="guest-notice-signin">' + T('auth.signIn') + '</button>') +
+      '</div></div>';
+  }
+
   function feedView(main, r) {
-    var tab = qs('tab') || 'home';
+    var guest = !!state.guest;
+    var tab = qs('tab') || (guest ? 'global' : 'home');
     state.feed = { tab: tab, posts: [], next: 0, hasMore: false, loading: false };
-    var html = '<div id="stories-tray"></div>';
-    html += composerHtml(0);
+    var html = guest ? '' : '<div id="stories-tray"></div>';
+    html += guest ? guestNotice() : composerHtml(0);
     html += '<div class="feed-tabs">' +
-      feedTab('home', T('feed.home')) + feedTab('global', T('feed.global')) + feedTab('friends', T('feed.friends')) +
+      (guest
+        ? feedTab('global', T('feed.global'))
+        : feedTab('home', T('feed.home')) + feedTab('global', T('feed.global')) + feedTab('friends', T('feed.friends'))) +
       '</div>';
     html += '<div id="feed-list"></div>';
     html += '<div id="feed-more"></div>';
     main.innerHTML = html;
-    bindComposer(0);
+    if (!guest) bindComposer(0);
+    var gs = document.getElementById('guest-notice-signin');
+    if (gs) gs.addEventListener('click', function () { renderAuth('login'); });
     bindFeedTabs();
-    if (window.StoriesUI) StoriesUI.render();
+    if (!guest && window.StoriesUI) StoriesUI.render();
     var draftId = Number(qs('draft') || 0);
     if (draftId > 0) loadDraftIntoComposer(draftId);
     loadFeed(false);
@@ -2040,7 +2204,9 @@ var App = (function () {
       var isSelf = u.isSelf;
       var actions = '';
       var messageShown = false;
-      if (isSelf) actions += '<a class="btn btn-primary" href="#/settings">' + UI.icon('pen') + ' ' + T('profile.edit') + '</a>';
+      if (state.guest) actions += '<button type="button" class="btn btn-primary" id="profile-signin">' +
+        UI.icon('right-to-bracket') + ' ' + T('auth.signIn') + '</button>';
+      else if (isSelf) actions += '<a class="btn btn-primary" href="#/settings">' + UI.icon('pen') + ' ' + T('profile.edit') + '</a>';
       else {
         if (u.isFriend) {
           actions += '<a class="btn btn-primary" href="#/im/' + u.id + '">' + UI.icon('envelope') + ' ' + T('profile.message') + '</a>';
@@ -2129,6 +2295,8 @@ var App = (function () {
       main.innerHTML = html;
       bindFriendActions(main);
       if (window.GiftUI) GiftUI.bind(main);
+      var psi = document.getElementById('profile-signin');
+      if (psi) psi.addEventListener('click', function () { renderAuth('login'); });
 
       var callAudio = document.getElementById('profile-call-audio');
       if (callAudio) callAudio.addEventListener('click', function () {
@@ -2205,7 +2373,8 @@ var App = (function () {
 
   function userCard(u) {
     var action = '';
-    if (state.user && Number(u.id) === Number(state.user.id)) action = '<a class="btn btn-sm" href="#/profile/' + u.id + '">' + T('nav.profile') + '</a>';
+    if (state.guest) action = '<a class="btn btn-sm" href="#/profile/' + u.id + '">' + T('nav.profile') + '</a>';
+    else if (state.user && Number(u.id) === Number(state.user.id)) action = '<a class="btn btn-sm" href="#/profile/' + u.id + '">' + T('nav.profile') + '</a>';
     else if (u.isFriend) action = '<a class="btn btn-sm" href="#/im/' + u.id + '">' + T('profile.message') + '</a>';
     else if (u.requestPending) action = '<button class="btn btn-sm" disabled>' + T('profile.cancelRequest') + '</button>';
     else if (u.incomingRequest) action = '<button class="btn btn-sm btn-ok friend-action" data-user="' + u.id + '" data-action="accept">' + T('profile.accept') + '</button>';
@@ -2239,7 +2408,8 @@ var App = (function () {
   // ------------------------------------------------------------------ common
 
   function saveSetting(patch) {
-    if (!state.authed) return;
+    // a guest has nothing to save server-side; theme and language are local
+    if (!state.authed || state.guest) return;
     Api.request('POST', '/api/settings', patch, function (err) {
       if (err) { /* silent: theme/lang are local too */ }
     });
@@ -2271,16 +2441,34 @@ var App = (function () {
       }
     });
     Api.onAuthLost = function () {
+      var wasGuest = !!state.guest;
       state.authed = false;
+      state.guest = false;
       state.me = null;
       state.user = null;
       stopTimers();
       stopNotifyStream();
       stopBadgePoll();
       if (window.CallUI) CallUI.stop();
+      // a kiosk quietly starts a fresh guest session instead of showing a login
+      var site = state.site || Api.site || {};
+      if (site.kioskMode) {
+        Api.autoGuest(function (err, ok) {
+          if (!ok) { renderAuth('login'); return; }
+          state.authed = true;
+          state.guest = true;
+          state.me = Api.me;
+          state.user = null;
+          renderShell();
+          route();
+          startKioskIdle();
+        });
+        return;
+      }
       renderAuth('login');
-      UI.toast(T('errors.session'), 'err');
+      if (!wasGuest) UI.toast(T('errors.session'), 'err');
     };
+
   }
 
   // public api

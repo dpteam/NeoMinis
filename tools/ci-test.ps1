@@ -73,7 +73,9 @@ Remove-Item -Path (Join-Path $temp 'logs') -Recurse -Force -ErrorAction Silently
 $cfgPath = Join-Path $temp 'config.ini'
 $example = Join-Path $temp 'config.example.ini'
 if (Test-Path $example) {
-    (Get-Content $example -Raw) -replace 'requireCaptcha=true', 'requireCaptcha=false' |
+    # guest mode on as well, so the suite can exercise the read-only session
+    (Get-Content $example -Raw) -replace 'requireCaptcha=true', 'requireCaptcha=false' `
+        -replace '(?m)^guestMode=false', 'guestMode=true' |
         Set-Content -Path $cfgPath -Encoding UTF8
 } else {
     Remove-Item -Path $cfgPath -ErrorAction SilentlyContinue

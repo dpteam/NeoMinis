@@ -2259,26 +2259,29 @@
       var title = isVideo ? T('media.videoTitle') : T('media.musicTitle');
       var iconName = isVideo ? 'film' : 'music';
       // "mine" is the default: the page used to say "my library" while showing
-      // everybody's files, which is exactly as confusing as it sounds
-      var scope = App.qs('scope') === 'all' ? 'all' : 'mine';
+      // everybody's files, which is exactly as confusing as it sounds. A guest
+      // has no library of their own, so they only ever see the shared shelf.
+      var guest = !!state.guest;
+      var scope = (App.qs('scope') === 'all' || guest) ? 'all' : 'mine';
       var me = state.user || {};
 
       main.innerHTML = '<div class="card"><div class="card-h">' + UI.icon(iconName) + ' ' + title +
-        '<span class="right"><button class="btn btn-xs btn-primary" id="media-upload">' +
-        UI.icon('upload') + ' ' + T('media.upload') + '</button></span></div>' +
-        '<div class="card-b" style="padding:8px 10px 0"><div class="feed-tabs" style="margin:0">' +
+        (guest ? '' : '<span class="right"><button class="btn btn-xs btn-primary" id="media-upload">' +
+        UI.icon('upload') + ' ' + T('media.upload') + '</button></span>') + '</div>' +
+        (guest ? '' : '<div class="card-b" style="padding:8px 10px 0"><div class="feed-tabs" style="margin:0">' +
         '<a class="tab2' + (scope === 'mine' ? ' active' : '') + '" href="#/' +
           (isVideo ? 'video' : 'music') + '">' + T('media.mine') + '</a>' +
         '<a class="tab2' + (scope === 'all' ? ' active' : '') + '" href="#/' +
           (isVideo ? 'video' : 'music') + '?scope=all">' + T('media.everyone') + '</a>' +
-        '</div></div>' +
-        '<div class="card-b"><div class="tiny muted" style="margin-bottom:8px">' +
-        UI.esc(T('media.hint', maxKb, maxFiles)) + '</div>' +
-        '<input type="file" id="media-file" class="hidden" accept="' +
-        (isVideo ? 'video/mp4,video/webm,video/quicktime,video/ogg' : 'audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/flac,audio/aac,audio/webm') + '">' +
+        '</div></div>') +
+        '<div class="card-b">' +
+        (guest ? '' : '<div class="tiny muted" style="margin-bottom:8px">' +
+          UI.esc(T('media.hint', maxKb, maxFiles)) + '</div>' +
+          '<input type="file" id="media-file" class="hidden" accept="' +
+          (isVideo ? 'video/mp4,video/webm,video/quicktime,video/ogg' : 'audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/flac,audio/aac,audio/webm') + '">') +
         '<div id="media-list"><div class="center" style="padding:20px">' + UI.spinner() + '</div></div></div></div>';
 
-      main.insertAdjacentHTML('beforeend',
+      if (!guest) main.insertAdjacentHTML('beforeend',
         '<div class="card"><div class="card-h">' + UI.icon('list') + ' ' + T('playlists.title') +
         '<span class="right"><button class="btn btn-xs" id="playlist-new">' + UI.icon('plus') + ' ' +
         T('playlists.create') + '</button></span></div><div class="card-b" id="playlist-list">' +
@@ -2290,6 +2293,7 @@
       var playlists = [];
 
       function loadPlaylists() {
+        if (guest) return;
         Api.request('GET', '/api/playlists', null, function (err, data) {
           var box = document.getElementById('playlist-list');
           if (!box) return;
@@ -2464,6 +2468,7 @@
               ? '<video controls preload="metadata" src="' + UI.attr(UI.safeUrl(m.url)) + '"></video>'
               : '<audio controls preload="metadata" src="' + UI.attr(UI.safeUrl(m.url)) + '"></audio>') +
             '</div></div>' +
+            (guest ? '' :
             '<div class="media-actions">' +
             '<button type="button" class="btn btn-xs media-pl" data-id="' + m.id + '" title="' +
               UI.attr(T('playlists.addTo')) + '">' + UI.icon('plus') + '</button>' +
@@ -2474,7 +2479,7 @@
                 T('common.delete') + '</button>'
               : '<button type="button" class="btn btn-xs media-save" data-id="' + m.id + '">' +
                 UI.icon('download') + ' ' + T('media.saveMine') + '</button>') +
-            '</div></div>';
+            '</div>') + '</div>';
         }
         list.innerHTML = html + '</div>';
 
@@ -2560,8 +2565,8 @@
         } catch (e) { finish(0); }
       }
 
-      uploadBtn.addEventListener('click', function () { fileInput.click(); });
-      fileInput.addEventListener('change', function () {
+      if (uploadBtn) uploadBtn.addEventListener('click', function () { if (fileInput) fileInput.click(); });
+      if (fileInput) fileInput.addEventListener('change', function () {
         var f = fileInput.files && fileInput.files[0];
         if (!f) return;
         if (f.size > maxKb * 1024) {
@@ -3605,6 +3610,12 @@
         check('cfg-registration', T('admin.registrationOpen'), s.registration) +
         check('cfg-invite', T('admin.inviteOnly'), s.inviteOnly) +
         check('cfg-firstadmin', T('admin.firstUserAdmin'), s.firstUserAdmin) +
+        '<hr>' +
+        check('cfg-guest', T('admin.guestMode'), s.guestMode) +
+        field('cfg-guestpass', T('admin.guestPassword'), s.guestPassword) +
+        check('cfg-kiosk', T('admin.kioskMode'), s.kioskMode) +
+        field('cfg-kioskidle', T('admin.kioskIdle'), s.kioskIdleSec, 'number', ' min="15" max="3600"') +
+        '<div class="hint">' + T('admin.guestHint') + '</div>' +
         '</div>';
 
       // security
@@ -3739,7 +3750,11 @@
             defaultLanguage: App.val('cfg-lang'), defaultTheme: App.val('cfg-theme'),
             registration: document.getElementById('cfg-registration').checked,
             inviteOnly: document.getElementById('cfg-invite').checked,
-            firstUserAdmin: document.getElementById('cfg-firstadmin').checked
+            firstUserAdmin: document.getElementById('cfg-firstadmin').checked,
+            guestMode: document.getElementById('cfg-guest').checked,
+            guestPassword: App.val('cfg-guestpass'),
+            kioskMode: document.getElementById('cfg-kiosk').checked,
+            kioskIdleSec: Number(App.val('cfg-kioskidle'))
           },
           security: {
             requireCaptcha: document.getElementById('cfg-captcha').checked,

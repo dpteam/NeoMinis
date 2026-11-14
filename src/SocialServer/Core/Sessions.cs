@@ -7,6 +7,9 @@ namespace Social.Core
     {
         public string Id = "";
         public long UserId;
+        // A guest session carries no account: the router swaps in a throwaway
+        // read-only viewer and refuses every write. See Config.GuestMode.
+        public bool IsGuest;
         public byte[] Key;
         public DateTime Created = DateTime.UtcNow;
         public DateTime LastSeen = DateTime.UtcNow;
@@ -37,11 +40,27 @@ namespace Social.Core
 
         public Session Create(long userId, byte[] key, string ipHash, string uaHash, string loginIp)
         {
+            return Create(userId, key, ipHash, uaHash, loginIp, false);
+        }
+
+        /// <summary>
+        /// A read-only session with no account behind it. The key is derived from the
+        /// shared guest secret, so the transport is signed and sealed exactly like a
+        /// real login while the router keeps the viewer anonymous.
+        /// </summary>
+        public Session CreateGuest(byte[] key, string ipHash, string uaHash, string loginIp)
+        {
+            return Create(0, key, ipHash, uaHash, loginIp, true);
+        }
+
+        private Session Create(long userId, byte[] key, string ipHash, string uaHash, string loginIp, bool guest)
+        {
             lock (_sync)
             {
                 Session s = new Session();
                 s.Id = Crypto.NewSessionId();
                 s.UserId = userId;
+                s.IsGuest = guest;
                 s.Key = key;
                 s.IpHash = ipHash ?? "";
                 s.UserAgentHash = uaHash ?? "";

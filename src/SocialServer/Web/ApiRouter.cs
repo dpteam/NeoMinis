@@ -110,6 +110,7 @@ namespace Social.Web
                 if (route == "health") { HandleHealth(req, resp); return true; }
                 if (route == "register") { HandleRegister(req, resp, ip); return true; }
                 if (route == "login") { HandleLogin(req, resp, ip); return true; }
+                if (route == "guest") { HandleGuest(req, resp, ip); return true; }
                 if (route == "recover") { HandleRecover(req, resp, ip); return true; }
                 if (route == "feedback") { HandleFeedback(req, resp, ip); return true; }
 
@@ -182,6 +183,10 @@ namespace Social.Web
             b.Prop("baseUrl", _cfg.BaseUrl);
             b.Prop("registration", _cfg.Registration);
             b.Prop("inviteOnly", _cfg.InviteOnly);
+            b.Prop("guestMode", _cfg.GuestEnabled);
+            b.Prop("kioskMode", _cfg.KioskMode);
+            b.Prop("guestPasswordRequired", _cfg.GuestPasswordRequired);
+            b.Prop("kioskIdleSec", _cfg.KioskIdleSec);
             // tells the SPA whether the admin board is reachable from this origin
             b.Prop("adminBoard", _web != null && _web.IsAdminBoard);
             b.Prop("adminPort", _cfg.AdminEnabled ? _cfg.AdminPort : 0);
@@ -483,6 +488,76 @@ namespace Social.Web
             SendSealedKey(req, resp, k0, 200, b.ToString());
         }
 
+        // ============================================================= guest
+
+        // The verifier is derived from the guest password with the same PBKDF2
+        // recipe as a real account, using this fixed pseudo-username.
+        private const string GuestUser = "__guest__";
+
+        /// <summary>
+        /// Issues a read-only session for a visitor without an account. The key is
+        /// derived from the guest secret exactly like a login key, so the transport
+        /// stays signed and sealed; the session itself carries no user id and the
+        /// router refuses every write on it.
+        /// </summary>
+        private void HandleGuest(HttpRequest req, HttpResponse resp, string ip)
+        {
+            if (!IsMethod(req, "POST")) throw new ApiException(405, "method", "POST only");
+            if (!_cfg.GuestEnabled) throw new ApiException(403, "guest-off", "Guest access is switched off here");
+            if (_web.AuthBlocked(ip)) throw new ApiException(429, "locked", "Too many attempts, try later");
+
+            string verifier = req.Header("X-Auth-Guest");
+            string salt = req.Header("X-Auth-Salt");
+            if (string.IsNullOrEmpty(verifier) || string.IsNullOrEmpty(salt))
+                throw new ApiException(400, "auth-headers", "Missing authentication headers");
+            if (!Crypto.IsHex(verifier, 64, 64)) throw new ApiException(400, "bad-verifier", "Bad verifier");
+            if (!Crypto.IsHex(salt, 32, 32)) throw new ApiException(400, "bad-salt", "Bad salt");
+
+            byte[] k0 = Crypto.DeriveKey(verifier, salt, _cfg.KdfIterations);
+            try { VerifySigned(req, k0, "guest", ip); }
+            catch (ApiException) { _web.RegisterAuthFailure(ip); throw; }
+
+            if (_cfg.GuestPasswordRequired)
+            {
+                byte[] vsalt = Encoding.UTF8.GetBytes("social.login.v1|" + GuestUser);
+                string expected = Crypto.Hex(Crypto.Pbkdf2(
+                    Encoding.UTF8.GetBytes(_cfg.GuestPassword), vsalt, _cfg.KdfIterations, 32));
+                if (!Crypto.FixedEquals(expected, verifier))
+                {
+                    _web.RegisterAuthFailure(ip);
+                    Log.Warn("AUTH", "failed guest entry from " + ip);
+                    throw new ApiException(401, "bad-guest-password", "Wrong guest password");
+                }
+            }
+
+            _web.ClearAuthFailures(ip);
+            string sessionSalt = Crypto.RandomHex(Crypto.SaltBytes);
+            byte[] sessionKey = Crypto.DeriveKey(verifier, sessionSalt, _cfg.KdfIterations);
+            Session session = _sessions.CreateGuest(sessionKey, Crypto.HashIp(ip, _cfg.ServerSecret), UaHash(req), ip);
+            SetSessionCookie(req, resp, session);
+            Log.Info("AUTH", "guest session from " + ip);
+
+            JsonBuilder b = new JsonBuilder(2048);
+            b.BeginObject();
+            b.Prop("ok", true);
+            b.Prop("sessionSalt", sessionSalt);
+            b.Prop("guest", true);
+            b.Name("me").Raw(GuestMeJson());
+            b.Name("site").Raw(SiteJson());
+            b.EndObject();
+            SendSealedKey(req, resp, k0, 200, b.ToString());
+        }
+
+        private string GuestMeJson()
+        {
+            JsonBuilder b = new JsonBuilder(256);
+            b.BeginObject();
+            b.Prop("guest", true);
+            b.Prop("kiosk", _cfg.KioskMode);
+            b.EndObject();
+            return b.ToString();
+        }
+
         // =========================================================== recover
 
         private void HandleRecover(HttpRequest req, HttpResponse resp, string ip)
@@ -547,17 +622,30 @@ namespace Social.Web
                 return true;
             }
 
-            User user = _store.FindUser(session.UserId);
-            if (user == null || user.Deleted)
+            User user;
+            if (session.IsGuest)
             {
-                _sessions.Remove(sid);
-                FailPlain(resp, 401, "auth-required", "Please sign in", 0);
-                return true;
+                // A throwaway viewer with id 0. Every read rule already treats an
+                // unknown viewer as a stranger, so private rows stay hidden, and the
+                // dispatch whitelist below refuses anything that would write.
+                user = new User();
+                user.Id = 0;
+                user.Username = "guest";
             }
-            if (user.Banned && (user.BannedUntil == DateTime.MinValue || user.BannedUntil > DateTime.UtcNow))
+            else
             {
-                FailPlain(resp, 403, "banned", string.IsNullOrEmpty(user.BanReason) ? "Account blocked" : user.BanReason, 0);
-                return true;
+                user = _store.FindUser(session.UserId);
+                if (user == null || user.Deleted)
+                {
+                    _sessions.Remove(sid);
+                    FailPlain(resp, 401, "auth-required", "Please sign in", 0);
+                    return true;
+                }
+                if (user.Banned && (user.BannedUntil == DateTime.MinValue || user.BannedUntil > DateTime.UtcNow))
+                {
+                    FailPlain(resp, 403, "banned", string.IsNullOrEmpty(user.BanReason) ? "Account blocked" : user.BanReason, 0);
+                    return true;
+                }
             }
 
             bool encrypted = string.Equals(req.Header("X-Api-Enc") ?? "", "1", StringComparison.Ordinal);
@@ -600,7 +688,7 @@ namespace Social.Web
             }
 
             _sessions.Touch(session, Crypto.HashIp(ip, _cfg.ServerSecret), UaHash(req));
-            _store.TouchUser(user);
+            if (!session.IsGuest) _store.TouchUser(user);
 
             try
             {
@@ -627,10 +715,34 @@ namespace Social.Web
             return true;
         }
 
+        // Everything a guest may look at. Writes are never on the list, so the
+        // check below is a whitelist rather than a growing blocklist.
+        private static readonly string[] GuestRoutes = new string[]
+        {
+            "me", "feed", "wall", "post", "comments", "likes",
+            "profile", "people", "search", "search/posts", "search/all",
+            "photos", "tag", "tags", "media", "playlists", "playlist",
+            "games", "game", "gifts", "friends",
+            "groups", "group", "group/feed",
+            "albums", "album", "stories", "story",
+            "stats", "online"
+        };
+
+        private static bool GuestMayRead(ApiCtx ctx)
+        {
+            if (!string.Equals(ctx.Req.Method, "GET", StringComparison.OrdinalIgnoreCase)) return false;
+            for (int i = 0; i < GuestRoutes.Length; i++)
+                if (GuestRoutes[i] == ctx.Route) return true;
+            return false;
+        }
+
         private void Dispatch(ApiCtx ctx)
         {
             string r = ctx.Route;
             string m = ctx.Req.Method;
+
+            if (ctx.Session.IsGuest && !GuestMayRead(ctx))
+                throw new ApiException(403, "guest-readonly", "Guests may browse, but not change anything");
 
             if (r == "me") { RequireMethod(m, "GET"); HandleMe(ctx); return; }
             if (r == "logout") { RequireMethod(m, "POST"); HandleLogout(ctx); return; }
