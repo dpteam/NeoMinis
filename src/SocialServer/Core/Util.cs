@@ -157,6 +157,22 @@ namespace Social.Core
             return true;
         }
 
+        public static bool IsValidRoomName(string room)
+        {
+            if (string.IsNullOrEmpty(room)) return false;
+            if (room.Length < 3 || room.Length > 60) return false;
+            for (int i = 0; i < room.Length; i++)
+            {
+                char c = room[i];
+                bool ok = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+                          c == '-' || c == '_' || c == '.';
+                if (!ok) return false;
+            }
+            if (room[0] == '-' || room[0] == '.' || room[room.Length - 1] == '-' || room[room.Length - 1] == '.')
+                return false;
+            return true;
+        }
+
         public static string NormalizeUsername(string username)
         {
             return (username ?? "").Trim().ToLowerInvariant();

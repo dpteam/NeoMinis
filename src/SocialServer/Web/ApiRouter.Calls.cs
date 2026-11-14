@@ -96,8 +96,8 @@ namespace Social.Web
 
             // conference: join the room if it is alive, otherwise open it
             if (room.Length < 3) throw new ApiException(400, "bad-room", "A room needs a name of 3+ characters");
-            if (!Util.IsValidUsername(room.ToLowerInvariant().Replace(" ", "_"), 60))
-                throw new ApiException(400, "bad-room", "Use letters, digits, _ or . for the room name");
+            if (!Util.IsValidRoomName(room))
+                throw new ApiException(400, "bad-room", "Use lowercase letters, digits, - _ or . for the room name");
 
             LiveCall existing = null;
             List<LiveCall> all = CallRegistry.ForUser(ctx.User.Id);

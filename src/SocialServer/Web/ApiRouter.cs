@@ -818,6 +818,11 @@ namespace Social.Web
             if (r == "call/wait") { RequireMethod(m, "GET"); HandleCallWait(ctx); return; }
             if (r == "call/active") { RequireMethod(m, "GET"); HandleCallActive(ctx); return; }
             if (r == "call/history") { RequireMethod(m, "GET"); HandleCallHistory(ctx); return; }
+
+            if (r == "channels") { RequireMethod(m, "GET"); HandleChannels(ctx); return; }
+            if (r == "channel/create") { RequireMethod(m, "POST"); HandleChannelCreate(ctx); return; }
+            if (r == "channel/edit") { RequireMethod(m, "POST"); HandleChannelEdit(ctx); return; }
+            if (r == "channel/delete") { RequireMethod(m, "POST"); HandleChannelDelete(ctx); return; }
             if (r == "gifts") { RequireMethod(m, "GET"); HandleGifts(ctx); return; }
             if (r == "gifts/sent") { RequireMethod(m, "GET"); HandleGiftsSent(ctx); return; }
             if (r == "gifts/send") { RequireMethod(m, "POST"); HandleGiftSend(ctx); return; }

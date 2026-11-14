@@ -69,7 +69,7 @@ poll) but they are the minimum.
 | --- | --- |
 | **Screen sharing** | `getDisplayMedia` plus a second track per peer; `display-capture` is already allowed in `Permissions-Policy`. Needs renegotiation, because adding a track mid-call changes the SDP. |
 | **Calls that survive a reload** | `/api/call/active` exists; the overlay has to restore the peer connections from `sessionStorage` too. |
-| **Discord-style call page** | Replace the single "room name" box with a Discord-like sidebar: a list of channels (text-like names, e.g. `general`, `games`, `afk`) that anybody can create, a "join" button per channel, a list of who is inside each channel right now, and the active call filling the rest of the page. Voice channels get a speaker icon, the number of people inside, and a green ring around avatars of people currently talking (Web Audio level meter per peer). Rooms become persistent channel records (name, created by, order) instead of free-typed names, with an admin-editable list. |
+| **Discord-style call page** | Done: `#/calls` is a channel sidebar plus a room view, backed by `/api/channels`. Still open from the original idea: a Web Audio level meter so the avatar of whoever is talking gets a green ring, and drag-to-reorder channels. |
 | **Ringing when the tab is closed** | Web Push with a `call` payload, a ringtone, and an "answer" action in the notification. |
 | **Group layout** | Grid that switches to speaker view, mute-all, "raise hand", per-member volume. |
 | **Noise suppression / echo cancel** | `getUserMedia({ audio: { echoCancellation, noiseSuppression, autoGainControl } })` as toggles. |
@@ -200,6 +200,10 @@ Kept here so the list above stays honest.
   always fire `failed`, the selected candidate pair and live bitrate/RTT/loss under
   each tile, a "Reconnect" button that rebuilds the peer connection, and a glare
   rule so two simultaneous offers cannot deadlock at "connecting".
+- Voice channels: a Discord-style sidebar on `#/calls`, named rooms in
+  `channels.json`, live occupancy read from the call registry, create/edit/delete
+  with the creator or an admin in charge, and a delete that does not throw out the
+  people already talking.
 - Groups with editable settings, pictures and member management.
 - Communities: owner / editor / member roles, join requests for closed groups and a
   moderation queue ("members post, editors approve").

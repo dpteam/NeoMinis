@@ -859,6 +859,52 @@ img { max-width: 100%; }
 .chat-form textarea { flex: 1; min-height: 36px; max-height: 120px; resize: none; }
 .chat-empty { flex: 1; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
 
+/* -------------------------------------------------- voice channels (calls) */
+.chan-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 10px; align-items: start; }
+.chan-side {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; position: sticky; top: 8px;
+}
+.chan-side-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px; background: var(--head); border-bottom: 1px solid var(--border);
+  font: 700 11.5px var(--font-display); letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-soft);
+}
+.chan-side-head i { color: var(--accent); margin-right: 4px; }
+.chan-list { padding: 6px; display: flex; flex-direction: column; gap: 2px; max-height: 460px; overflow: auto; }
+.chan-row { display: flex; align-items: center; gap: 4px; border-radius: var(--radius-sm); padding: 1px; }
+.chan-row:hover { background: var(--panel-2); }
+.chan-row.busy { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.chan-join {
+  flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0;
+  border: 0; background: transparent; color: var(--text-soft);
+  padding: 6px 7px; border-radius: var(--radius-sm); text-align: left; font-size: 12.5px;
+}
+.chan-join:hover { color: var(--text); }
+.chan-row.busy .chan-join { color: var(--text); }
+.chan-join i { color: var(--muted); width: 14px; }
+.chan-row.busy .chan-join i { color: var(--ok); }
+.chan-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chan-count {
+  font-size: 10.5px; padding: 0 5px; border-radius: 8px;
+  background: var(--accent); color: #fff; font-weight: 700;
+}
+.chan-avatars { display: flex; align-items: center; gap: 2px; }
+.chan-avatars .avatar { width: 20px; height: 20px; border-radius: 50%; }
+.chan-actions { display: flex; gap: 1px; opacity: 0; transition: opacity .12s; }
+.chan-row:hover .chan-actions, .chan-row.busy .chan-actions { opacity: 1; }
+.chan-actions .icon-btn { padding: 3px 5px; font-size: 11px; }
+.chan-side-foot { padding: 8px 10px; border-top: 1px solid var(--border); background: var(--panel-2); }
+.chan-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+@media (max-width: 720px) {
+  .chan-layout { grid-template-columns: 1fr; }
+  .chan-side { position: static; }
+  .chan-list { max-height: 220px; }
+  .chan-actions { opacity: 1; }
+}
+
 /* ------------------------------------------------------- file transfers */
 .xfer-panel {
   display: flex; flex-direction: column; align-items: stretch; gap: 7px;

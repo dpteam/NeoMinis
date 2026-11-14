@@ -419,6 +419,38 @@ account; only a hashed IP is kept for abuse handling.
 Moderators can read feedback; the message, contact, page, user agent, an internal
 note and who handled it are all shown in the admin board.
 
+### Voice channels
+
+Named rooms, Discord-style. The row is only the sign on the wall; who is inside
+comes from the live call registry, so occupancy is never stale after a restart.
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| GET | `/api/channels` | — | `{ channels[], maxMembers, canCreate }` |
+| POST | `/api/channel/create` | `name`, `topic` | `{ channel }` |
+| POST | `/api/channel/edit` | `id`, `name`, `topic`, `position` | `{ channel }` |
+| POST | `/api/channel/delete` | `id` | `{ deleted, inside }` |
+
+A channel row carries `id`, `name`, `topic`, `createdBy`, `created`, `position`,
+`inside` (how many people are in it right now), `members[]` (their summaries) and
+`canManage` (creator or administrator). The name doubles as the room name, so it is
+a slug: lowercase letters, digits, `-`, `_`, `.`, 3–40 characters, and it cannot
+start or end with `-` or `.`. A duplicate name is `409 name-taken`.
+
+Rules worth knowing:
+
+* renaming a channel that somebody is sitting in is refused with `409 in-use` —
+  the room name is what their peer connections were built around;
+* deleting a channel **does not** throw anybody out. The room lives in the call
+  registry until the last person leaves; the row only disappears from the list.
+  The response says how many were inside at that moment (`inside`);
+* only the creator or an administrator may edit or delete one;
+* a fresh install is seeded with `general`, `games` and `afk` so the page is not
+  an empty box on day one. They are ordinary rows: rename, reorder, delete.
+
+The page refreshes occupancy every 6 seconds while it is on screen. Joining a
+channel is just `POST /api/call/start` with `room=<channel name>`.
+
 ### Calls
 
 Voice and video calls plus conference rooms. The server never touches the media:

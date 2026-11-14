@@ -674,6 +674,10 @@ var CallUI = (function () {
     call = null;
     muted = false;
     camOff = false;
+    // the channel page may be watching: put its idle panel back
+    if (App.state.callsIntroReset) {
+      try { App.state.callsIntroReset(); } catch (e) { }
+    }
     // the global poller keeps running so the next ring still arrives
   }
 
@@ -703,12 +707,16 @@ var CallUI = (function () {
     });
   }
 
-  function joinRoom(room, video) {
-    if (!supported()) { explainUnsupported(); return; }
-    if (call) { UI.toast(T('calls.already'), 'err'); return; }
+  /// <summary>
+  /// Joins (or opens) a named voice room. `onFail` runs when the attempt dies
+  /// before the overlay is up, so the caller can restore whatever it was showing.
+  /// </summary>
+  function joinRoom(room, video, onFail) {
+    if (!supported()) { explainUnsupported(); if (onFail) onFail(); return; }
+    if (call) { UI.toast(T('calls.already'), 'err'); if (onFail) onFail(); return; }
     getMedia(video).then(function () {
       Api.request('POST', '/api/call/start', { room: room, video: !!video }, function (err, data) {
-        if (err) { stopLocal(); UI.toast(Api.errorText(err), 'err'); return; }
+        if (err) { stopLocal(); UI.toast(Api.errorText(err), 'err'); if (onFail) onFail(); return; }
         call = data.call;
         openOverlay(room, call.kind);
         attach(local, App.state.user, true);
@@ -719,6 +727,7 @@ var CallUI = (function () {
       });
     }).catch(function (e) {
       UI.toast(mediaErrorText(e), 'err');
+      if (onFail) onFail();
     });
   }
 
@@ -801,32 +810,189 @@ var CallUI = (function () {
   // ----------------------------------------------------------------- view
 
   App.views.calls = function (main) {
-    main.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('phone') + ' ' + T('calls.title') + '</div>' +
-      '<div class="card-b"><div class="tiny muted" style="margin-bottom:8px">' + T('calls.roomHint') + '</div>' +
-      '<div class="inline-fields"><div class="field"><label>' + T('calls.room') + '</label>' +
-      '<input class="input" id="call-room" maxlength="60" placeholder="team">' +
-      '</div></div><div style="display:flex;gap:6px;flex-wrap:wrap">' +
-      '<button class="btn btn-primary" id="call-room-audio">' + UI.icon('phone') + ' ' + T('calls.joinAudio') + '</button>' +
-      '<button class="btn" id="call-room-video">' + UI.icon('video') + ' ' + T('calls.joinVideo') + '</button>' +
-      '</div></div></div>' +
-      '<div class="card"><div class="card-h">' + UI.icon('clock-rotate-left') + ' ' + T('calls.history') + '</div>' +
-      '<div class="card-b flush" id="call-history"><div class="center" style="padding:18px">' + UI.spinner() + '</div></div></div>';
+    var channels = [];
 
-    function roomName() {
-      var v = (byId('call-room') || {}).value || '';
-      return v.replace(/^\s+|\s+$/g, '').replace(/\s+/g, '_');
+    main.innerHTML = '<div class="chan-layout">' +
+      '<aside class="chan-side">' +
+      '<div class="chan-side-head"><span>' + UI.icon('hashtag') + ' ' + T('calls.channels') + '</span>' +
+      '<button type="button" class="icon-btn" id="chan-new" title="' + UI.attr(T('calls.newChannel')) + '">' +
+      UI.icon('plus') + '</button></div>' +
+      '<div class="chan-list" id="chan-list"><div class="center" style="padding:16px">' + UI.spinner() + '</div></div>' +
+      '<div class="chan-side-foot tiny muted">' + T('calls.channelsHint') + '</div>' +
+      '</aside>' +
+      '<section class="chan-main">' +
+      '<div class="card"><div class="card-h">' + UI.icon('phone') + ' ' + T('calls.title') + '</div>' +
+      '<div class="card-b" id="chan-intro">' +
+      UI.empty('hashtag', T('calls.pickChannel'), T('calls.pickChannelHint')) + '</div></div>' +
+      '<div class="card"><div class="card-h">' + UI.icon('clock-rotate-left') + ' ' + T('calls.history') + '</div>' +
+      '<div class="card-b flush" id="call-history"><div class="center" style="padding:18px">' + UI.spinner() + '</div></div></div>' +
+      '</section></div>';
+
+    function loadChannels() {
+      Api.request('GET', '/api/channels', null, function (err, data) {
+        var box = byId('chan-list');
+        if (!box) return;
+        if (err) {
+          box.innerHTML = '<div class="alert err" style="margin:8px">' + UI.esc(Api.errorText(err)) + '</div>';
+          return;
+        }
+        channels = (data && data.channels) || [];
+        if (!channels.length) {
+          box.innerHTML = '<div class="tiny muted" style="padding:10px">' + T('calls.noChannels') + '</div>';
+          return;
+        }
+        var html = '';
+        for (var i = 0; i < channels.length; i++) {
+          var c = channels[i];
+          var inside = c.members || [];
+          html += '<div class="chan-row' + (inside.length ? ' busy' : '') + '" data-id="' + c.id + '">' +
+            '<button type="button" class="chan-join" data-id="' + c.id + '" title="' +
+            UI.attr(T('calls.joinAudio')) + '">' +
+            UI.icon(inside.length ? 'volume-high' : 'hashtag') +
+            '<span class="chan-name">' + UI.esc(c.name) + '</span>' +
+            (inside.length ? '<span class="chan-count">' + inside.length + '</span>' : '') +
+            '</button>';
+          if (inside.length) {
+            html += '<div class="chan-avatars">';
+            for (var k = 0; k < inside.length && k < 5; k++) {
+              html += '<span title="' + UI.attr(inside[k].displayName || inside[k].username) + '">' +
+                UI.avatar(inside[k], 20) + '</span>';
+            }
+            if (inside.length > 5) html += '<span class="tiny muted">+' + (inside.length - 5) + '</span>';
+            html += '</div>';
+          }
+          html += '<div class="chan-actions">' +
+            '<button type="button" class="icon-btn chan-video" data-id="' + c.id + '" title="' +
+            UI.attr(T('calls.joinVideo')) + '">' + UI.icon('video') + '</button>' +
+            (c.canManage ? '<button type="button" class="icon-btn chan-edit" data-id="' + c.id + '" title="' +
+              UI.attr(T('common.edit')) + '">' + UI.icon('pen') + '</button>' : '') +
+            '</div></div>';
+        }
+        box.innerHTML = html;
+        bindChannelRows(box);
+      });
     }
 
-    byId('call-room-audio').addEventListener('click', function () {
-      var r = roomName();
-      if (r.length < 3) { UI.toast(T('calls.needRoom'), 'err'); return; }
-      joinRoom(r, false);
-    });
-    byId('call-room-video').addEventListener('click', function () {
-      var r = roomName();
-      if (r.length < 3) { UI.toast(T('calls.needRoom'), 'err'); return; }
-      joinRoom(r, true);
-    });
+    function bindChannelRows(box) {
+      var joins = box.querySelectorAll('.chan-join');
+      for (var i = 0; i < joins.length; i++) {
+        joins[i].addEventListener('click', function () {
+          var c = channelById(this.getAttribute('data-id'));
+          if (c) joinChannel(c, false);
+        });
+      }
+      var vids = box.querySelectorAll('.chan-video');
+      for (var k = 0; k < vids.length; k++) {
+        vids[k].addEventListener('click', function (e) {
+          e.stopPropagation();
+          var c = channelById(this.getAttribute('data-id'));
+          if (c) joinChannel(c, true);
+        });
+      }
+      var edits = box.querySelectorAll('.chan-edit');
+      for (var m = 0; m < edits.length; m++) {
+        edits[m].addEventListener('click', function (e) {
+          e.stopPropagation();
+          var c = channelById(this.getAttribute('data-id'));
+          if (c) channelModal(c);
+        });
+      }
+    }
+
+    function channelById(id) {
+      for (var i = 0; i < channels.length; i++) if (String(channels[i].id) === String(id)) return channels[i];
+      return null;
+    }
+
+    function joinChannel(c, video) {
+      if (call) { UI.toast(T('calls.already'), 'err'); return; }
+      var intro = byId('chan-intro');
+      if (intro) {
+        intro.innerHTML = '<div class="center" style="padding:18px">' + UI.spinner() + ' ' +
+          UI.esc(T('calls.joining', c.name)) + '</div>';
+      }
+      // A join can fail for reasons that are not an error dialog: the microphone
+      // is missing, the room filled up, the browser refused. Put the idle panel
+      // back so the page does not sit on a spinner that will never finish.
+      joinRoom(c.name, video, function () {
+        var box = byId('chan-intro');
+        if (!box) return;
+        box.innerHTML = UI.empty('hashtag', T('calls.pickChannel'), T('calls.pickChannelHint'));
+      });
+    }
+
+    /// Creates a channel, or edits and deletes one that is already there.
+    function channelModal(c) {
+      var isNew = !c;
+      var body = '<div class="field"><label>' + T('calls.channelName') + '</label>' +
+        '<input class="input" id="chan-name" maxlength="40" value="' + UI.attr(isNew ? '' : c.name) + '">' +
+        '<div class="hint">' + T('calls.channelNameHint') + '</div></div>' +
+        '<div class="field"><label>' + T('calls.channelTopic') + '</label>' +
+        '<input class="input" id="chan-topic" maxlength="120" value="' + UI.attr(isNew ? '' : c.topic) + '"></div>';
+
+      var actions = [{ label: T('common.cancel'), cls: 'btn-ghost' }];
+      if (!isNew) {
+        actions.push({
+          label: T('common.delete'), cls: 'btn-danger',
+          onClick: function (box, close) {
+            UI.confirm(T('common.delete'), T('calls.deleteChannelConfirm'), T('common.delete'), function () {
+              Api.request('POST', '/api/channel/delete', { id: c.id }, function (err) {
+                if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+                UI.toast(T('calls.channelDeleted'), 'ok');
+                if (close) close();
+                loadChannels();
+              });
+            }, true);
+            return false;
+          }
+        });
+      }
+      actions.push({
+        label: isNew ? T('common.create') : T('common.save'), cls: 'btn-primary', keepOpen: true,
+        onClick: function (box, close) {
+          var name = (byId('chan-name') || {}).value || '';
+          var topic = (byId('chan-topic') || {}).value || '';
+          var path = isNew ? '/api/channel/create' : '/api/channel/edit';
+          var payload = isNew ? { name: name, topic: topic } : { id: c.id, name: name, topic: topic };
+          Api.request('POST', path, payload, function (err) {
+            if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+            UI.toast(isNew ? T('calls.channelCreated') : T('common.saved'), 'ok');
+            SoundFX.play('success');
+            if (close) close();
+            loadChannels();
+          });
+          return false;
+        }
+      });
+
+      UI.modal({
+        title: isNew ? T('calls.newChannel') : T('calls.editChannel'),
+        icon: 'hashtag',
+        body: body,
+        actions: actions
+      });
+    }
+
+    var newBtn = byId('chan-new');
+    if (newBtn) newBtn.addEventListener('click', function () { channelModal(null); });
+
+    loadChannels();
+    // occupancy is a live fact, so refresh it while the page is on screen.
+    // While this tab is in a call the panel above the feed is the truth, so the
+    // list only needs to keep ticking when nobody is connected here.
+    if (App.state.callsTicker) clearInterval(App.state.callsTicker);
+    App.state.callsTicker = setInterval(function () {
+      if (App.state.route !== 'calls' || document.hidden) return;
+      if (!byId('chan-list')) { clearInterval(App.state.callsTicker); return; }
+      loadChannels();
+    }, 6000);
+    // and put the idle panel back whenever a call ends, so the page never sits
+    // on a "joining" spinner that will not finish
+    App.state.callsIntroReset = function () {
+      var box = byId('chan-intro');
+      if (box) box.innerHTML = UI.empty('hashtag', T('calls.pickChannel'), T('calls.pickChannelHint'));
+      loadChannels();
+    };
 
     Api.request('GET', '/api/call/history', null, function (err, data) {
       var box = byId('call-history');
@@ -844,7 +1010,7 @@ var CallUI = (function () {
         }
         html += '<div class="call-row">' + UI.icon(c.kind === 'video' ? 'video' : 'phone') +
           '<div class="call-row-main"><div><b>' + UI.esc(c.room || names.join(', ')) + '</b></div>' +
-          '<div class="tiny muted">' + UI.formatDate(c.started, true) + ' В· ' + fmtDur(c.duration) + '</div></div></div>';
+          '<div class="tiny muted">' + UI.formatDate(c.started, true) + ' \u00b7 ' + fmtDur(c.duration) + '</div></div></div>';
       }
       box.innerHTML = html;
     });

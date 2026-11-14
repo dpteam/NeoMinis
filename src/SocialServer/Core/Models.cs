@@ -181,6 +181,22 @@ namespace Social.Core
         public DateTime Updated = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// A named voice room, Discord-style. The row is only the name and the order;
+    /// who is inside right now lives in <see cref="CallRegistry"/>, because that is
+    /// true only for as long as the browsers stay connected and persisting it would
+    /// be a lie after a restart.
+    /// </summary>
+    public sealed class Channel
+    {
+        public long Id;
+        public string Name = "";
+        public string Topic = "";
+        public long CreatedBy;
+        public DateTime Created = DateTime.UtcNow;
+        public int Position;
+    }
+
         /// <summary>
         /// A story: a photo or a short clip that lives for a while and then goes
         /// away. The file is deleted when it expires, so the storage does not grow
@@ -375,6 +391,7 @@ namespace Social.Core
         public long NextGiftId = 1;
         public long NextAlbumId = 1;
         public long NextStoryId = 1;
+        public long NextChannelId = 1;
         public long TotalRegistrations;
         public DateTime LastBackup = DateTime.MinValue;
         public string InstallId = "";

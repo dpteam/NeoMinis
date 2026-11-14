@@ -571,6 +571,58 @@ async function main() {
   await alice.call('POST', '/api/call/leave', { id: roomId });
   await bob.call('POST', '/api/call/leave', { id: roomId });
 
+  // ---- voice channels
+  const chans = await alice.call('GET', '/api/channels');
+  ok('a fresh install has starter channels', chans.status === 200 &&
+    chans.data.channels.length >= 3 &&
+    chans.data.channels.some(c => c.name === 'general'), String(chans.status));
+
+  const chanNew = await alice.call('POST', '/api/channel/create',
+    { name: 'Test Room', topic: 'made by the suite' });
+  ok('channel created and slugged', chanNew.status === 200 &&
+    chanNew.data.channel.name === 'test-room', JSON.stringify(chanNew.data && chanNew.data.channel && chanNew.data.channel.name));
+  const chanId = chanNew.data.channel.id;
+
+  const chanDup = await alice.call('POST', '/api/channel/create', { name: 'test-room' });
+  ok('a duplicate channel name is refused', chanDup.status === 409, String(chanDup.status));
+
+  const chanBad = await alice.call('POST', '/api/channel/create', { name: 'has spaces!' });
+  ok('a channel name must be a slug', chanBad.status === 400, String(chanBad.status));
+
+  const chanForeign = await bob.call('POST', '/api/channel/edit', { id: chanId, topic: 'hijacked' });
+  ok('only the creator may edit a channel', chanForeign.status === 403, String(chanForeign.status));
+
+  const chanEdit = await alice.call('POST', '/api/channel/edit',
+    { id: chanId, topic: 'edited by the suite' });
+  ok('the creator can edit the topic', chanEdit.status === 200 &&
+    chanEdit.data.channel.topic === 'edited by the suite', String(chanEdit.status));
+
+  // occupancy comes from the live call registry, not from storage
+  const roomJoinChan = await alice.call('POST', '/api/call/start', { room: 'test-room', video: false });
+  const chanBusy = await alice.call('GET', '/api/channels');
+  const busyRow = (chanBusy.data.channels || []).find(c => c.id === chanId);
+  ok('a channel shows who is inside', !!busyRow && busyRow.inside === 1 &&
+    busyRow.members.some(m => m.id === alice.user.id), JSON.stringify(busyRow && busyRow.inside));
+
+  const chanRenameBusy = await alice.call('POST', '/api/channel/edit',
+    { id: chanId, name: 'renamed-busy' });
+  ok('a channel in use cannot be renamed', chanRenameBusy.status === 409, String(chanRenameBusy.status));
+
+  await alice.call('POST', '/api/call/leave', { id: roomJoinChan.data.call.id });
+
+  // deleting the row does not throw out the people who are already talking
+  const chanRoom = await alice.call('POST', '/api/call/start', { room: 'test-room', video: false });
+  const chanDel = await alice.call('POST', '/api/channel/delete', { id: chanId });
+  ok('the creator can delete a channel', chanDel.status === 200 &&
+    chanDel.data.inside === 1, JSON.stringify(chanDel.data));
+  const chanGone = await alice.call('GET', '/api/channels');
+  ok('a deleted channel leaves the list',
+    !(chanGone.data.channels || []).some(c => c.id === chanId), '');
+  const stillIn = await alice.call('GET', '/api/call/active');
+  ok('people inside a deleted channel stay connected',
+    (stillIn.data.calls || []).some(c => c.id === chanRoom.data.call.id), '');
+  await alice.call('POST', '/api/call/leave', { id: chanRoom.data.call.id });
+
   // ---- ICE configuration for the browsers
   ok('handshake carries several STUN servers', String(hs.site.callStun || '').split(',').length >= 2,
     String(hs.site.callStun));

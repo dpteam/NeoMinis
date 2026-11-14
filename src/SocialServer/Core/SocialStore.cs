@@ -40,13 +40,14 @@ namespace Social.Core
         private readonly List<Gift> _gifts = new List<Gift>();
         private readonly List<Album> _albums = new List<Album>();
         private readonly List<Story> _stories = new List<Story>();
+        private readonly List<Channel> _channels = new List<Channel>();
         private Meta _meta = new Meta();
 
         private readonly Dictionary<long, User> _userById = new Dictionary<long, User>();
         private readonly Dictionary<string, User> _userByName = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
 
         private bool _dirtyUsers, _dirtyPosts, _dirtyComments, _dirtyFriends, _dirtyMessages;
-        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts, _dirtyAlbums, _dirtyStories;
+        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts, _dirtyAlbums, _dirtyStories, _dirtyChannels;
         private bool _readOnly;
         private string _saveError = "";
         private DateTime _lastSave = DateTime.MinValue;
@@ -73,7 +74,7 @@ namespace Social.Core
                 {
                     return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
                            _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
-                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls || _dirtyGifts || _dirtyAlbums || _dirtyStories;
+                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls || _dirtyGifts || _dirtyAlbums || _dirtyStories || _dirtyChannels;
                 }
             }
         }
@@ -137,6 +138,9 @@ namespace Social.Core
                 _albums.AddRange(LoadTable("albums.json", AlbumFromDict));
                 _stories.Clear();
                 _stories.AddRange(LoadTable("stories.json", StoryFromDict));
+                _channels.Clear();
+                _channels.AddRange(LoadTable("channels.json", ChannelFromDict));
+                if (_channels.Count == 0) SeedChannels();
 
                 // sort newest first, keeping the hot queries cheap
                 _posts.Sort(delegate(Post a, Post b) { return b.Id.CompareTo(a.Id); });
@@ -147,7 +151,7 @@ namespace Social.Core
                 EnsureCounters();
                 _loaded = true;
                 _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = _dirtyStories = false;
+                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = _dirtyStories = _dirtyChannels = false;
 
                 Log.Info("DATA", "loaded users=" + _users.Count + " posts=" + _posts.Count +
                                   " comments=" + _comments.Count + " friends=" + _friends.Count +
@@ -230,6 +234,9 @@ namespace Social.Core
             long maxStory = 0;
             for (int i = 0; i < _stories.Count; i++) if (_stories[i].Id > maxStory) maxStory = _stories[i].Id;
             if (_meta.NextStoryId <= maxStory) _meta.NextStoryId = maxStory + 1;
+            long maxChannel = 0;
+            for (int i = 0; i < _channels.Count; i++) if (_channels[i].Id > maxChannel) maxChannel = _channels[i].Id;
+            if (_meta.NextChannelId <= maxChannel) _meta.NextChannelId = maxChannel + 1;
         }
 
         private string ReadJson(string path)
@@ -340,9 +347,10 @@ namespace Social.Core
                     if (force || _dirtyGifts) WriteTable("gifts.json", GiftsToArray());
                     if (force || _dirtyAlbums) WriteTable("albums.json", AlbumsToArray());
                     if (force || _dirtyStories) WriteTable("stories.json", StoriesToArray());
+                    if (force || _dirtyChannels) WriteTable("channels.json", ChannelsToArray());
 
                     _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = _dirtyStories = false;
+                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = _dirtyStories = _dirtyChannels = false;
                     _lastSave = DateTime.UtcNow;
                     _saveError = "";
                     if (_readOnly)
@@ -423,6 +431,7 @@ namespace Social.Core
         private void MarkGifts() { _dirtyGifts = true; }
         private void MarkAlbums() { _dirtyAlbums = true; }
         private void MarkStories() { _dirtyStories = true; }
+        private void MarkChannels() { _dirtyChannels = true; _dirtyMeta = true; }
 
         // ============================================================== users
 
@@ -2631,6 +2640,143 @@ namespace Social.Core
             a.Updated = Json.GetDate(d, "updated", a.Created);
             if (a.Id <= 0 || a.Owner <= 0) return null;
             return a;
+        }
+
+        // ============================================================ channels
+
+        /// <summary>
+        /// The three rooms a fresh install starts with, so the call page is not an
+        /// empty box on day one. They are ordinary rows: rename, reorder or delete
+        /// them like any other.
+        /// </summary>
+        private void SeedChannels()
+        {
+            string[] names = new string[] { "general", "games", "afk" };
+            string[] topics = new string[] { "Everyone hangs out here", "For a round or two", "Quiet company" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                Channel c = new Channel();
+                c.Id = _meta.NextChannelId++;
+                c.Name = names[i];
+                c.Topic = topics[i];
+                c.CreatedBy = 0;
+                c.Created = DateTime.UtcNow;
+                c.Position = i;
+                _channels.Add(c);
+            }
+            MarkChannels();
+        }
+
+        /// <summary>Every channel, in display order.</summary>
+        public List<Channel> Channels()
+        {
+            lock (_sync)
+            {
+                List<Channel> list = new List<Channel>(_channels);
+                list.Sort(delegate(Channel a, Channel b)
+                {
+                    int byPos = a.Position.CompareTo(b.Position);
+                    return byPos != 0 ? byPos : a.Id.CompareTo(b.Id);
+                });
+                return list;
+            }
+        }
+
+        public Channel FindChannel(long id)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _channels.Count; i++) if (_channels[i].Id == id) return _channels[i];
+                return null;
+            }
+        }
+
+        /// <summary>Channel by name, case-insensitively: the name doubles as the room.</summary>
+        public Channel FindChannel(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            lock (_sync)
+            {
+                for (int i = 0; i < _channels.Count; i++)
+                    if (string.Equals(_channels[i].Name, name, StringComparison.OrdinalIgnoreCase))
+                        return _channels[i];
+                return null;
+            }
+        }
+
+        public Channel CreateChannel(long by, string name, string topic)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Channel c = new Channel();
+                c.Id = _meta.NextChannelId++;
+                c.Name = name;
+                c.Topic = topic ?? "";
+                c.CreatedBy = by;
+                c.Created = DateTime.UtcNow;
+                c.Position = _channels.Count;
+                _channels.Add(c);
+                MarkChannels();
+                return c;
+            }
+        }
+
+        public bool UpdateChannel(long id, string name, string topic, int position)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Channel c = FindChannel(id);
+                if (c == null) return false;
+                if (!string.IsNullOrEmpty(name)) c.Name = name;
+                c.Topic = topic ?? "";
+                if (position >= 0) c.Position = position;
+                MarkChannels();
+                return true;
+            }
+        }
+
+        public bool DeleteChannel(long id)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _channels.Count; i++)
+                {
+                    if (_channels[i].Id != id) continue;
+                    _channels.RemoveAt(i);
+                    MarkChannels();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        private List<object> ChannelsToArray()
+        {
+            List<object> list = new List<object>(_channels.Count);
+            for (int i = 0; i < _channels.Count; i++)
+            {
+                Channel c = _channels[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = c.Id; d["name"] = c.Name; d["topic"] = c.Topic;
+                d["createdBy"] = c.CreatedBy; d["created"] = c.Created; d["position"] = c.Position;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static Channel ChannelFromDict(Dictionary<string, object> d)
+        {
+            Channel c = new Channel();
+            c.Id = Json.GetLong(d, "id", 0);
+            c.Name = Json.GetString(d, "name", "");
+            c.Topic = Json.GetString(d, "topic", "");
+            c.CreatedBy = Json.GetLong(d, "createdBy", 0);
+            c.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            c.Position = Json.GetInt(d, "position", 0);
+            return c;
         }
 
         // ============================================================== games
