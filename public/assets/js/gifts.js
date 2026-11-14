@@ -229,6 +229,8 @@ var GiftUI = (function () {
       if (tab === 'received' && isSelf && (data.unseen || 0) > 0) {
         Api.request('POST', '/api/gifts/seen', { id: 0 }, function () {
           if (App.state.me) App.state.me.unreadGifts = 0;
+          var badge = main.querySelector('.tab2 .count');
+          if (badge && badge.parentNode) badge.parentNode.removeChild(badge);
         });
       }
     });
