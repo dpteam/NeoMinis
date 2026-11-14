@@ -87,8 +87,7 @@ namespace Social.Web
                 b.EndObject();
             }
             b.EndArray();
-            b.Prop("canPost", _cfg.StoryPerDay == 0 || _store.CountStoriesToday(ctx.User.Id) < _cfg.StoryPerDay);
-            b.Prop("leftToday", _cfg.StoryPerDay <= 0 ? -1 :
+            b.Prop("canPost", _cfg.StoryPerDay == 0 || _store.CountStoriesToday(ctx.User.Id) < _cfg.StoryPerDay);            b.Prop("leftToday", _cfg.StoryPerDay <= 0 ? -1 :
                 Math.Max(0, _cfg.StoryPerDay - _store.CountStoriesToday(ctx.User.Id)));
             SendOk(ctx, b);
         }

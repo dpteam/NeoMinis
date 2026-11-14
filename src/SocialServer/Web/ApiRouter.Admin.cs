@@ -148,6 +148,7 @@ namespace Social.Web
             b.Prop("posts", _store.CountPosts(u.Id));
             b.Prop("friends", _store.CountFriends(u.Id));
             b.Prop("isSelf", viewer != null && viewer.Id == u.Id);
+            b.Prop("canGames", u.CanGames || u.IsAdmin);
             b.EndObject();
             return b.ToString();
         }
@@ -331,6 +332,18 @@ namespace Social.Web
                     Log.Info("ADMIN", "@" + ctx.User.Username + (on ? " granted " : " revoked ") +
                              "badge " + badge + " for @" + target.Username);
                 }
+            }
+            else if (action == "allow-games")
+            {
+                // SWF uploads are a privilege: an admin hands it out per account.
+                bool on = BodyBool(ctx, "on", true);
+                target.CanGames = on;
+                _store.MarkUserDirty(target);
+                _store.Notify(target.Id, ctx.User.Id, "admin",
+                    on ? "allowed you to upload Flash games" : "took away your Flash game uploads",
+                    "#/games");
+                Log.Info("ADMIN", "@" + ctx.User.Username + (on ? " allowed" : " forbade") +
+                         " game uploads for @" + target.Username);
             }
             else if (action == "delete")
             {

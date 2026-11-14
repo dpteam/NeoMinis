@@ -306,6 +306,8 @@ var Api = (function () {
     if (code === 'locked') return I18N.t('auth.locked');
     if (code === 'banned') return err.message || I18N.t('auth.banned');
     if (code === 'private') return I18N.t('profile.private');
+    if (code === 'unsupported-file') return I18N.t('messages.fileUnsupported');
+    if (code === 'file-too-large' || code === 'too-large') return I18N.t('errors.tooLarge');
     if (err.message) return err.message;
     return I18N.t('errors.generic');
   }

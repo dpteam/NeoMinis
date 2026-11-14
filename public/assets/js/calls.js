@@ -1,4 +1,4 @@
-/* =========================================================================
+﻿/* =========================================================================
    CallUI - voice and video calls over WebRTC. The server only relays the
    signalling (SDP + ICE) through the existing long-poll channel; audio and
    video flow directly between the browsers.
@@ -35,7 +35,25 @@ var CallUI = (function () {
   }
 
   function supported() {
-    return !!(window.RTCPeerConnection && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    if (!window.RTCPeerConnection) return false;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
+    return true;
+  }
+
+  /// <summary>Explains why calls cannot work here instead of failing silently.</summary>
+  function explainUnsupported() {
+    var why = window.UI && UI.mediaBlockedText ? UI.mediaBlockedText() : '';
+    UI.toast(why || T('calls.unsupported'), 'err');
+  }
+
+  /// <summary>Turns a getUserMedia rejection into something a human can act on.</summary>
+  function mediaErrorText(e) {
+    var name = (e && e.name) || '';
+    if (name === 'NotAllowedError' || name === 'SecurityError') return T('calls.micDenied');
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') return T('calls.noDevices');
+    if (name === 'NotReadableError') return T('calls.deviceBusy');
+    if (name === 'OverconstrainedError') return T('calls.noDevices');
+    return T('calls.micDenied');
   }
 
   // ------------------------------------------------------------- overlay
@@ -101,14 +119,14 @@ var CallUI = (function () {
     if (s) s.textContent = text || '';
   }
 
-  /// <summary>Renders "connected · muted" style labels from the two halves.</summary>
+  /// <summary>Renders "connected В· muted" style labels from the two halves.</summary>
   function paintState(userId) {
     var p = peers[userId];
     if (!p) return;
     var parts = [];
     if (p.conn) parts.push(p.conn);
     if (p.med) parts.push(p.med);
-    setTileState(userId, parts.join(' · '));
+    setTileState(userId, parts.join(' В· '));
   }
 
   // --------------------------------------------------------------- media
@@ -456,7 +474,7 @@ var CallUI = (function () {
   }
 
   function startCall(withId, video) {
-    if (!supported()) { UI.toast(T('calls.unsupported'), 'err'); return; }
+    if (!supported()) { explainUnsupported(); return; }
     if (call) { UI.toast(T('calls.already'), 'err'); return; }
     getMedia(video).then(function () {
       Api.request('POST', '/api/call/start', { with: withId, video: !!video }, function (err, data) {
@@ -469,13 +487,13 @@ var CallUI = (function () {
         updateMembers(call);
         startPolling();
       });
-    }).catch(function () {
-      UI.toast(T('calls.micDenied'), 'err');
+    }).catch(function (e) {
+      UI.toast(mediaErrorText(e), 'err');
     });
   }
 
   function joinRoom(room, video) {
-    if (!supported()) { UI.toast(T('calls.unsupported'), 'err'); return; }
+    if (!supported()) { explainUnsupported(); return; }
     if (call) { UI.toast(T('calls.already'), 'err'); return; }
     getMedia(video).then(function () {
       Api.request('POST', '/api/call/start', { room: room, video: !!video }, function (err, data) {
@@ -488,8 +506,8 @@ var CallUI = (function () {
         updateMembers(call);
         startPolling();
       });
-    }).catch(function () {
-      UI.toast(T('calls.micDenied'), 'err');
+    }).catch(function (e) {
+      UI.toast(mediaErrorText(e), 'err');
     });
   }
 
@@ -615,7 +633,7 @@ var CallUI = (function () {
         }
         html += '<div class="call-row">' + UI.icon(c.kind === 'video' ? 'video' : 'phone') +
           '<div class="call-row-main"><div><b>' + UI.esc(c.room || names.join(', ')) + '</b></div>' +
-          '<div class="tiny muted">' + UI.formatDate(c.started, true) + ' · ' + fmtDur(c.duration) + '</div></div></div>';
+          '<div class="tiny muted">' + UI.formatDate(c.started, true) + ' В· ' + fmtDur(c.duration) + '</div></div></div>';
       }
       box.innerHTML = html;
     });

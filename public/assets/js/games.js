@@ -46,7 +46,7 @@ var GamesUI = (function () {
 
     var query = App.qs('q') || '';
     main.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('gamepad') + ' ' + T('games.title') +
-      '<span class="right"><button type="button" class="btn btn-xs btn-primary" id="game-upload">' +
+      '<span class="right"><button type="button" class="btn btn-xs btn-primary hidden" id="game-upload">' +
       UI.icon('upload') + ' ' + T('games.upload') + '</button></span></div>' +
       '<div class="card-b"><div class="inline-fields">' +
       '<div class="field" style="flex:1"><input class="input" id="game-search" placeholder="' +
@@ -64,6 +64,8 @@ var GamesUI = (function () {
         if (!box) return;
         if (err) { box.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
         var list = (data && data.games) || [];
+        var uploadBtn = byId('game-upload');
+        if (uploadBtn && data && data.canUpload) uploadBtn.className = 'btn btn-xs btn-primary';
         if (!before) {
           if (!list.length) {
             box.innerHTML = UI.empty('gamepad', T('games.empty'), T('games.emptyHint'));

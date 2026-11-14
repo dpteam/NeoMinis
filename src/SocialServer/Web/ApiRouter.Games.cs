@@ -77,6 +77,7 @@ namespace Social.Web
             b.EndArray();
             b.Prop("total", _store.CountGames());
             b.Prop("hasMore", hasMore);
+            b.Prop("canUpload", ctx.User.IsAdmin || ctx.User.CanGames);
             b.Prop("next", games.Count > 0 ? games[games.Count - 1].Id : 0);
             SendOk(ctx, b);
         }
@@ -95,6 +96,10 @@ namespace Social.Web
         private void HandleGameUpload(ApiCtx ctx)
         {
             if (!GamesAvailable()) throw new ApiException(403, "games-off", "Games are switched off here");
+            // uploading a .swf is a privilege granted in the admin board
+            if (!ctx.User.IsAdmin && !ctx.User.CanGames)
+                throw new ApiException(403, "no-permission",
+                    "Only approved authors may upload games. Ask an administrator for permission.");
 
             int limit = _cfg.MaxGameFiles;
             if (limit > 0 && _store.CountMedia(ctx.User.Id, "game") >= limit)

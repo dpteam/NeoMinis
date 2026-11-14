@@ -243,6 +243,29 @@ var UI = (function () {
     });
   }
 
+  // ------------------------------------------------------------------ media
+
+  /// <summary>
+  /// Why the browser will not hand over the microphone, or "" when it can.
+  /// getUserMedia only exists in a secure context, so a site opened as
+  /// http://192.168.1.5:8080 silently has no API at all - which looks exactly
+  /// like "the browser refused" and is the usual reason calls do nothing.
+  /// </summary>
+  function mediaBlocked() {
+    if (!window.isSecureContext) return 'insecure';
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return 'no-api';
+    return '';
+  }
+
+  function mediaBlockedText() {
+    var why = mediaBlocked();
+    if (why === 'insecure') return I18N.t('media.needHttps');
+    if (why === 'no-api') return I18N.t('media.noApi');
+    return '';
+  }
+
+  function mediaReady() { return mediaBlocked() === ''; }
+
   // ------------------------------------------------------------------ theme
 
   var THEMES = ['light', 'dark', 'oled'];
@@ -354,6 +377,7 @@ var UI = (function () {
     avatar: avatar, icon: icon, userLink: userLink, roleBadge: roleBadge, presence: presence,
     spinner: spinner, empty: empty, toast: toast, modal: modal, confirm: confirmBox,
     imageModal: imageModal, getTheme: getTheme, applyTheme: applyTheme, cycleTheme: cycleTheme,
+    mediaBlocked: mediaBlocked, mediaBlockedText: mediaBlockedText, mediaReady: mediaReady,
     themes: THEMES, copy: copy, fileToDataUrl: fileToDataUrl, debounce: debounce,
     throttle: throttle, scrollTop: scrollTop, bytes: bytes, query: query, on: on, pad: pad
   };

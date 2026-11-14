@@ -130,11 +130,15 @@ var App = (function () {
     setBadge('badge-friends', me.friendRequests);
   }
 
+  /// Updates every badge with this key: the shell shows the same counter in the top
+  /// tabs and in the side nav, and both must move together.
   function setBadge(id, n) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    if (n > 0) { el.textContent = n > 99 ? '99+' : String(n); el.className = 'count'; }
-    else { el.textContent = ''; el.className = 'hidden'; }
+    var nodes = document.querySelectorAll('[data-badge="' + id + '"], #' + id);
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (n > 0) { el.textContent = n > 99 ? '99+' : String(n); el.className = 'count'; }
+      else { el.textContent = ''; el.className = 'count hidden'; }
+    }
   }
 
   function updateTitle(n) {
@@ -206,6 +210,8 @@ var App = (function () {
         if (data && data.busy) { setTimeout(pump, 3000); return; }
         var fresh = (data && data.notifications) || [];
         if (data && data.latest && data.latest > n.last) n.last = data.latest;
+        if (data && typeof data.unreadMessages === 'number') setBadge('badge-msg', data.unreadMessages);
+        if (data && typeof data.friendRequests === 'number') setBadge('badge-friends', data.friendRequests);
         if (fresh.length) {
           // oldest first so the toasts stack in the right order
           for (var i = fresh.length - 1; i >= 0; i--) announce(fresh[i]);
@@ -330,11 +336,11 @@ var App = (function () {
       '</div></div>';
     html += '<div class="card side-nav">';
     html += side('#/feed', 'house', T('nav.feed'), 'feed');
-    html += side('#/friends', 'user-group', T('nav.friends'), 'friends', friendReq);
-    html += side('#/im', 'envelope', T('nav.messages'), 'im', unreadM);
+    html += side('#/friends', 'user-group', T('nav.friends'), 'friends', friendReq, 'badge-friends');
+    html += side('#/im', 'envelope', T('nav.messages'), 'im', unreadM, 'badge-msg');
     html += side('#/people', 'users', T('nav.people'), 'people');
     html += side('#/groups', 'people-group', T('nav.groups'), 'groups');
-    html += side('#/notifications', 'bell', T('nav.notifications'), 'notifications', unreadN);
+    html += side('#/notifications', 'bell', T('nav.notifications'), 'notifications', unreadN, 'badge-notif');
     html += side('#/bookmarks', 'bookmark', T('nav.bookmarks'), 'bookmarks');
     html += side('#/drafts', 'file-pen', T('nav.drafts'), 'drafts');
     html += side('#/music', 'music', T('nav.music'), 'music');
@@ -405,15 +411,21 @@ var App = (function () {
     var active = state.route === key || (key === 'profile' && state.route === 'profile');
     return '<a class="tab' + (active ? ' active' : '') + '" href="' + href + '">' + UI.icon(iconName) +
       '<span class="lbl">' + UI.esc(label) + '</span>' +
-      (count ? '<span class="count" id="' + badgeId + '">' + (count > 99 ? '99+' : count) + '</span>' : (badgeId ? '<span class="hidden" id="' + badgeId + '"></span>' : '')) +
+      (badgeId
+        ? '<span class="count' + (count ? '' : ' hidden') + '" id="' + badgeId + '" data-badge="' + badgeId + '">' +
+          (count ? (count > 99 ? '99+' : count) : '') + '</span>'
+        : (count ? '<span class="count">' + (count > 99 ? '99+' : count) + '</span>' : '')) +
       '</a>';
   }
 
-  function side(href, iconName, label, key, count) {
+  function side(href, iconName, label, key, count, badgeKey) {
     var active = state.route === key;
+    var badge = badgeKey
+      ? '<span class="count' + (count ? '' : ' hidden') + '" data-badge="' + badgeKey + '">' +
+        (count ? (count > 99 ? '99+' : count) : '') + '</span>'
+      : (count ? '<span class="count">' + (count > 99 ? '99+' : count) + '</span>' : '');
     return '<a class="side-link' + (active ? ' active' : '') + '" href="' + href + '">' + UI.icon(iconName) +
-      '<span>' + UI.esc(label) + '</span>' +
-      (count ? '<span class="count">' + (count > 99 ? '99+' : count) + '</span>' : '') + '</a>';
+      '<span>' + UI.esc(label) + '</span>' + badge + '</a>';
   }
 
   function bindShell() {
@@ -2027,10 +2039,12 @@ var App = (function () {
       }
       var isSelf = u.isSelf;
       var actions = '';
+      var messageShown = false;
       if (isSelf) actions += '<a class="btn btn-primary" href="#/settings">' + UI.icon('pen') + ' ' + T('profile.edit') + '</a>';
       else {
         if (u.isFriend) {
           actions += '<a class="btn btn-primary" href="#/im/' + u.id + '">' + UI.icon('envelope') + ' ' + T('profile.message') + '</a>';
+          messageShown = true;
           actions += '<button type="button" class="btn friend-action" data-user="' + u.id + '" data-action="remove">' + UI.icon('user-minus') + ' ' + T('profile.removeFriend') + '</button>';
         } else if (u.requestPending) {
           actions += '<button type="button" class="btn friend-action" data-user="' + u.id + '" data-action="remove">' + UI.icon('clock') + ' ' + T('profile.cancelRequest') + '</button>';
@@ -2040,7 +2054,7 @@ var App = (function () {
         } else if (!u.blocked) {
           actions += '<button type="button" class="btn btn-primary friend-action" data-user="' + u.id + '" data-action="request">' + UI.icon('user-plus') + ' ' + T('profile.addFriend') + '</button>';
         }
-        if (u.canMessage) actions += '<a class="btn" href="#/im/' + u.id + '">' + UI.icon('envelope') + ' ' + T('profile.message') + '</a>';
+        if (u.canMessage && !messageShown) actions += '<a class="btn" href="#/im/' + u.id + '">' + UI.icon('envelope') + ' ' + T('profile.message') + '</a>';
       }
 
       var info = '';

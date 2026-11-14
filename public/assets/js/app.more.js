@@ -228,8 +228,11 @@
         if (one) album.push(one);
       }
     }
+    var clip = UI.safeUrl(m.video);
     var media = '';
-    if (album.length === 1) {
+    if (clip) {
+      media = '<video class="msg-video" controls preload="metadata" playsinline src="' + UI.attr(clip) + '"></video>';
+    } else if (album.length === 1) {
       media = '<img class="msg-img" src="' + UI.attr(album[0]) + '" alt="" loading="lazy" data-zoom="1">';
     } else if (album.length > 1) {
       media = '<div class="msg-album n' + Math.min(album.length, 4) + '">';
@@ -418,7 +421,7 @@
       '<div class="chat-row">' +
       '<button type="button" class="chat-btn" id="chat-mic-btn" title="' + UI.attr(T('messages.record')) + '">' + UI.icon('microphone') + '</button>' +
       '<button type="button" class="chat-btn" id="chat-file-btn" title="' + UI.attr(T('messages.attach')) + '">' + UI.icon('image') + '</button>' +
-      '<input type="file" id="chat-file" class="hidden" accept="image/png,image/jpeg,image/gif,image/webp" multiple>' +
+      '<input type="file" id="chat-file" class="hidden" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime" multiple>' +
       '<button type="button" class="chat-btn" id="chat-doc-btn" title="' + UI.attr(T('messages.attachFile')) + '">' + UI.icon('paperclip') + '</button>' +
       '<input type="file" id="chat-doc" class="hidden">' +
       '<button type="button" class="chat-btn" id="chat-emoji-btn" title="' + UI.attr(T('messages.emoji')) + '">' + UI.icon('face-smile') + '</button>' +
@@ -432,6 +435,7 @@
   function loadConversation(withId, silent) {
     Api.request('GET', '/api/messages?with=' + withId + '&limit=60', null, function (err, data) {
       if (err) { if (!silent) UI.toast(Api.errorText(err), 'err'); return; }
+      if (data && typeof data.unreadMessages === 'number') App.setBadge('badge-msg', data.unreadMessages);
       var chat = document.getElementById('chat');
       if (!chat) return;
       var other = data.other || {};
@@ -565,11 +569,34 @@
       });
     }
 
-    // attachments (single picture or an album of up to 6)
+    // attachments: pictures (one or an album of up to 6) or a single short clip
     document.getElementById('chat-file-btn').addEventListener('click', function () { file.click(); });
     file.addEventListener('change', function () {
       var files = file.files ? Array.prototype.slice.call(file.files) : [];
       if (!files.length) return;
+
+      // a clip is its own kind of message, so it travels alone
+      if (/^video\//.test(files[0].type)) {
+        var clipLimit = (state.site.maxMessageVideoKB || 8192) * 1024;
+        if (files[0].size > clipLimit) {
+          UI.toast(T('messages.videoTooBig', state.site.maxMessageVideoKB || 8192), 'err');
+          file.value = '';
+          return;
+        }
+        UI.fileToDataUrl(files[0], clipLimit, function (err, dataUrl) {
+          if (err) { UI.toast(T('messages.videoTooBig', state.site.maxMessageVideoKB || 8192), 'err'); file.value = ''; return; }
+          state.im.clip = dataUrl;
+          state.im.album = [];
+          attach.innerHTML = '<video src="' + UI.attr(dataUrl) + '" muted playsinline></video>' +
+            '<button type="button" class="icon-btn" id="chat-attach-x">' + UI.icon('xmark') + '</button>';
+          attach.className = 'chat-attach';
+          var x = document.getElementById('chat-attach-x');
+          if (x) x.addEventListener('click', clearAttachment);
+          ta.focus();
+        });
+        return;
+      }
+
       if (files.length > 6) files = files.slice(0, 6);
       var limit = (state.site.maxMessageImageKB || 2048) * 1024;
       var results = [];
@@ -581,14 +608,15 @@
             UI.toast(failed === 'too-large' ? T('messages.imageTooBig', state.site.maxMessageImageKB || 2048) : T('errors.generic'), 'err');
           }
           if (!results.length) { file.value = ''; return; }
+          state.im.clip = '';
           state.im.album = results;
-          if (results.length === 1) {
-            attachImg.src = results[0];
-            attach.className = 'chat-attach';
-          } else {
-            attachImg.src = results[0];
-            attach.className = 'chat-attach';
-          }
+          attach.innerHTML = '<img id="chat-attach-img" alt="">' +
+            '<button type="button" class="icon-btn" id="chat-attach-x">' + UI.icon('xmark') + '</button>';
+          var img = document.getElementById('chat-attach-img');
+          if (img) img.src = results[0];
+          attach.className = 'chat-attach';
+          var xx = document.getElementById('chat-attach-x');
+          if (xx) xx.addEventListener('click', clearAttachment);
           ta.focus();
           return;
         }
@@ -602,13 +630,19 @@
       }
       next(0);
     });
-    document.getElementById('chat-attach-x').addEventListener('click', function () {
+
+    function clearAttachment() {
       state.im.image = '';
       state.im.album = [];
-      file.value = '';
+      state.im.clip = '';
+      if (file) file.value = '';
       attach.className = 'chat-attach hidden';
-      attachImg.removeAttribute('src');
-    });
+      attach.innerHTML = '<img id="chat-attach-img" alt="">' +
+        '<button type="button" class="icon-btn" id="chat-attach-x">' + UI.icon('xmark') + '</button>';
+      var xx = document.getElementById('chat-attach-x');
+      if (xx) xx.addEventListener('click', clearAttachment);
+    }
+    document.getElementById('chat-attach-x').addEventListener('click', clearAttachment);
 
     // generic files (documents, archives, audio and video that are not images)
     state.im.file = null;
@@ -622,6 +656,13 @@
     if (doc) doc.addEventListener('change', function () {
       var f = doc.files && doc.files[0];
       if (!f) return;
+      // executables are refused before the upload, with a clear reason
+      var blocked = /\.(exe|msi|bat|cmd|com|scr|pif|cpl|apk|appx|msix|jar|vbs|vbe|js|jse|ps1|sh|dll|sys|lnk|reg|hta|iso|img|dmg|pkg|deb|rpm)$/i;
+      if (blocked.test(f.name)) {
+        UI.toast(T('messages.fileBlocked', f.name), 'err');
+        doc.value = '';
+        return;
+      }
       var limit = (state.site.maxFileKB || 4096) * 1024;
       if (f.size > limit) {
         UI.toast(T('messages.fileTooBig', state.site.maxFileKB || 4096), 'err');
@@ -676,9 +717,18 @@
     var voiceSecEl = document.getElementById('chat-voice-sec');
     var rec = null;          // { recorder, stream, chunks, startedAt, timer, cancelled }
     state.im.voice = null;
+    state.im.clip = '';
 
     function recSupported() {
       return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+    }
+
+    /// <summary>Tells the user why the mic is unavailable instead of "not supported".</summary>
+    function recExplain() {
+      var why = UI.mediaBlockedText ? UI.mediaBlockedText() : '';
+      if (why) { UI.toast(why, 'err'); return; }
+      if (!window.MediaRecorder) { UI.toast(T('messages.micNoRecorder'), 'err'); return; }
+      UI.toast(T('messages.micUnsupported'), 'err');
     }
 
     function recStopTracks() {
@@ -721,7 +771,7 @@
 
     if (micBtn) micBtn.addEventListener('click', function () {
       if (rec) return;
-      if (!recSupported()) { UI.toast(T('messages.micUnsupported'), 'err'); return; }
+      if (!recSupported()) { recExplain(); return; }
       if (state.im.voice) clearVoice();
       navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
         var mime = pickMime();
@@ -767,8 +817,12 @@
           if (recTime) recTime.textContent = fmtSec(s);
           if (s >= limit) { try { rec.recorder.stop(); } catch (e) { } }
         }, 500);
-      }).catch(function () {
-        UI.toast(T('messages.micDenied'), 'err');
+      }).catch(function (e) {
+        var name = (e && e.name) || '';
+        if (name === 'NotAllowedError' || name === 'SecurityError') UI.toast(T('messages.micDenied'), 'err');
+        else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') UI.toast(T('messages.micMissing'), 'err');
+        else if (name === 'NotReadableError') UI.toast(T('messages.micBusy'), 'err');
+        else UI.toast(T('messages.micFailed'), 'err');
       });
     });
 
@@ -789,7 +843,8 @@
       var voice = state.im.voice;
       var doc = state.im.file;
       var album = state.im.album || [];
-      if (!text && !album.length && !voice && !doc) { ta.focus(); return; }
+      var clip = state.im.clip || '';
+      if (!text && !album.length && !voice && !doc && !clip) { ta.focus(); return; }
       sendBtn.disabled = true;
       var payload = {
         to: withId,
@@ -797,6 +852,7 @@
         image: '',
         audio: voice ? voice.data : '',
         audioSec: voice ? voice.sec : 0,
+        video: state.im.clip || '',
         file: doc ? doc.data : '',
         fileName: doc ? doc.name : '',
         replyTo: state.im.replyTo || 0
@@ -810,8 +866,9 @@
         autoGrow(ta);
         state.im.image = '';
         state.im.album = [];
+        state.im.clip = '';
         file.value = '';
-        attach.className = 'chat-attach hidden';
+        clearAttachment();
         clearVoice();
         clearDoc();
         clearReply();
@@ -2368,6 +2425,7 @@
             (m.artist ? ' <span class="media-artist">— ' + UI.esc(m.artist) + '</span>' : '') + '</div>' +
             '<div class="tiny muted">' + UI.bytes(m.size || 0) +
             (m.duration ? ' · ' + fmtSec(m.duration) : '') + ' · ' + UI.timeAgo(m.created) + '</div>' +
+            (m.description ? '<div class="media-desc tiny">' + UI.nl2br(UI.esc(m.description)) + '</div>' : '') +
             '<div class="media-player">' +
             (m.kind === 'video'
               ? '<video controls preload="metadata" src="' + UI.attr(UI.safeUrl(m.url)) + '"></video>'
@@ -2377,13 +2435,26 @@
             '<button type="button" class="btn btn-xs media-pl" data-id="' + m.id + '" title="' +
               UI.attr(T('playlists.addTo')) + '">' + UI.icon('plus') + '</button>' +
             (m.mine
-              ? '<button type="button" class="btn btn-xs btn-danger media-del" data-id="' + m.id + '">' +
+              ? '<button type="button" class="btn btn-xs media-edit" data-id="' + m.id + '" title="' +
+                UI.attr(T('common.edit')) + '">' + UI.icon('pen') + '</button>' +
+                '<button type="button" class="btn btn-xs btn-danger media-del" data-id="' + m.id + '">' +
                 T('common.delete') + '</button>'
               : '<button type="button" class="btn btn-xs media-save" data-id="' + m.id + '">' +
                 UI.icon('download') + ' ' + T('media.saveMine') + '</button>') +
             '</div></div>';
         }
         list.innerHTML = html + '</div>';
+
+        var edits = list.querySelectorAll('.media-edit');
+        for (var ed = 0; ed < edits.length; ed++) {
+          edits[ed].addEventListener('click', function () {
+            var id = Number(this.getAttribute('data-id'));
+            var item = null;
+            for (var q = 0; q < items.length; q++) if (Number(items[q].id) === id) item = items[q];
+            if (!item) return;
+            mediaEditModal(item, load);
+          });
+        }
 
         var dels = list.querySelectorAll('.media-del');
         for (var d = 0; d < dels.length; d++) {
@@ -2495,6 +2566,49 @@
       load();
       loadPlaylists();
     };
+  }
+
+  /// <summary>
+  /// Renames a track or a clip. Audio keeps a title and an artist; a clip also has
+  /// a description, which is what the video shelf shows under the player.
+  /// </summary>
+  function mediaEditModal(item, done) {
+    var isVideo = item.kind === 'video';
+    var body = '<div class="field"><label>' + T('media.title') + '</label>' +
+      '<input class="input" id="me-title" maxlength="120" value="' + UI.attr(item.title || '') + '"></div>' +
+      (isVideo ? '' : '<div class="field"><label>' + T('media.artist') + '</label>' +
+        '<input class="input" id="me-artist" maxlength="120" value="' + UI.attr(item.artist || '') + '"></div>') +
+      '<div class="field"><label>' + T('media.description') + '</label>' +
+      '<textarea class="textarea" id="me-desc" rows="4" maxlength="2000">' +
+      UI.esc(item.description || '') + '</textarea></div>';
+
+    UI.modal({
+      title: T('media.edit'),
+      icon: 'pen',
+      body: body,
+      actions: [
+        { label: T('common.cancel'), cls: 'btn-ghost' },
+        {
+          label: T('common.save'), cls: 'btn-primary', keepOpen: true,
+          onClick: function (box, close) {
+            var payload = {
+              id: item.id,
+              title: (document.getElementById('me-title') || {}).value || '',
+              description: (document.getElementById('me-desc') || {}).value || ''
+            };
+            if (!isVideo) payload.artist = (document.getElementById('me-artist') || {}).value || '';
+            Api.request('POST', '/api/media/edit', payload, function (err) {
+              if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+              if (close) close();
+              UI.toast(T('common.saved'), 'ok');
+              SoundFX.play('success');
+              if (done) done();
+            });
+            return false;
+          }
+        }
+      ]
+    });
   }
 
   views.music = mediaView('audio');
@@ -3026,6 +3140,8 @@
             (canRevokeAdmin ? '' : ' disabled') + '>' + UI.icon('user-slash') + ' ' + T('admin.revokeAdmin') + '</button>' +
           '<button class="btn btn-sm" id="au-grant-mod"' + (canGrantMod ? '' : ' disabled') + '>' + UI.icon('gavel') + ' ' + T('admin.makeMod') + '</button>' +
           '<button class="btn btn-sm" id="au-revoke-mod"' + (canRevokeMod ? '' : ' disabled') + '>' + UI.icon('gavel') + ' ' + T('admin.revokeMod') + '</button>' +
+          '<button class="btn btn-sm' + (u.canGames ? '' : ' btn-ok') + '" id="au-games">' + UI.icon('gamepad') + ' ' +
+            (u.canGames ? T('admin.forbidGames') : T('admin.allowGames')) + '</button>' +
           '</div>';
         if (roleLocked) body += '<div class="hint">' + T('admin.roleLocked') + '</div>';
         else if (selfBlocked) body += '<div class="hint">' + T('admin.selfDemoteBlocked') + '</div>';
@@ -3123,6 +3239,11 @@
 
       var rm = box.querySelector('#au-revoke-mod');
       if (rm) rm.addEventListener('click', function () { send('role', { role: 'user' }); });
+
+      var gmBtn = box.querySelector('#au-games');
+      if (gmBtn) gmBtn.addEventListener('click', function () {
+        send('allow-games', { on: !u.canGames });
+      });
 
       var warn = box.querySelector('#au-warn');
       if (warn) warn.addEventListener('click', function () {

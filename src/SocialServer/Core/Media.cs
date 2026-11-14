@@ -28,7 +28,7 @@ namespace Social.Core
             if (data.Length > (long)maxKb * 1024L) { error = "image-too-large"; return null; }
 
             bool audio = kind == "voice";
-            bool video = kind == "storyvideo";
+            bool video = kind == "storyvideo" || kind == "messagevideo";
             string ext = audio ? SniffAudio(data) : video ? SniffVideo(data) : Sniff(data);
             if (ext == null)
             {
@@ -39,6 +39,7 @@ namespace Social.Core
             string sub = kind == "avatar" ? "avatars"
                 : kind == "group" ? "groups"
                 : kind == "message" ? "messages"
+                : kind == "messagevideo" ? "messages"
                 : kind == "voice" ? "messages"
                 : kind == "story" || kind == "storyvideo" ? "stories"
                 : "posts";

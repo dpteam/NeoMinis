@@ -1389,6 +1389,14 @@ namespace Social.Core
                                      int audioSec, long replyTo, long forwardedFrom,
                                      string fileUrl, string fileName, long fileSize)
         {
+            return CreateMessage(from, to, body, image, images, audio, audioSec, replyTo, forwardedFrom,
+                fileUrl, fileName, fileSize, "");
+        }
+
+        public Message CreateMessage(long from, long to, string body, string image, string images, string audio,
+                                     int audioSec, long replyTo, long forwardedFrom,
+                                     string fileUrl, string fileName, long fileSize, string video)
+        {
             lock (_sync)
             {
                 EnsureWritable();
@@ -1399,6 +1407,7 @@ namespace Social.Core
                 m.Body = body ?? "";
                 m.Image = image ?? "";
                 m.Images = images ?? "";
+                m.Video = video ?? "";
                 m.Audio = audio ?? "";
                 m.AudioSec = audioSec;
                 m.ReplyTo = replyTo;
@@ -2291,6 +2300,22 @@ namespace Social.Core
             {
                 for (int i = 0; i < _media.Count; i++) if (_media[i].Id == id) return _media[i];
                 return null;
+            }
+        }
+
+        public bool UpdateMedia(long id, long owner, string title, string artist, string description)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                MediaItem m = FindMedia(id);
+                if (m == null || m.Owner != owner) return false;
+                if (m.Kind == "game") return false;   // games have their own endpoint
+                if (title != null) m.Title = Util.SingleLine(title, 120);
+                if (artist != null) m.Artist = Util.SingleLine(artist, 120);
+                if (description != null) m.Description = Util.CleanText(description, 2000);
+                MarkMedia();
+                return true;
             }
         }
 
@@ -3980,6 +4005,7 @@ namespace Social.Core
             d["favGames"] = u.FavGames; d["favMovies"] = u.FavMovies; d["favMusic"] = u.FavMusic;
             d["favBooks"] = u.FavBooks; d["persona"] = u.Persona; d["mood"] = u.Mood;
             d["badges"] = u.Badges; d["notifyMute"] = u.NotifyMute; d["legacySource"] = u.LegacySource; d["legacyId"] = u.LegacyId;
+            if (u.CanGames) d["canGames"] = true;
             return d;
         }
 
@@ -4032,6 +4058,7 @@ namespace Social.Core
             u.NotifyMute = Json.GetString(d, "notifyMute", "");
             u.LegacySource = Json.GetString(d, "legacySource", "");
             u.LegacyId = Json.GetString(d, "legacyId", "");
+            u.CanGames = Json.GetBool(d, "canGames", false);
             return u;
         }
 
@@ -4164,6 +4191,7 @@ namespace Social.Core
                 Dictionary<string, object> d = new Dictionary<string, object>();
                 d["id"] = m.Id; d["from"] = m.From; d["to"] = m.To; d["body"] = m.Body;
                 d["image"] = m.Image; d["images"] = m.Images; d["replyTo"] = m.ReplyTo;
+                if (!string.IsNullOrEmpty(m.Video)) d["video"] = m.Video;
                 d["audio"] = m.Audio; d["audioSec"] = m.AudioSec;
                 d["reactions"] = m.Reactions;
                 d["forwardedFrom"] = m.ForwardedFrom;
@@ -4184,6 +4212,7 @@ namespace Social.Core
             m.Body = Json.GetString(d, "body", "");
             m.Image = Json.GetString(d, "image", "");
             m.Images = Json.GetString(d, "images", "");
+            m.Video = Json.GetString(d, "video", "");
             m.Audio = Json.GetString(d, "audio", "");
             m.AudioSec = Json.GetInt(d, "audioSec", 0);
             m.ReplyTo = Json.GetLong(d, "replyTo", 0);

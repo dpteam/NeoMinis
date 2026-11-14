@@ -214,7 +214,7 @@ earned (useful after an import or a rule change).
 | --- | --- | --- | --- |
 | GET | `/api/messages/threads` | — | `{ threads[], unread }` |
 | GET | `/api/messages` | `with`, `before`, `limit` | `{ other, messages[], hasMore, next }` |
-| POST | `/api/messages/send` | `to`, `body`, `image`, `images[]`, `audio`, `audioSec`, `file`, `fileName`, `replyTo` | `{ message }` |
+| POST | `/api/messages/send` | `to`, `body`, `image`, `images[]`, `video`, `audio`, `audioSec`, `file`, `fileName`, `replyTo` | `{ message }` |
 | GET | `/api/messages/wait` | `with`, `after`, `timeout` | `{ messages[], latest, typing, read, unread, live }` |
 | POST | `/api/messages/typing` | `to` | `{ ok }` |
 | POST | `/api/messages/react` | `id`, `emoji` | `{ message }` |
@@ -239,6 +239,20 @@ sniffs the container, not the codec), at most `limits.maxVoiceKB` and
 `limits.maxVoiceSec` seconds (`audioSec` carries the duration, 0 is tolerated and
 clamped to 1). The file lands in `/media/messages/` and the message comes back with
 `audio` and `audioSec`.
+
+`video` is a short clip picked from the gallery: a data URL of webm/mp4/ogv, up to
+`limits.maxMessageVideoKB`. It is sniffed by its container bytes, stored under
+`/media/messages/` and played inline in the bubble. A message carries one clip at a
+time (a clip and a photo album do not mix).
+
+`file` is a generic attachment. The extension must be on the whitelist in
+`Core/Media.cs` — documents, archives, audio, video and pictures. **Executables are
+refused**: `.exe`, `.msi`, `.bat`, `.cmd`, `.com`, `.scr`, `.pif`, `.cpl`, `.apk`,
+`.appx`, `.jar`, `.vbs`, `.ps1`, `.dll`, `.lnk`, `.hta`, `.iso`, `.dmg`, `.pkg` and
+friends are not on the list, so an upload answers `400 unsupported-file` and the
+client refuses the file before it is even read. Files are always served as
+`application/octet-stream` with `Content-Disposition: attachment`, so a renamed
+document can never execute on our origin.
 
 Reactions: one per account per message from the fixed set ❤️ 👍 👎 😂 😀 😮 😢 🔥.
 `POST /api/messages/react` sets, replaces or (same emoji) removes it; messages come
@@ -348,8 +362,7 @@ Until then `site.gamesEnabled` is `false`, the shelf and every endpoint answer
 | --- | --- | --- | --- |
 | GET | `/api/games` | `user`, `q`, `before`, `limit` | `{ games[], total, hasMore, next }` |
 | GET | `/api/game` | `id` | `{ game }` |
-| POST | `/api/game/upload` | `data`, `title`, `description` | `{ game }` |
-| POST | `/api/game/edit` | `id`, `title`, `description` | `{ game }` |
+| POST | `/api/game/upload` | `data`, `title`, `description` | `{ game }` || POST | `/api/game/edit` | `id`, `title`, `description` | `{ game }` |
 | POST | `/api/game/delete` | `id` | `{ id }` |
 | POST | `/api/game/play` | `id` | `{ plays }` |
 | POST | `/api/game/like` | `id` | `{ likes, liked }` |
@@ -368,6 +381,12 @@ opaque origin with no cookies, no `localStorage` and no handle on the parent
 document, even through `ExternalInterface` (`allowScriptAccess` is off and
 `openUrlMode` is `deny`). Limits: `limits.maxGameKB` (8192) per file and
 `limits.maxGameFiles` (20) per account; `ui.gamesEnabled` hides the shelf.
+
+Uploading is a privilege, not a right: `POST /api/game/upload` answers `403
+no-permission` unless the account is an administrator or has `canGames`, which an
+admin grants in Admin → Users ("Allow game uploads"). `GET /api/games` reports
+`canUpload` so the client can hide the button. HTML apps (as opposed to sandboxed
+`.swf`) will be admin-only once the applications API lands — see the roadmap.
 
 ### Gifts
 
@@ -535,6 +554,7 @@ notification for every mentioned user (at most 10 per post/comment, never yourse
 | GET | `/api/media` | `kind` (`audio|video`), `user` | `{ items[], user? }` |
 | POST | `/api/media/upload` | `kind`, `fileName`, `data`, `title`, `artist`, `duration` | `{ item }` |
 | POST | `/api/media/delete` | `id` | `{ ok }` |
+| POST | `/api/media/edit` | `id`, `title`, `artist`, `description` | `{ item }` |
 | POST | `/api/media/save` | `id` | `{ item }` (copy on your own shelf) |
 | GET | `/api/playlists` | `user` (optional) | `{ playlists[{ id, name, count, mine, created, updated }] }` |
 | GET | `/api/playlist` | `id` | `{ id, name, items[] }` |
@@ -545,6 +565,8 @@ notification for every mentioned user (at most 10 per post/comment, never yourse
 Every account has a music and a video shelf. `GET /api/media` without `user`
 returns the shared shelf (everything, with `mine` telling what is yours); with
 `user` it returns that person's library, and a private profile hides it.
+`/api/media/edit` renames a track (`title`, `artist`) or a clip (`title`,
+`description`) and is owner-only; games are edited through `/api/game/edit`.
 Uploads are data URLs of real audio/video containers — `limits.maxAudioKB` /
 `maxVideoKB` cap the size and `maxAudioFiles` / `maxVideoFiles` the count, all
 editable in Admin → Settings. A file whose extension does not belong to the

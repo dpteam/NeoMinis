@@ -92,8 +92,7 @@ namespace Social.Core
 
         // Admin board: its own listener so /api/admin/ simply does not exist on
         // the public port. Bind it to 127.0.0.1 or keep it on the LAN.
-        public int AdminPort = 8090;
-        public int[] AdminPortFallbacks = new int[] { 8091, 8092, 8093 };
+        public int AdminPort = 8090;        public int[] AdminPortFallbacks = new int[] { 8091, 8092, 8093 };
         public string AdminBind = "0.0.0.0";
         public bool AdminEnabled = true;
         public int Backlog = 128;
@@ -178,6 +177,9 @@ namespace Social.Core
         public int MaxStoryVideoKB = 8192;
         public int StoryPerDay = 20;
         public int MaxStoryCaption = 200;
+
+        // short clips inside private messages
+        public int MaxMessageVideoKB = 8192;
         public int MaxStatusLength = 140;
         public int MaxBioLength = 2000;
         public int MaxNameLength = 40;
@@ -481,6 +483,7 @@ namespace Social.Core
                     else if (key == "maxstoryvideokb") MaxStoryVideoKB = Int(val, MaxStoryVideoKB);
                     else if (key == "storyperday") StoryPerDay = Int(val, StoryPerDay);
                     else if (key == "maxstorycaption") MaxStoryCaption = Int(val, MaxStoryCaption);
+                    else if (key == "maxmessagevideokb") MaxMessageVideoKB = Int(val, MaxMessageVideoKB);
                     else if (key == "maxstatuslength") MaxStatusLength = Int(val, MaxStatusLength);
                     else if (key == "maxbiolength") MaxBioLength = Int(val, MaxBioLength);
                     else if (key == "maxnamelength") MaxNameLength = Int(val, MaxNameLength);
@@ -562,6 +565,7 @@ namespace Social.Core
             if (StoryPerDay < 0) StoryPerDay = 0;
             if (MaxStoryCaption < 0) MaxStoryCaption = 0;
             if (MaxStoryCaption > 500) MaxStoryCaption = 500;
+            if (MaxMessageVideoKB < 64) MaxMessageVideoKB = 64;
             if (BackupKeep < 1) BackupKeep = 1;
             if (SaveDebounceMs < 100) SaveDebounceMs = 100;
             if (string.IsNullOrEmpty(CookieName)) CookieName = "sid";

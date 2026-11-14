@@ -1043,6 +1043,7 @@ namespace Social.Web
                     .Prop("created", Util.Iso(m.Created))
                     .Prop("owner", m.Owner)
                     .Prop("savedFrom", m.SavedFrom)
+                    .Prop("description", m.Description)
                     .Prop("mine", ctx.User != null && m.Owner == ctx.User.Id)
                     .EndObject();
             }
@@ -1091,6 +1092,30 @@ namespace Social.Web
 
             MediaItem item = _store.AddMedia(ctx.User.Id, kind, title, artist, url, size, duration);
             Log.Info("DATA", "@" + ctx.User.Username + " uploaded " + kind + " #" + item.Id + " (" + size + " bytes)");
+
+            JsonBuilder b = new JsonBuilder(512);
+            b.BeginObject();
+            b.Name("item").Raw(MediaJson(item, ctx.User));
+            SendOk(ctx, b);
+        }
+
+        private void HandleMediaEdit(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            MediaItem item = _store.FindMedia(id);
+            if (item == null) throw new ApiException(404, "no-item", "Item not found");
+            if (item.Owner != ctx.User.Id) throw new ApiException(403, "not-mine", "That is not your file");
+            if (item.Kind == "game") throw new ApiException(400, "bad-kind", "Edit games from the games page");
+
+            string title = ctx.Body.ContainsKey("title") ? BodyStr(ctx, "title", item.Title) : null;
+            if (title != null && Util.SingleLine(title, 120).Length == 0)
+                throw new ApiException(400, "bad-title", "A title cannot be empty");
+            string artist = ctx.Body.ContainsKey("artist") ? BodyStr(ctx, "artist", item.Artist) : null;
+            string description = ctx.Body.ContainsKey("description") ?
+                BodyStr(ctx, "description", item.Description) : null;
+
+            if (!_store.UpdateMedia(id, ctx.User.Id, title, artist, description))
+                throw new ApiException(400, "failed", "Nothing was changed");
 
             JsonBuilder b = new JsonBuilder(512);
             b.BeginObject();
@@ -1235,6 +1260,7 @@ namespace Social.Web
                 .Prop("created", Util.Iso(m.Created))
                 .Prop("owner", m.Owner)
                 .Prop("savedFrom", m.SavedFrom)
+                .Prop("description", m.Description)
                 .Prop("mine", viewer != null && m.Owner == viewer.Id)
                 .EndObject();
             return b.ToString();
@@ -1375,6 +1401,8 @@ namespace Social.Web
             b.Prop("hasMore", hasMore);
             b.Prop("next", next);
             b.Prop("unreadFrom", firstUnread);
+            // the thread was just marked read, so hand back the new counter too
+            b.Prop("unreadMessages", _store.UnreadMessages(ctx.User.Id));
             SendOk(ctx, b);
         }
 
@@ -1400,12 +1428,14 @@ namespace Social.Web
             }
             if (albumData.Count > 0) imageData = "";
             string audioData = BodyStr(ctx, "audio", "");
+            string videoData = BodyStr(ctx, "video", "");
             string fileData = BodyStr(ctx, "file", "");
             string fileName = Util.SingleLine(BodyStr(ctx, "fileName", ""), 120);
             int audioSec = (int)BodyLong(ctx, "audioSec", 0);
             long replyTo = BodyLong(ctx, "replyTo", 0);
             if (text.Length == 0 && string.IsNullOrEmpty(imageData) && albumData.Count == 0 &&
-                string.IsNullOrEmpty(audioData) && string.IsNullOrEmpty(fileData))
+                string.IsNullOrEmpty(audioData) && string.IsNullOrEmpty(fileData) &&
+                string.IsNullOrEmpty(videoData))
                 throw new ApiException(400, "empty", "Write something first");
 
             string image = "";
@@ -1450,6 +1480,18 @@ namespace Social.Web
                 if (audio == null) throw new ApiException(400, err, "Voice message could not be saved");
                 if (audioSec == 0) audioSec = 1;
             }
+            string video = "";
+            if (!string.IsNullOrEmpty(videoData))
+            {
+                string err;
+                video = _media.SaveDataUrl(videoData, "messagevideo", _cfg.MaxMessageVideoKB, out err);
+                if (video == null)
+                {
+                    if (err == "image-too-large")
+                        throw new ApiException(400, "too-large", "Clip is larger than " + _cfg.MaxMessageVideoKB + " KB");
+                    throw new ApiException(400, err, "That clip format is not supported");
+                }
+            }
             string fileUrl = "";
             long fileSize = 0;
             if (!string.IsNullOrEmpty(fileData))
@@ -1470,7 +1512,7 @@ namespace Social.Web
             }
 
             Message m = _store.CreateMessage(ctx.User.Id, target.Id, text, image, images, audio, audioSec, replyTo, 0,
-                fileUrl, fileUrl.Length == 0 ? "" : fileName, fileSize);
+                fileUrl, fileUrl.Length == 0 ? "" : fileName, fileSize, video);
             TypingRegistry.Clear(ctx.User.Id, target.Id);
             ctx.User.LastMessageAt = DateTime.UtcNow;
             _store.MarkUserDirty(ctx.User);
@@ -1748,7 +1790,7 @@ namespace Social.Web
             b.Name("notifications").BeginArray();
             for (int i = 0; i < list.Count; i++) b.Raw(NotificationView(list[i], ctx.User));
             b.EndArray();
-            b.Prop("unread", _store.UnreadNotifications(ctx.User.Id));
+            AppendCounters(b, ctx.User);
             b.Prop("hasMore", hasMore);
             b.Prop("next", list.Count == 0 ? 0 : list[list.Count - 1].Id);
             SendOk(ctx, b);
@@ -1791,7 +1833,7 @@ namespace Social.Web
                 JsonBuilder bb = new JsonBuilder(256);
                 bb.BeginObject();
                 bb.Name("notifications").BeginArray().EndArray();
-                bb.Prop("unread", _store.UnreadNotifications(ctx.User.Id));
+                AppendCounters(bb, ctx.User);
                 bb.Prop("latest", _store.LatestNotificationId(ctx.User.Id));
                 bb.Prop("live", _cfg.LiveNotifications);
                 bb.Prop("busy", true);
@@ -1826,10 +1868,22 @@ namespace Social.Web
             b.Name("notifications").BeginArray();
             for (int i = 0; i < fresh.Count; i++) b.Raw(NotificationView(fresh[i], ctx.User));
             b.EndArray();
-            b.Prop("unread", _store.UnreadNotifications(ctx.User.Id));
+            AppendCounters(b, ctx.User);
             b.Prop("latest", _store.LatestNotificationId(ctx.User.Id));
             b.Prop("live", _cfg.LiveNotifications);
             SendOk(ctx, b);
+        }
+
+        /// <summary>
+        /// The three counters the shell shows. They ride along with every long-poll
+        /// reply, so the badges move the moment something arrives instead of waiting
+        /// for the next page load.
+        /// </summary>
+        private void AppendCounters(JsonBuilder b, User user)
+        {
+            b.Prop("unread", _store.UnreadNotifications(user.Id));
+            b.Prop("unreadMessages", _store.UnreadMessages(user.Id));
+            b.Prop("friendRequests", _store.PendingRequests(user.Id).Count);
         }
 
         // ============================================================= online

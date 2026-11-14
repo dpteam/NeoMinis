@@ -789,7 +789,10 @@ namespace Social.Web
             // is framed by us and has an opaque origin)
             if (!resp.Headers.ContainsKey("Cross-Origin-Resource-Policy"))
                 resp.Set("Cross-Origin-Resource-Policy", "same-origin");
-            resp.Set("Permissions-Policy", "camera=(), microphone=(self), geolocation=(), payment=(), usb=()");
+            // Calls need both. `camera=()` (what this used to say) denied the camera
+            // to everybody, so video calls could never work even on HTTPS.
+            resp.Set("Permissions-Policy",
+                "camera=(self), microphone=(self), geolocation=(), payment=(), usb=(), display-capture=(self)");
             // a caller may have set a stricter policy already (downloads, sandboxes)
             if (!resp.Headers.ContainsKey("Content-Security-Policy"))
             {

@@ -447,6 +447,31 @@ async function main() {
   ok('overlong voice rejected', tooLong.status === 400, String(tooLong.status));
   const badAudio = await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: '', audio: PNG });
   ok('non-audio payload rejected', badAudio.status === 400, String(badAudio.status));
+
+  // a clip picked from the gallery
+  const MP4 = 'data:video/mp4;base64,' + Buffer.concat([
+    Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom'), Buffer.from([0, 0, 2, 0]),
+    Buffer.from('isomiso2mp41'), Buffer.from([0, 0, 0, 8]), Buffer.from('mdat')
+  ]).toString('base64');
+  const clipMsg = await bob.call('POST', '/api/messages/send', {
+    to: alice.user.id, body: '', video: MP4
+  });
+  ok('clip message saved', clipMsg.status === 200 && clipMsg.data.message.video &&
+    clipMsg.data.message.video.indexOf('/media/messages/') === 0,
+    String(clipMsg.status) + ' ' + (clipMsg.data && clipMsg.data.message && clipMsg.data.message.video));
+  const fakeClip = await bob.call('POST', '/api/messages/send', {
+    to: alice.user.id, body: '', video: 'data:video/mp4;base64,' + Buffer.from('<html>nope</html>').toString('base64')
+  });
+  ok('a fake clip is refused', fakeClip.status === 400, String(fakeClip.status));
+
+  // executables never travel: the whitelist has no .exe/.apk/.scr
+  for (const bad of ['virus.exe', 'app.apk', 'screen.scr']) {
+    const sent = await bob.call('POST', '/api/messages/send', {
+      to: alice.user.id, body: '', file: 'data:application/octet-stream;base64,' + Buffer.from('MZ').toString('base64'),
+      fileName: bad
+    });
+    ok('executable refused: ' + bad, sent.status === 400, String(sent.status));
+  }
   const voiceList = await alice.call('GET', '/api/messages?with=' + bob.user.id);
   ok('voice message in the thread', voiceList.data && voiceList.data.messages.some(m => m.audio), '');
 
@@ -598,6 +623,11 @@ async function main() {
   const up = await alice.call('POST', '/api/game/upload', {
     data: SWF, title: 'Test game', description: 'uploaded by the suite'
   });
+  // uploading a .swf is a privilege: an ordinary account is refused until an
+  // administrator ticks "allow game uploads"
+  const noPerm = await bob.call('POST', '/api/game/upload', { data: SWF, title: 'Not allowed' });
+  ok('game upload needs permission', noPerm.status === 403 &&
+    noPerm.data.error === 'no-permission', JSON.stringify(noPerm.data));
   ok('game uploaded', up.status === 200 && up.data.game.kind === 'game' &&
     up.data.game.url.startsWith('/media/games/') && up.data.game.url.endsWith('.swf') &&
     up.data.game.size === swf.length,
@@ -1116,6 +1146,21 @@ async function main() {
     kind: 'video', fileName: 'song.wav', data: TRACK
   });
   ok('audio file refused as video', wrongKind.status === 400, String(wrongKind.status));
+
+  // ---- editing the details of a track / clip
+  const retitled = await alice.call('POST', '/api/media/edit', {
+    id: upTrack.data.item.id, title: 'Renamed track', artist: 'Someone else', description: 'a note'
+  });
+  ok('track details can be edited', retitled.status === 200 &&
+    retitled.data.item.title === 'Renamed track' && retitled.data.item.artist === 'Someone else' &&
+    retitled.data.item.description === 'a note',
+    JSON.stringify(retitled.data && retitled.data.item));
+  const foreignEdit = await bob.call('POST', '/api/media/edit', {
+    id: upTrack.data.item.id, title: 'Stolen'
+  });
+  ok("nobody else edits my track", foreignEdit.status === 403, String(foreignEdit.status));
+  const emptyTitle = await alice.call('POST', '/api/media/edit', { id: upTrack.data.item.id, title: '   ' });
+  ok('a track needs a title', emptyTitle.status === 400, String(emptyTitle.status));
   const badKind = await alice.call('POST', '/api/media/upload', {
     kind: 'documents', fileName: 'a.wav', data: TRACK
   });

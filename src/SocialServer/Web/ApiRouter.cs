@@ -219,7 +219,8 @@ namespace Social.Web
                 .Prop("storyHours", _cfg.StoryHours)
                 .Prop("maxStoryKB", _cfg.MaxStoryKB)
                 .Prop("maxStoryVideoKB", _cfg.MaxStoryVideoKB)
-                .Prop("maxStoryCaption", _cfg.MaxStoryCaption);
+                .Prop("maxStoryCaption", _cfg.MaxStoryCaption)
+                .Prop("maxMessageVideoKB", _cfg.MaxMessageVideoKB);
             b.Prop("maxStatusLength", _cfg.MaxStatusLength);
             b.Prop("maxBioLength", _cfg.MaxBioLength);
             b.Prop("maxNameLength", _cfg.MaxNameLength);
@@ -664,6 +665,7 @@ namespace Social.Web
             if (r == "media") { RequireMethod(m, "GET"); HandleMedia(ctx); return; }
             if (r == "media/upload") { RequireMethod(m, "POST"); HandleMediaUpload(ctx); return; }
             if (r == "media/delete") { RequireMethod(m, "POST"); HandleMediaDelete(ctx); return; }
+            if (r == "media/edit") { RequireMethod(m, "POST"); HandleMediaEdit(ctx); return; }
             if (r == "media/save") { RequireMethod(m, "POST"); HandleMediaSave(ctx); return; }
             if (r == "playlists") { RequireMethod(m, "GET"); HandlePlaylists(ctx); return; }
             if (r == "playlist") { RequireMethod(m, "GET"); HandlePlaylist(ctx); return; }

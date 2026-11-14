@@ -54,6 +54,7 @@ namespace Social.Web
             b.Prop("mood", u.Mood);
             b.Prop("legacySource", u.LegacySource);
             if (!string.IsNullOrEmpty(u.Badges)) b.Prop("badges", u.Badges);
+            if (self || staff) b.Prop("canGames", u.CanGames || u.IsAdmin);
             if (self || staff) b.Prop("lastSeen", Util.Iso(u.LastSeen));
             else if (!u.HideOnline) b.Prop("lastSeen", Util.Iso(u.LastSeen));
             else b.Prop("lastSeen", "");
@@ -243,6 +244,7 @@ namespace Social.Web
             b.Prop("to", m.To);
             b.Prop("body", m.Body);
             b.Prop("image", m.Image);
+            b.Prop("video", m.Video);
             if (!string.IsNullOrEmpty(m.Images))
             {
                 b.Name("images").BeginArray();
