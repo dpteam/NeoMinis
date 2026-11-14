@@ -334,6 +334,24 @@ remove a member; the owner can never be removed.
 tag, not a longer word that starts with it. `@username` mentions create a `mention`
 notification for every mentioned user (at most 10 per post/comment, never yourself).
 
+### Media library
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| GET | `/api/media` | `kind` (`audio|video`), `user` | `{ items[], user? }` |
+| POST | `/api/media/upload` | `kind`, `fileName`, `data`, `title`, `artist`, `duration` | `{ item }` |
+| POST | `/api/media/delete` | `id` | `{ ok }` |
+
+Every account has a music and a video shelf. `GET /api/media` without `user`
+returns the shared shelf (everything, with `mine` telling what is yours); with
+`user` it returns that person's library, and a private profile hides it.
+Uploads are data URLs of real audio/video containers — `limits.maxAudioKB` /
+`maxVideoKB` cap the size and `maxAudioFiles` / `maxVideoFiles` the count, all
+editable in Admin → Settings. A file whose extension does not belong to the
+requested kind is refused, so a "video" upload can never smuggle in a document.
+Files live under `/media/library/` and are served inline with the type derived
+from the extension, which is what lets the browser play them.
+
 ### Drafts and scheduling
 
 | Method | Path | Body / query | Result |

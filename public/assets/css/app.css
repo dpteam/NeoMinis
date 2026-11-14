@@ -1584,3 +1584,23 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 }
 .share-item:hover { background: var(--hover); }
 .share-item i { width: 14px; text-align: center; color: var(--accent); }
+
+/* ---------------------------------------------------------- media library */
+
+.media-list { display: flex; flex-direction: column; gap: 10px; }
+.media-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 9px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--panel-2);
+}
+.media-main { flex: 1; min-width: 0; }
+.media-title { font-size: 13px; font-weight: 700; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; }
+.media-artist { font-weight: 400; color: var(--muted); }
+.media-player { margin-top: 7px; }
+.media-player audio { width: 100%; max-width: 420px; height: 34px; }
+.media-player video { width: 100%; max-width: 460px; max-height: 320px; border-radius: 6px; background: #000; }
+.media-row .btn-danger { flex: 0 0 auto; }
+
+@media (max-width: 560px) {
+  .media-row { flex-direction: column; }
+}

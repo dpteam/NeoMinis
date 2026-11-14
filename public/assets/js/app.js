@@ -282,6 +282,8 @@ var App = (function () {
     html += side('#/notifications', 'bell', T('nav.notifications'), 'notifications', unreadN);
     html += side('#/bookmarks', 'bookmark', T('nav.bookmarks'), 'bookmarks');
     html += side('#/drafts', 'file-pen', T('nav.drafts'), 'drafts');
+    html += side('#/music', 'music', T('nav.music'), 'music');
+    html += side('#/video', 'film', T('nav.video'), 'video');
     html += '<div class="side-sep"></div>';
     html += side('#/profile/' + u.id, 'id-card', T('nav.profile'), 'profile');
     html += side('#/settings', 'gear', T('nav.settings'), 'settings');

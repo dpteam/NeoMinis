@@ -488,7 +488,14 @@ namespace Social.Web
             m[".oga"] = "audio/ogg";
             m[".mp3"] = "audio/mpeg";
             m[".m4a"] = "audio/mp4";
+            m[".aac"] = "audio/aac";
+            m[".weba"] = "audio/webm";
             m[".wav"] = "audio/wav";
+            m[".flac"] = "audio/flac";
+            m[".mp4"] = "video/mp4";
+            m[".m4v"] = "video/mp4";
+            m[".ogv"] = "video/ogg";
+            m[".mov"] = "video/quicktime";
             return m;
         }
 
@@ -580,6 +587,23 @@ namespace Social.Web
                 resp.Set("Content-Disposition", "attachment; filename=\"" + name + "\"");
                 resp.Set("Content-Security-Policy", "default-src 'none'; sandbox");
                 resp.Set("Cross-Origin-Resource-Policy", "same-site");
+                SendFile(req, resp, file, MediaStore.MimeForFile(ext), true);
+                return;
+            }
+            // Library files (music, clips) must stream inline so the browser can
+            // play them; the extension decides the type, never the uploader's claim.
+            if (rel.StartsWith("library/", StringComparison.OrdinalIgnoreCase))
+            {
+                string ext = Path.GetExtension(file).ToLowerInvariant();
+                bool audio = MediaStore.IsAudioExtension(ext);
+                bool video = MediaStore.IsVideoExtension(ext);
+                if (!audio && !video)
+                {
+                    SendText(req, resp, 404, "Not found");
+                    return;
+                }
+                resp.Set("Content-Disposition", "inline");
+                resp.Set("Accept-Ranges", "none");
                 SendFile(req, resp, file, MediaStore.MimeForFile(ext), true);
                 return;
             }

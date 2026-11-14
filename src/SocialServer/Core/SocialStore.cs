@@ -31,13 +31,14 @@ namespace Social.Core
         private readonly List<Report> _reports = new List<Report>();
         private readonly List<Bookmark> _bookmarks = new List<Bookmark>();
         private readonly List<Draft> _drafts = new List<Draft>();
+        private readonly List<MediaItem> _media = new List<MediaItem>();
         private Meta _meta = new Meta();
 
         private readonly Dictionary<long, User> _userById = new Dictionary<long, User>();
         private readonly Dictionary<string, User> _userByName = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
 
         private bool _dirtyUsers, _dirtyPosts, _dirtyComments, _dirtyFriends, _dirtyMessages;
-        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts;
+        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia;
         private bool _readOnly;
         private string _saveError = "";
         private DateTime _lastSave = DateTime.MinValue;
@@ -64,7 +65,7 @@ namespace Social.Core
                 {
                     return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
                            _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
-                           _dirtyDrafts;
+                           _dirtyDrafts || _dirtyMedia;
                 }
             }
         }
@@ -111,6 +112,8 @@ namespace Social.Core
                 _bookmarks.AddRange(LoadTable("bookmarks.json", BookmarkFromDict));
                 _drafts.Clear();
                 _drafts.AddRange(LoadTable("drafts.json", DraftFromDict));
+                _media.Clear();
+                _media.AddRange(LoadTable("media.json", MediaFromDict));
 
                 // sort newest first, keeping the hot queries cheap
                 _posts.Sort(delegate(Post a, Post b) { return b.Id.CompareTo(a.Id); });
@@ -121,7 +124,7 @@ namespace Social.Core
                 EnsureCounters();
                 _loaded = true;
                 _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = false;
+                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = false;
 
                 Log.Info("DATA", "loaded users=" + _users.Count + " posts=" + _posts.Count +
                                   " comments=" + _comments.Count + " friends=" + _friends.Count +
@@ -149,6 +152,7 @@ namespace Social.Core
                 m.NextGroupId = Json.GetLong(d, "nextGroupId", 1);
                 m.NextReportId = Json.GetLong(d, "nextReportId", 1);
                 m.NextDraftId = Json.GetLong(d, "nextDraftId", 1);
+                m.NextMediaId = Json.GetLong(d, "nextMediaId", 1);
                 m.TotalRegistrations = Json.GetLong(d, "totalRegistrations", 0);
                 m.LastBackup = Json.GetDate(d, "lastBackup", DateTime.MinValue);
                 m.InstallId = Json.GetString(d, "installId", "");
@@ -164,7 +168,7 @@ namespace Social.Core
 
         private void EnsureCounters()
         {
-            long maxUser = 0, maxPost = 0, maxComment = 0, maxMessage = 0, maxNotif = 0, maxGroup = 0, maxReport = 0, maxDraft = 0;
+            long maxUser = 0, maxPost = 0, maxComment = 0, maxMessage = 0, maxNotif = 0, maxGroup = 0, maxReport = 0, maxDraft = 0, maxMedia = 0;
             for (int i = 0; i < _users.Count; i++) if (_users[i].Id > maxUser) maxUser = _users[i].Id;
             for (int i = 0; i < _posts.Count; i++) if (_posts[i].Id > maxPost) maxPost = _posts[i].Id;
             for (int i = 0; i < _comments.Count; i++) if (_comments[i].Id > maxComment) maxComment = _comments[i].Id;
@@ -173,7 +177,7 @@ namespace Social.Core
             for (int i = 0; i < _groups.Count; i++) if (_groups[i].Id > maxGroup) maxGroup = _groups[i].Id;
             for (int i = 0; i < _reports.Count; i++) if (_reports[i].Id > maxReport) maxReport = _reports[i].Id;
             for (int i = 0; i < _drafts.Count; i++) if (_drafts[i].Id > maxDraft) maxDraft = _drafts[i].Id;
-
+            for (int i = 0; i < _media.Count; i++) if (_media[i].Id > maxMedia) maxMedia = _media[i].Id;
             if (_meta.NextUserId <= maxUser) _meta.NextUserId = maxUser + 1;
             if (_meta.NextPostId <= maxPost) _meta.NextPostId = maxPost + 1;
             if (_meta.NextCommentId <= maxComment) _meta.NextCommentId = maxComment + 1;
@@ -182,6 +186,7 @@ namespace Social.Core
             if (_meta.NextGroupId <= maxGroup) _meta.NextGroupId = maxGroup + 1;
             if (_meta.NextReportId <= maxReport) _meta.NextReportId = maxReport + 1;
             if (_meta.NextDraftId <= maxDraft) _meta.NextDraftId = maxDraft + 1;
+            if (_meta.NextMediaId <= maxMedia) _meta.NextMediaId = maxMedia + 1;
         }
 
         private string ReadJson(string path)
@@ -285,9 +290,10 @@ namespace Social.Core
                     if (force || _dirtyReports) WriteTable("reports.json", ReportsToArray());
                     if (force || _dirtyBookmarks) WriteTable("bookmarks.json", BookmarksToArray());
                     if (force || _dirtyDrafts) WriteTable("drafts.json", DraftsToArray());
+                    if (force || _dirtyMedia) WriteTable("media.json", MediaToArray());
 
                     _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = false;
+                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = false;
                     _lastSave = DateTime.UtcNow;
                     _saveError = "";
                     if (_readOnly)
@@ -360,6 +366,7 @@ namespace Social.Core
         private void MarkReports() { _dirtyReports = true; }
         private void MarkBookmarks() { _dirtyBookmarks = true; }
         private void MarkDrafts() { _dirtyDrafts = true; }
+        private void MarkMedia() { _dirtyMedia = true; }
 
         // ============================================================== users
 
@@ -1923,6 +1930,116 @@ namespace Social.Core
             }
         }
 
+        // ======================================================== media library
+
+        public List<MediaItem> MediaFor(long userId, string kind)
+        {
+            List<MediaItem> list = new List<MediaItem>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _media.Count; i++)
+                {
+                    MediaItem m = _media[i];
+                    if (userId > 0 && m.Owner != userId) continue;
+                    if (!string.IsNullOrEmpty(kind) && m.Kind != kind) continue;
+                    list.Add(m);
+                }
+            }
+            list.Sort(delegate(MediaItem a, MediaItem b) { return b.Id.CompareTo(a.Id); });
+            return list;
+        }
+
+        public MediaItem FindMedia(long id)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _media.Count; i++) if (_media[i].Id == id) return _media[i];
+                return null;
+            }
+        }
+
+        public int CountMedia(long userId, string kind)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _media.Count; i++)
+                    if (_media[i].Owner == userId && _media[i].Kind == kind) n++;
+                return n;
+            }
+        }
+
+        public MediaItem AddMedia(long owner, string kind, string title, string artist, string url, long size, int duration)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                MediaItem m = new MediaItem();
+                m.Id = _meta.NextMediaId++;
+                m.Owner = owner;
+                m.Kind = kind == "video" ? "video" : "audio";
+                m.Title = Util.SingleLine(title ?? "", 120);
+                m.Artist = Util.SingleLine(artist ?? "", 120);
+                m.Url = url ?? "";
+                m.Size = size;
+                m.Duration = duration < 0 ? 0 : duration;
+                m.Created = DateTime.UtcNow;
+                _media.Add(m);
+                MarkMedia();
+                _dirtyMeta = true;
+                return m;
+            }
+        }
+
+        /// <summary>Removes an entry; returns its url so the caller can delete the file.</summary>
+        public string RemoveMedia(long id, long owner)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _media.Count; i++)
+                {
+                    if (_media[i].Id != id || _media[i].Owner != owner) continue;
+                    string url = _media[i].Url;
+                    _media.RemoveAt(i);
+                    MarkMedia();
+                    return url;
+                }
+                return null;
+            }
+        }
+
+        private List<object> MediaToArray()
+        {
+            List<object> list = new List<object>(_media.Count);
+            for (int i = 0; i < _media.Count; i++)
+            {
+                MediaItem m = _media[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = m.Id; d["owner"] = m.Owner; d["kind"] = m.Kind;
+                d["title"] = m.Title; d["artist"] = m.Artist; d["url"] = m.Url;
+                d["size"] = m.Size; d["duration"] = m.Duration; d["created"] = m.Created;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static MediaItem MediaFromDict(Dictionary<string, object> d)
+        {
+            MediaItem m = new MediaItem();
+            m.Id = Json.GetLong(d, "id", 0);
+            m.Owner = Json.GetLong(d, "owner", 0);
+            m.Kind = Json.GetString(d, "kind", "audio");
+            m.Title = Json.GetString(d, "title", "");
+            m.Artist = Json.GetString(d, "artist", "");
+            m.Url = Json.GetString(d, "url", "");
+            m.Size = Json.GetLong(d, "size", 0);
+            m.Duration = Json.GetInt(d, "duration", 0);
+            m.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            if (m.Id <= 0 || m.Owner <= 0 || string.IsNullOrEmpty(m.Url)) return null;
+            return m;
+        }
+
         // =========================================================== scheduling
 
         /// <summary>True when the post is not waiting for its publication time.</summary>
@@ -2405,6 +2522,7 @@ namespace Social.Core
             d["nextGroupId"] = m.NextGroupId;
             d["nextReportId"] = m.NextReportId;
             d["nextDraftId"] = m.NextDraftId;
+            d["nextMediaId"] = m.NextMediaId;
             d["totalRegistrations"] = m.TotalRegistrations;
             d["lastBackup"] = m.LastBackup;
             d["installId"] = m.InstallId;

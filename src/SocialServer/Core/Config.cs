@@ -149,6 +149,12 @@ namespace Social.Core
         public int MaxVoiceSec = 300;
         // generic file attachments in private messages
         public int MaxFileKB = 4096;
+
+        // personal media library (music / clips)
+        public int MaxAudioKB = 4096;
+        public int MaxVideoKB = 5120;
+        public int MaxAudioFiles = 200;
+        public int MaxVideoFiles = 50;
         public int MaxStatusLength = 140;
         public int MaxBioLength = 2000;
         public int MaxNameLength = 40;
@@ -430,6 +436,10 @@ namespace Social.Core
                     else if (key == "maxvoicekb") MaxVoiceKB = Int(val, MaxVoiceKB);
                     else if (key == "maxvoicesec") MaxVoiceSec = Int(val, MaxVoiceSec);
                     else if (key == "maxfilekb") MaxFileKB = Int(val, MaxFileKB);
+                    else if (key == "maxaudiokb") MaxAudioKB = Int(val, MaxAudioKB);
+                    else if (key == "maxvideokb") MaxVideoKB = Int(val, MaxVideoKB);
+                    else if (key == "maxaudiofiles") MaxAudioFiles = Int(val, MaxAudioFiles);
+                    else if (key == "maxvideofiles") MaxVideoFiles = Int(val, MaxVideoFiles);
                     else if (key == "maxstatuslength") MaxStatusLength = Int(val, MaxStatusLength);
                     else if (key == "maxbiolength") MaxBioLength = Int(val, MaxBioLength);
                     else if (key == "maxnamelength") MaxNameLength = Int(val, MaxNameLength);

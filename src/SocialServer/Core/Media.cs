@@ -155,6 +155,90 @@ namespace Social.Core
             return "/media/" + sub + "/" + name;
         }
 
+        /// <summary>
+        /// Stores a track or a clip for the media library. Only audio and video
+        /// containers are accepted, and the kind decides which extensions are legal so
+        /// a "music" upload can never smuggle in a document.
+        /// </summary>
+        public string SaveLibrary(string dataUrl, string fileName, string kind, int maxKb, out string error)
+        {
+            error = "";
+            string mime;
+            byte[] data = Util.ParseDataUrl(dataUrl, out mime);
+            if (data == null) { error = "bad-file"; return null; }
+            if (data.Length == 0) { error = "empty-file"; return null; }
+            if (data.Length > (long)maxKb * 1024L) { error = "file-too-large"; return null; }
+
+            string ext = LibraryExtension(fileName, kind);
+            if (ext == null) { error = kind == "video" ? "unsupported-video" : "unsupported-audio"; return null; }
+
+            string sub = "library";
+            string dir = Path.Combine(_cfg.MediaDir, sub);
+            Directory.CreateDirectory(dir);
+
+            string name = Crypto.RandomHex(16) + ext;
+            string path = Path.Combine(dir, name);
+            string tmp = path + ".tmp";
+            try
+            {
+                File.WriteAllBytes(tmp, data);
+                if (File.Exists(path)) File.Delete(path);
+                File.Move(tmp, path);
+            }
+            catch (Exception ex)
+            {
+                error = "save-failed";
+                Log.Error("MEDIA", "cannot save library file: " + ex.Message);
+                try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+                return null;
+            }
+
+            Log.Debug("MEDIA", "library " + kind + " saved " + name + " (" + data.Length + " bytes)");
+            return "/media/" + sub + "/" + name;
+        }
+
+        /// <summary>Audio containers every browser can play.</summary>
+        public static string[] AudioExtensions()
+        {
+            return new string[] { ".mp3", ".m4a", ".aac", ".ogg", ".oga", ".opus", ".wav", ".flac", ".weba" };
+        }
+
+        /// <summary>Video containers browsers can play (mkv/mov are hit and miss).</summary>
+        public static string[] VideoExtensions()
+        {
+            return new string[] { ".mp4", ".m4v", ".webm", ".ogv", ".mov" };
+        }
+
+        public static bool IsAudioExtension(string ext)
+        {
+            string[] allowed = AudioExtensions();
+            for (int i = 0; i < allowed.Length; i++) if (allowed[i] == ext) return true;
+            return false;
+        }
+
+        public static bool IsVideoExtension(string ext)
+        {
+            string[] allowed = VideoExtensions();
+            for (int i = 0; i < allowed.Length; i++) if (allowed[i] == ext) return true;
+            return false;
+        }
+
+        /// <summary>Extension when it belongs to the requested kind, otherwise null.</summary>
+        public static string LibraryExtension(string fileName, string kind)
+        {
+            if (string.IsNullOrEmpty(fileName)) return null;
+            string ext = Path.GetExtension(fileName);
+            if (string.IsNullOrEmpty(ext)) return null;
+            ext = ext.ToLowerInvariant();
+            for (int i = 1; i < ext.Length; i++)
+            {
+                char c = ext[i];
+                if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) return null;
+            }
+            if (kind == "video") return IsVideoExtension(ext) ? ext : null;
+            return IsAudioExtension(ext) ? ext : null;
+        }
+
         /// <summary>Extensions we are willing to store and hand back.</summary>
         public static string[] FileExtensions()
         {
@@ -211,11 +295,15 @@ namespace Social.Core
                 case ".ods": return "application/vnd.oasis.opendocument.spreadsheet";
                 case ".mp3": return "audio/mpeg";
                 case ".m4a": return "audio/mp4";
-                case ".ogg": case ".opus": return "audio/ogg";
+                case ".aac": return "audio/aac";
+                case ".ogg": case ".opus": case ".oga": return "audio/ogg";
+                case ".weba": return "audio/webm";
                 case ".wav": return "audio/wav";
                 case ".flac": return "audio/flac";
                 case ".mp4": return "video/mp4";
+                case ".m4v": return "video/mp4";
                 case ".webm": return "video/webm";
+                case ".ogv": return "video/ogg";
                 case ".mkv": return "video/x-matroska";
                 case ".mov": return "video/quicktime";
                 case ".png": return "image/png";

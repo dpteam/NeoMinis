@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Threading;
 using Social.Core;
 
@@ -983,6 +984,122 @@ namespace Social.Web
             JsonBuilder b = new JsonBuilder(64);
             b.BeginObject();
             SendOk(ctx, b);
+        }
+
+        // ===================================================== media library
+
+        private void HandleMedia(ApiCtx ctx)
+        {
+            string kind = (GetQuery(ctx.Query, "kind") ?? "").Trim().ToLowerInvariant();
+            if (kind != "audio" && kind != "video") kind = "";
+            long userId = LongQuery(ctx, "user");
+            User owner = userId > 0 ? RequireUser(userId) : null;
+            if (owner != null && !CanViewProfile(ctx.User, owner))
+                throw new ApiException(403, "private", "This profile is private");
+
+            List<MediaItem> items = _store.MediaFor(owner == null ? 0 : owner.Id, kind);
+
+            JsonBuilder b = new JsonBuilder(8192);
+            b.BeginObject();
+            if (owner != null) b.Name("user").Raw(UserSummary(owner));
+            b.Name("items").BeginArray();
+            for (int i = 0; i < items.Count; i++)
+            {
+                MediaItem m = items[i];
+                b.BeginObject()
+                    .Prop("id", m.Id)
+                    .Prop("kind", m.Kind)
+                    .Prop("title", m.Title)
+                    .Prop("artist", m.Artist)
+                    .Prop("url", m.Url)
+                    .Prop("size", m.Size)
+                    .Prop("duration", m.Duration)
+                    .Prop("created", Util.Iso(m.Created))
+                    .Prop("owner", m.Owner)
+                    .Prop("mine", ctx.User != null && m.Owner == ctx.User.Id)
+                    .EndObject();
+            }
+            b.EndArray();
+            SendOk(ctx, b);
+        }
+
+        private void HandleMediaUpload(ApiCtx ctx)
+        {
+            string kind = BodyStr(ctx, "kind", "audio").Trim().ToLowerInvariant();
+            if (kind != "audio" && kind != "video")
+                throw new ApiException(400, "bad-kind", "Unknown media kind");
+
+            int limit = kind == "video" ? _cfg.MaxVideoFiles : _cfg.MaxAudioFiles;
+            if (_store.CountMedia(ctx.User.Id, kind) >= limit)
+                throw new ApiException(400, "too-many-files",
+                    "The " + kind + " library is full (" + limit + " files)");
+
+            string fileName = Util.SingleLine(BodyStr(ctx, "fileName", ""), 160);
+            if (fileName.Length == 0) throw new ApiException(400, "bad-file", "A file needs a name");
+            string data = BodyStr(ctx, "data", "");
+            if (data.Length == 0) throw new ApiException(400, "bad-file", "The file is empty");
+
+            int maxKb = kind == "video" ? _cfg.MaxVideoKB : _cfg.MaxAudioKB;
+            string err;
+            string url = _media.SaveLibrary(data, fileName, kind, maxKb, out err);
+            if (url == null)
+            {
+                if (err == "file-too-large")
+                    throw new ApiException(400, "too-large", "File is larger than " + maxKb + " KB");
+                throw new ApiException(400, err, "File could not be saved");
+            }
+
+            string mime;
+            byte[] raw = Util.ParseDataUrl(data, out mime);
+            long size = raw == null ? 0 : raw.Length;
+
+            string title = Util.SingleLine(BodyStr(ctx, "title", ""), 120);
+            if (title.Length == 0)
+            {
+                title = Path.GetFileNameWithoutExtension(fileName);
+                if (title.Length == 0) title = fileName;
+            }
+            string artist = Util.SingleLine(BodyStr(ctx, "artist", ""), 120);
+            int duration = (int)BodyLong(ctx, "duration", 0);
+
+            MediaItem item = _store.AddMedia(ctx.User.Id, kind, title, artist, url, size, duration);
+            Log.Info("DATA", "@" + ctx.User.Username + " uploaded " + kind + " #" + item.Id + " (" + size + " bytes)");
+
+            JsonBuilder b = new JsonBuilder(512);
+            b.BeginObject();
+            b.Name("item").Raw(MediaJson(item, ctx.User));
+            SendOk(ctx, b);
+        }
+
+        private void HandleMediaDelete(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            string url = _store.RemoveMedia(id, ctx.User.Id);
+            if (url == null) throw new ApiException(404, "no-item", "Item not found");
+            if (!string.IsNullOrEmpty(url)) _media.Delete(url);
+            Log.Info("DATA", "@" + ctx.User.Username + " deleted media #" + id);
+
+            JsonBuilder b = new JsonBuilder(64);
+            b.BeginObject();
+            SendOk(ctx, b);
+        }
+
+        private static string MediaJson(MediaItem m, User viewer)
+        {
+            JsonBuilder b = new JsonBuilder(512);
+            b.BeginObject()
+                .Prop("id", m.Id)
+                .Prop("kind", m.Kind)
+                .Prop("title", m.Title)
+                .Prop("artist", m.Artist)
+                .Prop("url", m.Url)
+                .Prop("size", m.Size)
+                .Prop("duration", m.Duration)
+                .Prop("created", Util.Iso(m.Created))
+                .Prop("owner", m.Owner)
+                .Prop("mine", viewer != null && m.Owner == viewer.Id)
+                .EndObject();
+            return b.ToString();
         }
 
         // ============================================================ friends

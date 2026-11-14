@@ -198,7 +198,11 @@ namespace Social.Web
             b.Prop("maxMessageLength", _cfg.MaxMessageLength)
                 .Prop("maxMessageImageKB", _cfg.MaxMessageImageKB)
                 .Prop("maxVoiceSec", _cfg.MaxVoiceSec)
-                .Prop("maxFileKB", _cfg.MaxFileKB);
+                .Prop("maxFileKB", _cfg.MaxFileKB)
+                .Prop("maxAudioKB", _cfg.MaxAudioKB)
+                .Prop("maxVideoKB", _cfg.MaxVideoKB)
+                .Prop("maxAudioFiles", _cfg.MaxAudioFiles)
+                .Prop("maxVideoFiles", _cfg.MaxVideoFiles);
             b.Prop("maxStatusLength", _cfg.MaxStatusLength);
             b.Prop("maxBioLength", _cfg.MaxBioLength);
             b.Prop("maxNameLength", _cfg.MaxNameLength);
@@ -583,6 +587,9 @@ namespace Social.Web
             if (r == "drafts") { RequireMethod(m, "GET"); HandleDrafts(ctx); return; }
             if (r == "drafts/save") { RequireMethod(m, "POST"); HandleDraftSave(ctx); return; }
             if (r == "drafts/delete") { RequireMethod(m, "POST"); HandleDraftDelete(ctx); return; }
+            if (r == "media") { RequireMethod(m, "GET"); HandleMedia(ctx); return; }
+            if (r == "media/upload") { RequireMethod(m, "POST"); HandleMediaUpload(ctx); return; }
+            if (r == "media/delete") { RequireMethod(m, "POST"); HandleMediaDelete(ctx); return; }
             if (r == "friends") { RequireMethod(m, "GET"); HandleFriends(ctx); return; }
             if (r == "friend") { RequireMethod(m, "POST"); HandleFriendAction(ctx); return; }
             if (r == "messages/threads") { RequireMethod(m, "GET"); HandleThreads(ctx); return; }

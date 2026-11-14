@@ -563,6 +563,56 @@ async function main() {
   ok('deleting a repost lowers the counter', deleteRepost.status === 200 && originAfter3.data.post.reposts === 1,
     String(originAfter3.data.post.reposts));
 
+  // ---- media library
+  const wavSamples2 = 800;
+  const wav2 = Buffer.alloc(44 + wavSamples2 * 2);
+  wav2.write('RIFF', 0); wav2.writeUInt32LE(36 + wavSamples2 * 2, 4); wav2.write('WAVE', 8);
+  wav2.write('fmt ', 12); wav2.writeUInt32LE(16, 16); wav2.writeUInt16LE(1, 20);
+  wav2.writeUInt16LE(1, 22); wav2.writeUInt32LE(8000, 24); wav2.writeUInt32LE(16000, 28);
+  wav2.writeUInt16LE(2, 32); wav2.writeUInt16LE(16, 34);
+  wav2.write('data', 36); wav2.writeUInt32LE(wavSamples2 * 2, 40);
+  const TRACK = 'data:audio/wav;base64,' + wav2.toString('base64');
+
+  const upTrack = await alice.call('POST', '/api/media/upload', {
+    kind: 'audio', fileName: 'song.wav', data: TRACK, title: 'Test track', artist: 'Tester', duration: 7
+  });
+  ok('audio uploaded', upTrack.status === 200 && upTrack.data.item.url.indexOf('/media/library/') === 0 &&
+    upTrack.data.item.title === 'Test track' && upTrack.data.item.duration === 7,
+    String(upTrack.status) + ' ' + (upTrack.data && upTrack.data.item.url));
+  const trackId = upTrack.data && upTrack.data.item.id;
+
+  const myMusic = await alice.call('GET', '/api/media?kind=audio');
+  ok('library lists the track', myMusic.data.items.some(i => i.id === trackId), '');
+  const bobMusic = await bob.call('GET', '/api/media?kind=audio');
+  ok('shared shelf shows it without delete rights',
+    bobMusic.data.items.some(i => i.id === trackId && i.mine === false), '');
+  const bobOwn = await bob.call('GET', '/api/media?kind=audio&user=' + bob.user.id);
+  ok("another user's library is separate", !bobOwn.data.items.some(i => i.id === trackId), '');
+  const aliceOwn = await alice.call('GET', '/api/media?kind=audio&user=' + alice.user.id);
+  ok('own library lists the track', aliceOwn.data.items.some(i => i.id === trackId), '');
+
+  const audioFetch = await fetch(BASE + upTrack.data.item.url);
+  ok('track streams inline as audio', audioFetch.status === 200 &&
+    (audioFetch.headers.get('content-type') || '').indexOf('audio/') === 0 &&
+    (audioFetch.headers.get('content-disposition') || '') === 'inline',
+    String(audioFetch.headers.get('content-type')) + ' ' + String(audioFetch.headers.get('content-disposition')));
+
+  const wrongKind = await alice.call('POST', '/api/media/upload', {
+    kind: 'video', fileName: 'song.wav', data: TRACK
+  });
+  ok('audio file refused as video', wrongKind.status === 400, String(wrongKind.status));
+  const badKind = await alice.call('POST', '/api/media/upload', {
+    kind: 'documents', fileName: 'a.wav', data: TRACK
+  });
+  ok('unknown media kind rejected', badKind.status === 400, String(badKind.status));
+
+  const foreignDelete = await bob.call('POST', '/api/media/delete', { id: trackId });
+  ok("cannot delete somebody else's track", foreignDelete.status === 404, String(foreignDelete.status));
+  const delTrack = await alice.call('POST', '/api/media/delete', { id: trackId });
+  ok('own track deleted', delTrack.status === 200, String(delTrack.status));
+  const goneTrack = await alice.call('GET', '/api/media?kind=audio');
+  ok('deleted track is gone', !goneTrack.data.items.some(i => i.id === trackId), '');
+
   await bob.call('POST', '/api/messages/typing', { to: alice.user.id });
   const typingWait = await alice.call('GET', '/api/messages/wait?with=' + bob.user.id + '&after=0&timeout=3');
   ok('typing is visible', typingWait.status === 200 && typingWait.data.typing === true, JSON.stringify(typingWait.data && typingWait.data.typing));

@@ -103,6 +103,23 @@ namespace Social.Core
     }
 
     /// <summary>
+    /// An uploaded track or clip in a user's media library. The file lives under
+    /// /media/library/ and the metadata here; nothing else references it.
+    /// </summary>
+    public sealed class MediaItem
+    {
+        public long Id;
+        public long Owner;
+        public string Kind = "audio";   // audio | video
+        public string Title = "";
+        public string Artist = "";
+        public string Url = "";
+        public long Size;
+        public int Duration;            // seconds, 0 when the browser could not tell
+        public DateTime Created = DateTime.UtcNow;
+    }
+
+    /// <summary>
     /// An unfinished post. Drafts keep text, video link, visibility, wall/group and
     /// a poll; pictures are deliberately not stored so the JSON tables stay small.
     /// </summary>
@@ -214,6 +231,7 @@ namespace Social.Core
         public long NextGroupId = 1;
         public long NextReportId = 1;
         public long NextDraftId = 1;
+        public long NextMediaId = 1;
         public long TotalRegistrations;
         public DateTime LastBackup = DateTime.MinValue;
         public string InstallId = "";

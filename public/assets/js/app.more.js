@@ -1713,6 +1713,150 @@
     });
   };
 
+  // ---------------------------------------------------------- media library
+
+  function mediaView(kind) {
+    return function (main) {
+      var isVideo = kind === 'video';
+      var maxKb = (state.site && (isVideo ? state.site.maxVideoKB : state.site.maxAudioKB)) || (isVideo ? 5120 : 4096);
+      var maxFiles = (state.site && (isVideo ? state.site.maxVideoFiles : state.site.maxAudioFiles)) || 100;
+      var items = [];
+
+      var title = isVideo ? T('media.videoTitle') : T('media.musicTitle');
+      var iconName = isVideo ? 'film' : 'music';
+
+      main.innerHTML = '<div class="card"><div class="card-h">' + UI.icon(iconName) + ' ' + title +
+        '<span class="right"><button class="btn btn-xs btn-primary" id="media-upload">' +
+        UI.icon('upload') + ' ' + T('media.upload') + '</button></span></div>' +
+        '<div class="card-b"><div class="tiny muted" style="margin-bottom:8px">' +
+        UI.esc(T('media.hint', maxKb, maxFiles)) + '</div>' +
+        '<input type="file" id="media-file" class="hidden" accept="' +
+        (isVideo ? 'video/mp4,video/webm,video/quicktime,video/ogg' : 'audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/flac,audio/aac,audio/webm') + '">' +
+        '<div id="media-list"><div class="center" style="padding:20px">' + UI.spinner() + '</div></div></div></div>';
+
+      var list = document.getElementById('media-list');
+      var fileInput = document.getElementById('media-file');
+      var uploadBtn = document.getElementById('media-upload');
+
+      function render() {
+        if (!items.length) {
+          list.innerHTML = UI.empty(iconName, isVideo ? T('media.emptyVideo') : T('media.emptyMusic'),
+            T('media.emptyHint'));
+          return;
+        }
+        var html = '<div class="media-list">';
+        for (var i = 0; i < items.length; i++) {
+          var m = items[i];
+          html += '<div class="media-row" data-id="' + m.id + '">' +
+            '<div class="media-main">' +
+            '<div class="media-title">' + UI.esc(m.title || T('media.untitled')) +
+            (m.artist ? ' <span class="media-artist">— ' + UI.esc(m.artist) + '</span>' : '') + '</div>' +
+            '<div class="tiny muted">' + UI.bytes(m.size || 0) +
+            (m.duration ? ' · ' + fmtSec(m.duration) : '') + ' · ' + UI.timeAgo(m.created) + '</div>' +
+            '<div class="media-player">' +
+            (m.kind === 'video'
+              ? '<video controls preload="metadata" src="' + UI.attr(UI.safeUrl(m.url)) + '"></video>'
+              : '<audio controls preload="metadata" src="' + UI.attr(UI.safeUrl(m.url)) + '"></audio>') +
+            '</div></div>' +
+            (m.mine ? '<button type="button" class="btn btn-xs btn-danger media-del" data-id="' + m.id + '">' +
+              T('common.delete') + '</button>' : '') +
+            '</div>';
+        }
+        list.innerHTML = html + '</div>';
+
+        var dels = list.querySelectorAll('.media-del');
+        for (var d = 0; d < dels.length; d++) {
+          dels[d].addEventListener('click', function () {
+            var id = this.getAttribute('data-id');
+            var btn = this;
+            UI.confirm(T('common.delete'), T('media.deleteConfirm'), T('common.delete'), function () {
+              btn.disabled = true;
+              Api.request('POST', '/api/media/delete', { id: Number(id) }, function (err) {
+                btn.disabled = false;
+                if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+                UI.toast(T('media.deleted'), 'ok');
+                load();
+              });
+            }, true);
+          });
+        }
+      }
+
+      function load() {
+        Api.request('GET', '/api/media?kind=' + kind, null, function (err, data) {
+          if (err) { list.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+          items = (data && data.items) || [];
+          render();
+        });
+      }
+
+      function readDuration(file, dataUrl, cb) {
+        var done = false;
+        function finish(sec) {
+          if (done) return;
+          done = true;
+          cb(sec);
+        }
+        try {
+          var el = document.createElement(isVideo ? 'video' : 'audio');
+          el.preload = 'metadata';
+          el.onloadedmetadata = function () {
+            finish(isFinite(el.duration) ? Math.round(el.duration) : 0);
+          };
+          el.onerror = function () { finish(0); };
+          el.src = dataUrl;
+          // never leave a stuck upload if the metadata never arrives
+          setTimeout(function () { finish(0); }, 4000);
+        } catch (e) { finish(0); }
+      }
+
+      uploadBtn.addEventListener('click', function () { fileInput.click(); });
+      fileInput.addEventListener('change', function () {
+        var f = fileInput.files && fileInput.files[0];
+        if (!f) return;
+        if (f.size > maxKb * 1024) {
+          UI.toast(T('media.tooLarge', maxKb), 'err');
+          fileInput.value = '';
+          return;
+        }
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = UI.spinner() + ' ' + T('media.uploading');
+        var reader = new FileReader();
+        reader.onload = function () {
+          var dataUrl = String(reader.result || '');
+          readDuration(f, dataUrl, function (sec) {
+            Api.request('POST', '/api/media/upload', {
+              kind: kind,
+              fileName: f.name,
+              data: dataUrl,
+              title: f.name.replace(/\.[^.]+$/, ''),
+              duration: sec
+            }, function (err) {
+              uploadBtn.disabled = false;
+              uploadBtn.innerHTML = UI.icon('upload') + ' ' + T('media.upload');
+              fileInput.value = '';
+              if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+              UI.toast(T('media.uploaded'), 'ok');
+              SoundFX.play('success');
+              load();
+            });
+          });
+        };
+        reader.onerror = function () {
+          uploadBtn.disabled = false;
+          uploadBtn.innerHTML = UI.icon('upload') + ' ' + T('media.upload');
+          UI.toast(T('errors.generic'), 'err');
+        };
+        reader.readAsDataURL(f);
+      });
+
+      load();
+    };
+  }
+
+  views.music = mediaView('audio');
+  views.video = mediaView('video');
+
   // -------------------------------------------------------------- settings
 
   views.settings = function (main, r) {
@@ -2685,6 +2829,13 @@
         field('cfg-voicesec', T('admin.maxVoiceSec'), lim.maxVoiceSec, 'number', ' min="5"') +
         '</div>' +
         field('cfg-filekb', T('admin.maxFileKB'), lim.maxFileKB, 'number', ' min="64"') +
+        '<div class="inline-fields">' +
+        field('cfg-audiokb', T('admin.maxAudioKB'), lim.maxAudioKB, 'number', ' min="256"') +
+        field('cfg-videokb', T('admin.maxVideoKB'), lim.maxVideoKB, 'number', ' min="256"') +
+        '</div><div class="inline-fields">' +
+        field('cfg-audiofiles', T('admin.maxAudioFiles'), lim.maxAudioFiles, 'number', ' min="1"') +
+        field('cfg-videofiles', T('admin.maxVideoFiles'), lim.maxVideoFiles, 'number', ' min="1"') +
+        '</div>' +
         field('cfg-editwin', T('admin.editWindow'), lim.editWindowMin, 'number', ' min="0"') +
         '</div>';
 
@@ -2778,6 +2929,10 @@
             maxVoiceKB: Number(App.val('cfg-voicekb')),
             maxVoiceSec: Number(App.val('cfg-voicesec')),
             maxFileKB: Number(App.val('cfg-filekb')),
+            maxAudioKB: Number(App.val('cfg-audiokb')),
+            maxVideoKB: Number(App.val('cfg-videokb')),
+            maxAudioFiles: Number(App.val('cfg-audiofiles')),
+            maxVideoFiles: Number(App.val('cfg-videofiles')),
             maxAvatarKB: Number(App.val('cfg-avatarkb')),
             maxPostImageKB: Number(App.val('cfg-imagekb')),
             editWindowMin: Number(App.val('cfg-editwin'))
