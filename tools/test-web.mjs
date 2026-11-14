@@ -325,6 +325,37 @@ async function main() {
   const plainVote = await bob.call('POST', '/api/poll', { post: postId, option: 0 });
   ok('voting without a poll rejected', plainVote.status === 400, String(plainVote.status));
 
+  // ---- drafts and scheduling
+  const draftSave = await alice.call('POST', '/api/drafts/save', {
+    body: 'draft body', video: '', visibility: 'friends', poll: { question: 'q?', options: ['a', 'b'] }
+  });
+  ok('draft saved', draftSave.status === 200 && draftSave.data.id > 0, String(draftSave.status));
+  const draftId = draftSave.data && draftSave.data.id;
+  const draftList = await alice.call('GET', '/api/drafts');
+  ok('draft listed', draftList.status === 200 && draftList.data.drafts.some(d => d.id === draftId), '');
+  const draftEmpty = await alice.call('POST', '/api/drafts/save', { body: '' });
+  ok('empty draft rejected', draftEmpty.status === 400, String(draftEmpty.status));
+  const draftBob = await bob.call('GET', '/api/drafts');
+  ok('drafts are private', draftBob.data.drafts.every(d => d.id !== draftId), '');
+  const draftDel = await alice.call('POST', '/api/drafts/delete', { id: draftId });
+  ok('draft deleted', draftDel.status === 200, String(draftDel.status));
+
+  const future = new Date(Date.now() + 3600000).toISOString();
+  const scheduled = await alice.call('POST', '/api/post', { body: 'later post', scheduledFor: future });
+  ok('post scheduled', scheduled.status === 200 && scheduled.data.post.scheduledFor === future,
+    String(scheduled.status) + ' ' + (scheduled.data && scheduled.data.post.scheduledFor));
+  const scheduledId = scheduled.data && scheduled.data.post.id;
+  const feedNow = await bob.call('GET', '/api/feed?tab=global&limit=50');
+  ok('scheduled post stays hidden', !feedNow.data.posts.some(p => p.id === scheduledId), '');
+  const myScheduled = await alice.call('GET', '/api/drafts');
+  ok('scheduled post listed for its author',
+    myScheduled.data.scheduled.some(p => p.id === scheduledId), '');
+  const pastSchedule = await alice.call('POST', '/api/post', {
+    body: 'x', scheduledFor: new Date(Date.now() - 86400000).toISOString()
+  });
+  ok('past schedule rejected', pastSchedule.status === 400, String(pastSchedule.status));
+  await alice.call('POST', '/api/post/delete', { id: scheduledId });
+
   // ---- live notifications and per-type mutes
   const baseNotif = await alice.call('GET', '/api/notifications?limit=1');
   const lastId = baseNotif.data.notifications.length ? baseNotif.data.notifications[0].id : 0;

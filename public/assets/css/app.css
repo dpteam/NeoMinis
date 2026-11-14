@@ -1515,3 +1515,32 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 
 .chat-attach { position: relative; }
 .chat-attach img { max-height: 64px; max-width: 120px; }
+
+/* -------------------------------------------------- drafts and scheduling */
+
+.composer-sched {
+  display: flex; align-items: center; gap: 7px;
+  margin: 0 12px 10px; padding: 6px 9px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--hover); color: var(--muted);
+}
+.composer-sched .input { flex: 1; font-size: 12px; }
+.composer-sched .icon-btn { width: 22px; height: 22px; color: var(--muted); }
+
+.draft-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 9px 2px; border-bottom: 1px solid var(--border);
+}
+.draft-row:last-child { border-bottom: 0; }
+.draft-main { flex: 1; min-width: 0; }
+.draft-text {
+  font-size: 12.5px; line-height: 1.45; margin-bottom: 3px;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+}
+.draft-actions { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; }
+.draft-actions .btn { white-space: nowrap; }
+
+@media (max-width: 560px) {
+  .draft-row { flex-direction: column; }
+  .draft-actions { flex-direction: row; }
+}

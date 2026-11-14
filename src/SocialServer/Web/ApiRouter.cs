@@ -579,6 +579,9 @@ namespace Social.Web
             if (r == "people") { RequireMethod(m, "GET"); HandlePeople(ctx); return; }
             if (r == "search") { RequireMethod(m, "GET"); HandleSearch(ctx); return; }
             if (r == "search/posts") { RequireMethod(m, "GET"); HandleSearchPosts(ctx); return; }
+            if (r == "drafts") { RequireMethod(m, "GET"); HandleDrafts(ctx); return; }
+            if (r == "drafts/save") { RequireMethod(m, "POST"); HandleDraftSave(ctx); return; }
+            if (r == "drafts/delete") { RequireMethod(m, "POST"); HandleDraftDelete(ctx); return; }
             if (r == "friends") { RequireMethod(m, "GET"); HandleFriends(ctx); return; }
             if (r == "friend") { RequireMethod(m, "POST"); HandleFriendAction(ctx); return; }
             if (r == "messages/threads") { RequireMethod(m, "GET"); HandleThreads(ctx); return; }

@@ -18,6 +18,7 @@ var App = (function () {
     im: { withId: 0, timer: null },
     adminLogs: { timer: null },
     notify: { started: false, last: 0, unreadAt: 0 },
+    composerDraftId: 0,
     booted: false
   };
 
@@ -280,6 +281,7 @@ var App = (function () {
     html += side('#/groups', 'people-group', T('nav.groups'), 'groups');
     html += side('#/notifications', 'bell', T('nav.notifications'), 'notifications', unreadN);
     html += side('#/bookmarks', 'bookmark', T('nav.bookmarks'), 'bookmarks');
+    html += side('#/drafts', 'file-pen', T('nav.drafts'), 'drafts');
     html += '<div class="side-sep"></div>';
     html += side('#/profile/' + u.id, 'id-card', T('nav.profile'), 'profile');
     html += side('#/settings', 'gear', T('nav.settings'), 'settings');
@@ -703,7 +705,54 @@ var App = (function () {
     main.innerHTML = html;
     bindComposer(0);
     bindFeedTabs();
+    var draftId = Number(qs('draft') || 0);
+    if (draftId > 0) loadDraftIntoComposer(draftId);
     loadFeed(false);
+  }
+
+  /// Fills the composer from a saved draft and remembers its id so publishing
+  /// removes the draft again.
+  function loadDraftIntoComposer(id) {
+    Api.request('GET', '/api/drafts', null, function (err, data) {
+      if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+      var list = (data && data.drafts) || [];
+      var d = null;
+      for (var i = 0; i < list.length; i++) if (Number(list[i].id) === Number(id)) d = list[i];
+      if (!d) { UI.toast(T('feed.draftMissing'), 'err'); return; }
+      state.composerDraftId = d.id;
+      var text = document.getElementById('composer-text');
+      if (text) {
+        text.value = d.body || '';
+        text.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (d.video) {
+        var vBtn = document.getElementById('composer-video');
+        var vInput = document.getElementById('composer-video-url');
+        var vRow = document.getElementById('composer-video-row');
+        if (vBtn && vRow) vBtn.click();
+        if (vInput) {
+          vInput.value = d.video;
+          vInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+      var vis = document.getElementById('composer-visibility');
+      if (vis && d.visibility) vis.value = d.visibility;
+      if (d.pollQuestion) {
+        var pBtn = document.getElementById('composer-poll-btn');
+        if (pBtn) pBtn.click();
+        var pq = document.getElementById('composer-poll-q');
+        if (pq) pq.value = d.pollQuestion;
+        var opts = String(d.pollOptions || '').split('\n');
+        var add = document.getElementById('composer-poll-add');
+        var rows = document.querySelectorAll('#composer-poll-options input');
+        for (var k = 0; k < opts.length; k++) {
+          if (rows[k]) rows[k].value = opts[k];
+          else if (add && opts[k]) { add.click(); rows = document.querySelectorAll('#composer-poll-options input'); if (rows[k]) rows[k].value = opts[k]; }
+        }
+      }
+      UI.toast(T('feed.draftLoaded'), 'ok');
+      if (text) text.focus();
+    });
   }
 
   function feedTab(tab, label) {
@@ -789,10 +838,15 @@ var App = (function () {
       '<div id="composer-poll-options"></div>' +
       '<button type="button" class="btn btn-xs" id="composer-poll-add">' + UI.icon('plus') + ' ' + T('feed.pollAddOption') + '</button>' +
       '</div>' +
+      '<div class="composer-sched hidden" id="composer-sched">' + UI.icon('clock') +
+      '<input class="input" type="datetime-local" id="composer-sched-at">' +
+      '<button type="button" class="icon-btn" id="composer-sched-x">' + UI.icon('xmark') + '</button></div>' +
       '<div class="composer-bar">' +
       '<button type="button" class="btn btn-sm" id="composer-photo">' + UI.icon('image') + ' ' + T('feed.photo') + '</button>' +
       '<button type="button" class="btn btn-sm" id="composer-video">' + UI.icon('video') + ' ' + T('feed.video') + '</button>' +
       '<button type="button" class="btn btn-sm" id="composer-poll-btn">' + UI.icon('square-poll-vertical') + ' ' + T('feed.poll') + '</button>' +
+      '<button type="button" class="btn btn-sm" id="composer-sched-btn">' + UI.icon('clock') + ' ' + T('feed.schedule') + '</button>' +
+      '<button type="button" class="btn btn-sm" id="composer-draft-btn">' + UI.icon('file-pen') + ' ' + T('feed.saveDraft') + '</button>' +
       '<input type="file" id="composer-file" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">' +
       '<select class="select" id="composer-visibility" style="width:auto;padding:4px 24px 4px 8px;font-size:11.5px">' +
       '<option value="public">' + T('feed.public') + '</option>' +
@@ -819,6 +873,10 @@ var App = (function () {
     var pollBox = document.getElementById('composer-poll');
     var pollQ = document.getElementById('composer-poll-q');
     var pollOptions = document.getElementById('composer-poll-options');
+    var schedBtn = document.getElementById('composer-sched-btn');
+    var schedBox = document.getElementById('composer-sched');
+    var schedAt = document.getElementById('composer-sched-at');
+    var draftBtn = document.getElementById('composer-draft-btn');
     var imageData = '';
 
     if (text) {
@@ -881,6 +939,58 @@ var App = (function () {
     if (pollX) pollX.addEventListener('click', resetPoll);
     var pollAdd = document.getElementById('composer-poll-add');
     if (pollAdd) pollAdd.addEventListener('click', function () { addPollOption(''); });
+
+    // -------------------------------------------------------- scheduling
+    if (schedBtn && schedBox) schedBtn.addEventListener('click', function () {
+      var open = schedBox.className.indexOf('hidden') < 0;
+      schedBox.className = open ? 'composer-sched hidden' : 'composer-sched';
+      if (!open && schedAt) {
+        // default to an hour from now, in local time
+        var d = new Date(Date.now() + 3600000);
+        var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+        schedAt.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+          'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        schedAt.focus();
+      }
+    });
+    var schedX = document.getElementById('composer-sched-x');
+    if (schedX) schedX.addEventListener('click', function () {
+      if (schedAt) schedAt.value = '';
+      if (schedBox) schedBox.className = 'composer-sched hidden';
+    });
+
+    // ------------------------------------------------------------ drafts
+    function currentDraft() {
+      var question = pollQ ? pollQ.value.trim() : '';
+      var opts = [];
+      var inputs = pollOptions ? pollOptions.querySelectorAll('input') : [];
+      for (var i = 0; i < inputs.length; i++) {
+        var v = inputs[i].value.trim();
+        if (v) opts.push(v);
+      }
+      return {
+        body: text ? text.value.trim() : '',
+        video: videoInput ? videoInput.value.trim() : '',
+        visibility: val('composer-visibility') || 'public',
+        wall: wallId || 0,
+        group: groupId || 0,
+        poll: question ? { question: question, options: opts } : null
+      };
+    }
+
+    if (draftBtn) draftBtn.addEventListener('click', function () {
+      var d = currentDraft();
+      if (!d.body && !d.video && !d.poll) { UI.toast(T('feed.draftEmpty'), 'err'); return; }
+      draftBtn.disabled = true;
+      d.id = state.composerDraftId || 0;
+      Api.request('POST', '/api/drafts/save', d, function (err, data) {
+        draftBtn.disabled = false;
+        if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+        state.composerDraftId = data && data.id ? data.id : 0;
+        UI.toast(T('feed.draftSaved'), 'ok');
+        SoundFX.play('success');
+      });
+    });
 
     // ------------------------------------------------------ @mention helper
     var mentionSeq = 0;
@@ -992,6 +1102,15 @@ var App = (function () {
       }
 
       if (!body && !imageData && !videoUrl && !poll) { if (text) text.focus(); return; }
+      var scheduledFor = '';
+      if (schedAt && schedAt.value && schedBox && schedBox.className.indexOf('hidden') < 0) {
+        var when = new Date(schedAt.value);
+        if (isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+          UI.toast(T('feed.scheduleFuture'), 'err');
+          return;
+        }
+        scheduledFor = when.toISOString();
+      }
       var btn = document.getElementById('composer-submit');
       setBusy(btn, true, T('feed.posting'));
       var payload = {
@@ -1001,7 +1120,8 @@ var App = (function () {
         group: groupId || 0,
         image: imageData || '',
         video: videoUrl,
-        poll: poll
+        poll: poll,
+        scheduledFor: scheduledFor
       };
       Api.request('POST', '/api/post', payload, function (err, data) {
         setBusy(btn, false, T('feed.post'));
@@ -1014,13 +1134,20 @@ var App = (function () {
         if (videoPreview) videoPreview.innerHTML = '';
         if (videoRow) videoRow.className = 'composer-video-row hidden';
         resetPoll();
+        if (schedAt) schedAt.value = '';
+        if (schedBox) schedBox.className = 'composer-sched hidden';
+        // a published draft is no longer a draft
+        if (state.composerDraftId) {
+          Api.request('POST', '/api/drafts/delete', { id: state.composerDraftId }, function () { });
+          state.composerDraftId = 0;
+        }
         SoundFX.play('post');
-        UI.toast(T('feed.posted'), 'ok');
-        if (state.route === 'feed' && !groupId) {
+        UI.toast(scheduledFor ? T('feed.scheduled') : T('feed.posted'), 'ok');
+        if (state.route === 'feed' && !groupId && !scheduledFor) {
           state.feed.posts.unshift(data.post);
           renderFeedList(null);
           loadTags();
-        } else if (wallId || groupId) {
+        } else if (wallId || groupId || scheduledFor) {
           route();
         }
       });

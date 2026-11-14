@@ -17,6 +17,7 @@ namespace Social
         public readonly MediaStore Media;
         public readonly AiEngine Ai;
         public readonly AiRunner AiRunner;
+        public readonly Scheduler Scheduler;
 
         /// <summary>Public board (feed, profiles, media) — expose this one.</summary>
         public readonly WebServer WebPublic;
@@ -38,6 +39,7 @@ namespace Social
             Media = new MediaStore(cfg);
             Ai = new AiEngine(cfg, Store);
             AiRunner = new AiRunner(cfg, Store, Ai);
+            Scheduler = new Scheduler(Store);
             WebPublic = new WebServer(cfg, Store, Sessions, Stats, Captcha, Media, Ai, AiRunner, WebRole.Public);
             WebAdmin = cfg.AdminEnabled
                 ? new WebServer(cfg, Store, Sessions, Stats, Captcha, Media, Ai, AiRunner, WebRole.Admin)
@@ -78,6 +80,7 @@ namespace Social
                 _supervisor = new AppSupervisor(this);
                 _supervisor.Start();
                 AiRunner.Start();
+                Scheduler.Start();
                 Log.Info("APP", Config.SiteName + " " + ApiRouter.Version + " started: public " + WebPublic.Port +
                                   (WebAdmin != null ? ", admin " + WebAdmin.Port : ", admin disabled") +
                                   " (users " + Store.CountUsers() + ", online " + Store.CountOnline(Config.OnlineWindowSec) + ")");
@@ -96,6 +99,7 @@ namespace Social
             _shuttingDown = true;
             Log.Info("APP", "shutdown requested");
             try { if (_supervisor != null) _supervisor.Stop(); } catch { }
+            try { Scheduler.Stop(); } catch { }
             try { AiRunner.Stop(); } catch { }
             try { WebPublic.Stop(); } catch { }
             try { if (WebAdmin != null) WebAdmin.Stop(); } catch { }

@@ -85,6 +85,9 @@ namespace Social.Core
 
         // emoji reactions (see Core/Reactions.cs)
         public string Reactions = "";
+
+        // future publication time; MinValue = published right away
+        public DateTime ScheduledFor = DateTime.MinValue;
     }
 
     public sealed class Bookmark
@@ -92,6 +95,25 @@ namespace Social.Core
         public long User;
         public long Post;
         public DateTime Created = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// An unfinished post. Drafts keep text, video link, visibility, wall/group and
+    /// a poll; pictures are deliberately not stored so the JSON tables stay small.
+    /// </summary>
+    public sealed class Draft
+    {
+        public long Id;
+        public long User;
+        public string Body = "";
+        public string Video = "";
+        public string Visibility = "public";
+        public long Wall;
+        public long Group;
+        public string PollQuestion = "";
+        public string PollOptions = "";
+        public DateTime Created = DateTime.UtcNow;
+        public DateTime Updated = DateTime.UtcNow;
     }
 
     public sealed class Comment
@@ -186,6 +208,7 @@ namespace Social.Core
         public long NextNotificationId = 1;
         public long NextGroupId = 1;
         public long NextReportId = 1;
+        public long NextDraftId = 1;
         public long TotalRegistrations;
         public DateTime LastBackup = DateTime.MinValue;
         public string InstallId = "";

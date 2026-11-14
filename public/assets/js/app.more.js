@@ -1624,6 +1624,95 @@
     load(false);
   };
 
+  // ---------------------------------------------------------------- drafts
+
+  views.drafts = function (main) {
+    main.innerHTML = spinnerCard();
+    Api.request('GET', '/api/drafts', null, function (err, data) {
+      if (err) { main.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+      var drafts = data.drafts || [];
+      var scheduled = data.scheduled || [];
+
+      var html = '<div class="card"><div class="card-h">' + UI.icon('file-pen') + ' ' + T('drafts.title') +
+        '<span class="right tiny muted">' + drafts.length + '</span></div><div class="card-b">';
+      if (!drafts.length) {
+        html += UI.empty('file-pen', T('drafts.empty'), T('drafts.emptyHint'));
+      } else {
+        for (var i = 0; i < drafts.length; i++) {
+          var d = drafts[i];
+          var preview = String(d.body || '').replace(/\s+/g, ' ').trim();
+          if (!preview && d.video) preview = d.video;
+          if (!preview && d.pollQuestion) preview = d.pollQuestion;
+          html += '<div class="draft-row" data-id="' + d.id + '">' +
+            '<div class="draft-main"><div class="draft-text">' + UI.esc(preview.substring(0, 160)) + '</div>' +
+            '<div class="tiny muted">' + UI.timeAgo(d.updated) +
+            (d.pollQuestion ? ' · ' + UI.icon('square-poll-vertical') + ' ' + UI.esc(d.pollQuestion) : '') +
+            (d.video ? ' · ' + UI.icon('video') : '') + '</div></div>' +
+            '<div class="draft-actions">' +
+            '<a class="btn btn-sm btn-primary" href="#/feed?draft=' + d.id + '">' + T('drafts.continue') + '</a>' +
+            '<button type="button" class="btn btn-sm btn-danger draft-del" data-id="' + d.id + '">' + T('common.delete') + '</button>' +
+            '</div></div>';
+        }
+      }
+      html += '</div></div>';
+
+      html += '<div class="card"><div class="card-h">' + UI.icon('clock') + ' ' + T('drafts.scheduled') +
+        '<span class="right tiny muted">' + scheduled.length + '</span></div><div class="card-b">';
+      if (!scheduled.length) {
+        html += UI.empty('clock', T('drafts.noScheduled'), T('drafts.noScheduledHint'));
+      } else {
+        for (var j = 0; j < scheduled.length; j++) {
+          var p = scheduled[j];
+          var body = String(p.body || '').replace(/\s+/g, ' ').trim();
+          html += '<div class="draft-row" data-post="' + p.id + '">' +
+            '<div class="draft-main"><div class="draft-text">' + UI.esc(body.substring(0, 160) || T('messages.photo')) + '</div>' +
+            '<div class="tiny muted">' + UI.icon('clock') + ' ' + T('drafts.publishesAt') + ' ' +
+            UI.formatDate(p.scheduledFor, true) + '</div></div>' +
+            '<div class="draft-actions">' +
+            '<button type="button" class="btn btn-sm btn-danger draft-cancel" data-id="' + p.id + '">' + T('common.cancel') + '</button>' +
+            '</div></div>';
+        }
+      }
+      html += '</div></div>';
+
+      main.innerHTML = html;
+
+      var dels = main.querySelectorAll('.draft-del');
+      for (var k = 0; k < dels.length; k++) {
+        dels[k].addEventListener('click', function () {
+          var id = this.getAttribute('data-id');
+          var btn = this;
+          UI.confirm(T('common.delete'), T('drafts.deleteConfirm'), T('common.delete'), function () {
+            btn.disabled = true;
+            Api.request('POST', '/api/drafts/delete', { id: Number(id) }, function (e2) {
+              btn.disabled = false;
+              if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+              UI.toast(T('drafts.deleted'), 'ok');
+              App.route();
+            });
+          }, true);
+        });
+      }
+
+      var cancels = main.querySelectorAll('.draft-cancel');
+      for (var c = 0; c < cancels.length; c++) {
+        cancels[c].addEventListener('click', function () {
+          var id = this.getAttribute('data-id');
+          var btn = this;
+          UI.confirm(T('common.cancel'), T('drafts.cancelConfirm'), T('common.cancel'), function () {
+            btn.disabled = true;
+            Api.request('POST', '/api/post/delete', { id: Number(id) }, function (e2) {
+              btn.disabled = false;
+              if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+              UI.toast(T('drafts.cancelled'), 'ok');
+              App.route();
+            });
+          }, true);
+        });
+      }
+    });
+  };
+
   // -------------------------------------------------------------- settings
 
   views.settings = function (main, r) {

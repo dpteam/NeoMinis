@@ -136,6 +136,7 @@ namespace Social.Web
             b.Prop("canPin", CanPinPost(viewer, p));
             b.Prop("canComment", viewer != null && _store.VisibleTo(viewer.Id, p));
             b.Prop("pinned", p.Pinned);
+            b.Prop("scheduledFor", p.ScheduledFor == DateTime.MinValue ? "" : Util.Iso(p.ScheduledFor));
             b.Prop("bookmarked", viewer != null && _store.IsBookmarked(viewer.Id, p.Id));
             b.Prop("legacySource", p.LegacySource);
             List<KeyValuePair<string, List<long>>> postReactions = Reactions.Parse(p.Reactions);

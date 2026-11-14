@@ -280,6 +280,21 @@ namespace Social.Web
             Post post = _store.CreatePost(ctx.User.Id, wallId, groupId, text, image, visibility);
             post.Video = Util.SingleLine(video, 500);
 
+            // optional scheduled publication
+            string scheduledRaw = BodyStr(ctx, "scheduledFor", "").Trim();
+            if (scheduledRaw.Length > 0)
+            {
+                DateTime when;
+                if (!DateTime.TryParse(scheduledRaw, CultureInfo.InvariantCulture,
+                                       DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out when))
+                    throw new ApiException(400, "bad-schedule", "Bad publication time");
+                if (when <= DateTime.UtcNow.AddMinutes(-1))
+                    throw new ApiException(400, "bad-schedule", "Pick a time in the future");
+                if (when > DateTime.UtcNow.AddDays(365))
+                    throw new ApiException(400, "bad-schedule", "That is too far in the future");
+                post.ScheduledFor = when;
+            }
+
             Dictionary<string, object> poll = Json.Get(ctx.Body, "poll") as Dictionary<string, object>;
             if (poll != null)
             {
@@ -841,6 +856,92 @@ namespace Social.Web
             b.Prop("next", posts.Count == 0 ? 0 : posts[posts.Count - 1].Id);
             b.Prop("total", posts.Count);
             b.Prop("sort", filter.Sort);
+            SendOk(ctx, b);
+        }
+
+        // ============================================================ drafts
+
+        private void HandleDrafts(ApiCtx ctx)
+        {
+            List<Draft> drafts = _store.DraftsFor(ctx.User.Id);
+            List<Post> scheduled = _store.ScheduledFor(ctx.User.Id);
+
+            JsonBuilder b = new JsonBuilder(8192);
+            b.BeginObject();
+            b.Name("drafts").BeginArray();
+            for (int i = 0; i < drafts.Count; i++)
+            {
+                Draft d = drafts[i];
+                b.BeginObject()
+                    .Prop("id", d.Id)
+                    .Prop("body", d.Body)
+                    .Prop("video", d.Video)
+                    .Prop("visibility", d.Visibility)
+                    .Prop("wall", d.Wall)
+                    .Prop("group", d.Group)
+                    .Prop("pollQuestion", d.PollQuestion)
+                    .Prop("pollOptions", d.PollOptions)
+                    .Prop("created", Util.Iso(d.Created))
+                    .Prop("updated", Util.Iso(d.Updated))
+                    .EndObject();
+            }
+            b.EndArray();
+            AppendPosts(b, "scheduled", scheduled, ctx.User);
+            SendOk(ctx, b);
+        }
+
+        private void HandleDraftSave(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            string body = Util.CleanText(BodyStr(ctx, "body", ""), _cfg.MaxPostLength);
+            string video = BodyStr(ctx, "video", "").Trim();
+            if (video.Length > 0 && !Util.IsHttpUrl(video))
+                throw new ApiException(400, "bad-video", "Video link must start with http:// or https://");
+
+            string visibility = BodyStr(ctx, "visibility", "public").Trim().ToLowerInvariant();
+            if (visibility != "public" && visibility != "friends" && visibility != "private") visibility = "public";
+
+            string question = "";
+            string options = "";
+            Dictionary<string, object> poll = Json.Get(ctx.Body, "poll") as Dictionary<string, object>;
+            if (poll != null)
+            {
+                question = Util.SingleLine(Json.GetString(poll, "question", ""), Polls.MaxQuestionLength);
+                List<object> rawOptions = Json.Get(poll, "options") as List<object>;
+                List<string> clean = new List<string>();
+                if (rawOptions != null)
+                {
+                    for (int i = 0; i < rawOptions.Count && clean.Count < Polls.MaxOptions; i++)
+                    {
+                        string o = Util.SingleLine(rawOptions[i] as string ?? "", Polls.MaxOptionLength);
+                        if (o.Length > 0) clean.Add(o);
+                    }
+                }
+                options = string.Join("\n", clean.ToArray());
+            }
+
+            if (body.Length == 0 && video.Length == 0 && question.Length == 0)
+                throw new ApiException(400, "empty", "Nothing to save yet");
+
+            if (_store.CountDrafts(ctx.User.Id) >= 50 && id <= 0)
+                throw new ApiException(400, "too-many-drafts", "Delete an old draft first");
+
+            Draft d = _store.SaveDraft(id, ctx.User.Id, body, video, visibility,
+                BodyLong(ctx, "wall", 0), BodyLong(ctx, "group", 0), question, options);
+
+            JsonBuilder b = new JsonBuilder(1024);
+            b.BeginObject();
+            b.Prop("id", d.Id);
+            b.Prop("updated", Util.Iso(d.Updated));
+            SendOk(ctx, b);
+        }
+
+        private void HandleDraftDelete(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            if (!_store.DeleteDraft(id, ctx.User.Id)) throw new ApiException(404, "no-draft", "Draft not found");
+            JsonBuilder b = new JsonBuilder(64);
+            b.BeginObject();
             SendOk(ctx, b);
         }
 

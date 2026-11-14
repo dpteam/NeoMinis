@@ -99,7 +99,7 @@ permission, `404` missing, `409` conflict, `413` too large, `429` rate limit,
 | GET | `/api/feed` | `tab=home|global|friends`, `before`, `limit` | `{ tab, posts[], hasMore, next }` |
 | GET | `/api/wall` | `user`, `before`, `limit` | `{ user, posts[], hasMore, next, canPost }` |
 | GET | `/api/post` | `id` | `{ post, comments[] }` |
-| POST | `/api/post` | `body`, `image`, `video`, `poll`, `visibility`, `wall`, `group` | `{ post }` |
+| POST | `/api/post` | `body`, `image`, `video`, `poll`, `scheduledFor`, `visibility`, `wall`, `group` | `{ post }` |
 | POST | `/api/post/delete` | `id` | `{ ok }` |
 | POST | `/api/post/edit` | `id`, `body`, `video`, `visibility`, `imageAction` (`keep|remove|replace`), `image` | `{ post }` |
 | POST | `/api/post/pin` | `id`, `on` | `{ pinned }` |
@@ -319,11 +319,31 @@ remove a member; the owner can never be removed.
 | Method | Path | Body / query | Result |
 | --- | --- | --- | --- |
 | GET | `/api/tag` | `tag`, `before`, `limit` | `{ tag, posts[], hasMore, next }` |
-| GET | `/api/tags` | — | `{ tags[{ tag, count }] }` (top 20 public tags) |
+| GET | `/api/tags` | - | `{ tags[{ tag, count }] }` (top 20 public tags) |
 
 `#hashtags` in a post body are extracted server side; `#tag` matches only the exact
 tag, not a longer word that starts with it. `@username` mentions create a `mention`
 notification for every mentioned user (at most 10 per post/comment, never yourself).
+
+### Drafts and scheduling
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| GET | `/api/drafts` | — | `{ drafts[], scheduled[] }` |
+| POST | `/api/drafts/save` | `id`, `body`, `video`, `visibility`, `wall`, `group`, `poll` | `{ id, updated }` |
+| POST | `/api/drafts/delete` | `id` | `{ ok }` |
+
+A draft keeps the text, video link, visibility, target wall/group and a poll; pictures
+are intentionally not stored so the JSON tables stay small. Saving with an `id`
+updates that draft, without one creates a new draft (max 50 per account). Drafts are
+private to their author.
+
+`scheduledFor` on `POST /api/post` postpones publication: an ISO timestamp in the
+future (at most a year ahead). A scheduled post is invisible to everybody — its
+author included — until the server's scheduler thread publishes it (it also
+publishes anything that came due while the server was down). The author sees
+pending posts in `GET /api/drafts` under `scheduled[]`, and every post carries
+`scheduledFor` (empty once published).
 
 ### Misc
 

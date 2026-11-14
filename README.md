@@ -13,7 +13,7 @@ limits from `config.ini` and ship your own network.
 
 | Area | What you get |
 | --- | --- |
-| **Feed** | home / everything / friends-only tabs, posts with images, video links (YouTube previews, inline mp4/webm) and polls, likes (with a "who liked" list), emoji reactions, comments, edit and pin your own posts, visibility (`public` / `friends` / `private`), delete with cascade |
+| **Feed** | home / everything / friends-only tabs, posts with images, video links (YouTube previews, inline mp4/webm) and polls, likes (with a "who liked" list), emoji reactions, comments, edit and pin your own posts, **drafts and scheduled publication**, visibility (`public` / `friends` / `private`), delete with cascade |
 | **Profiles** | avatar, status, bio, city/country, birthday, gender, website, interests (games / films / music / books), mood, achievements, photo gallery, privacy level, friends wall |
 | **Friends** | requests, accept/decline, remove, block, incoming/outgoing lists |
 | **Messages** | private conversations with live delivery (long poll), typing indicator, read receipts with "read up to", unread divider, replies with quotes, emoji reactions, forwarding, message search, picture/GIF attachments, **photo albums**, **voice messages**, **file attachments**, inline image and video links, emoji picker, Enter to send, per-side delete, thread list with unread counters |

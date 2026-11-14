@@ -30,13 +30,14 @@ namespace Social.Core
         private readonly List<Group> _groups = new List<Group>();
         private readonly List<Report> _reports = new List<Report>();
         private readonly List<Bookmark> _bookmarks = new List<Bookmark>();
+        private readonly List<Draft> _drafts = new List<Draft>();
         private Meta _meta = new Meta();
 
         private readonly Dictionary<long, User> _userById = new Dictionary<long, User>();
         private readonly Dictionary<string, User> _userByName = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
 
         private bool _dirtyUsers, _dirtyPosts, _dirtyComments, _dirtyFriends, _dirtyMessages;
-        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta;
+        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts;
         private bool _readOnly;
         private string _saveError = "";
         private DateTime _lastSave = DateTime.MinValue;
@@ -62,7 +63,8 @@ namespace Social.Core
                 lock (_sync)
                 {
                     return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
-                           _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta;
+                           _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
+                           _dirtyDrafts;
                 }
             }
         }
@@ -107,6 +109,8 @@ namespace Social.Core
                 _reports.AddRange(LoadTable("reports.json", ReportFromDict));
                 _bookmarks.Clear();
                 _bookmarks.AddRange(LoadTable("bookmarks.json", BookmarkFromDict));
+                _drafts.Clear();
+                _drafts.AddRange(LoadTable("drafts.json", DraftFromDict));
 
                 // sort newest first, keeping the hot queries cheap
                 _posts.Sort(delegate(Post a, Post b) { return b.Id.CompareTo(a.Id); });
@@ -117,7 +121,7 @@ namespace Social.Core
                 EnsureCounters();
                 _loaded = true;
                 _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = false;
+                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = false;
 
                 Log.Info("DATA", "loaded users=" + _users.Count + " posts=" + _posts.Count +
                                   " comments=" + _comments.Count + " friends=" + _friends.Count +
@@ -144,6 +148,7 @@ namespace Social.Core
                 m.NextNotificationId = Json.GetLong(d, "nextNotificationId", 1);
                 m.NextGroupId = Json.GetLong(d, "nextGroupId", 1);
                 m.NextReportId = Json.GetLong(d, "nextReportId", 1);
+                m.NextDraftId = Json.GetLong(d, "nextDraftId", 1);
                 m.TotalRegistrations = Json.GetLong(d, "totalRegistrations", 0);
                 m.LastBackup = Json.GetDate(d, "lastBackup", DateTime.MinValue);
                 m.InstallId = Json.GetString(d, "installId", "");
@@ -159,7 +164,7 @@ namespace Social.Core
 
         private void EnsureCounters()
         {
-            long maxUser = 0, maxPost = 0, maxComment = 0, maxMessage = 0, maxNotif = 0, maxGroup = 0, maxReport = 0;
+            long maxUser = 0, maxPost = 0, maxComment = 0, maxMessage = 0, maxNotif = 0, maxGroup = 0, maxReport = 0, maxDraft = 0;
             for (int i = 0; i < _users.Count; i++) if (_users[i].Id > maxUser) maxUser = _users[i].Id;
             for (int i = 0; i < _posts.Count; i++) if (_posts[i].Id > maxPost) maxPost = _posts[i].Id;
             for (int i = 0; i < _comments.Count; i++) if (_comments[i].Id > maxComment) maxComment = _comments[i].Id;
@@ -167,6 +172,7 @@ namespace Social.Core
             for (int i = 0; i < _notifications.Count; i++) if (_notifications[i].Id > maxNotif) maxNotif = _notifications[i].Id;
             for (int i = 0; i < _groups.Count; i++) if (_groups[i].Id > maxGroup) maxGroup = _groups[i].Id;
             for (int i = 0; i < _reports.Count; i++) if (_reports[i].Id > maxReport) maxReport = _reports[i].Id;
+            for (int i = 0; i < _drafts.Count; i++) if (_drafts[i].Id > maxDraft) maxDraft = _drafts[i].Id;
 
             if (_meta.NextUserId <= maxUser) _meta.NextUserId = maxUser + 1;
             if (_meta.NextPostId <= maxPost) _meta.NextPostId = maxPost + 1;
@@ -175,6 +181,7 @@ namespace Social.Core
             if (_meta.NextNotificationId <= maxNotif) _meta.NextNotificationId = maxNotif + 1;
             if (_meta.NextGroupId <= maxGroup) _meta.NextGroupId = maxGroup + 1;
             if (_meta.NextReportId <= maxReport) _meta.NextReportId = maxReport + 1;
+            if (_meta.NextDraftId <= maxDraft) _meta.NextDraftId = maxDraft + 1;
         }
 
         private string ReadJson(string path)
@@ -277,9 +284,10 @@ namespace Social.Core
                     if (force || _dirtyGroups) WriteTable("groups.json", GroupsToArray());
                     if (force || _dirtyReports) WriteTable("reports.json", ReportsToArray());
                     if (force || _dirtyBookmarks) WriteTable("bookmarks.json", BookmarksToArray());
+                    if (force || _dirtyDrafts) WriteTable("drafts.json", DraftsToArray());
 
                     _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = false;
+                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = false;
                     _lastSave = DateTime.UtcNow;
                     _saveError = "";
                     if (_readOnly)
@@ -351,6 +359,7 @@ namespace Social.Core
         private void MarkGroups() { _dirtyGroups = true; }
         private void MarkReports() { _dirtyReports = true; }
         private void MarkBookmarks() { _dirtyBookmarks = true; }
+        private void MarkDrafts() { _dirtyDrafts = true; }
 
         // ============================================================== users
 
@@ -719,6 +728,7 @@ namespace Social.Core
                 {
                     Post p = _posts[i];
                     if (p.Deleted || p.Author != userId || string.IsNullOrEmpty(p.Image)) continue;
+                    if (!IsLive(p)) continue;
                     if (before > 0 && p.Id >= before) continue;
                     result.Add(p);
                 }
@@ -826,6 +836,8 @@ namespace Social.Core
         public bool VisibleTo(long viewerId, Post p)
         {
             if (p == null || p.Deleted) return false;
+            // a scheduled post stays invisible until its time comes
+            if (!IsLive(p)) return false;
             if (p.Visibility == "public") return true;
             if (viewerId == p.Author) return true;
             if (p.Visibility == "private") return false;
@@ -851,6 +863,7 @@ namespace Social.Core
                 {
                     Post p = _posts[i];
                     if (p.Deleted || p.Group != 0) continue;
+                    if (!IsLive(p)) continue;
                     if (before > 0 && p.Id >= before) continue;
 
                     if (tab == "global")
@@ -942,6 +955,7 @@ namespace Social.Core
                 {
                     Post p = _posts[i];
                     if (p.Deleted || p.Group != 0 || p.Visibility != "public") continue;
+                    if (!IsLive(p)) continue;
                     if (p.Body.ToLowerInvariant().IndexOf(q, StringComparison.Ordinal) >= 0) result.Add(p);
                 }
             }
@@ -1782,6 +1796,7 @@ namespace Social.Core
                 {
                     Post p = _posts[i];
                     if (p.Deleted || p.Visibility != "public" || string.IsNullOrEmpty(p.Body)) continue;
+                    if (!IsLive(p)) continue;
                     List<string> tags = Util.Hashtags(p.Body);
                     for (int t = 0; t < tags.Count; t++)
                     {
@@ -1799,6 +1814,138 @@ namespace Social.Core
             });
             if (list.Count > limit) list.RemoveRange(limit, list.Count - limit);
             return list;
+        }
+
+        // ============================================================ drafts
+
+        public List<Draft> DraftsFor(long userId)
+        {
+            List<Draft> list = new List<Draft>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _drafts.Count; i++)
+                    if (_drafts[i].User == userId) list.Add(_drafts[i]);
+            }
+            list.Sort(delegate(Draft a, Draft b) { return b.Updated.CompareTo(a.Updated); });
+            return list;
+        }
+
+        public Draft FindDraft(long id, long userId)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _drafts.Count; i++)
+                    if (_drafts[i].Id == id && _drafts[i].User == userId) return _drafts[i];
+                return null;
+            }
+        }
+
+        /// <summary>Creates a draft, or updates the one with that id when it exists.</summary>
+        public Draft SaveDraft(long id, long userId, string body, string video, string visibility,
+                               long wall, long group, string pollQuestion, string pollOptions)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Draft x = id > 0 ? FindDraft(id, userId) : null;
+                if (x == null)
+                {
+                    x = new Draft();
+                    x.Id = _meta.NextDraftId++;
+                    x.User = userId;
+                    x.Created = DateTime.UtcNow;
+                    _drafts.Add(x);
+                }
+                x.Body = body ?? "";
+                x.Video = video ?? "";
+                x.Visibility = visibility ?? "public";
+                x.Wall = wall;
+                x.Group = group;
+                x.PollQuestion = pollQuestion ?? "";
+                x.PollOptions = pollOptions ?? "";
+                x.Updated = DateTime.UtcNow;
+                MarkDrafts();
+                _dirtyMeta = true;
+                return x;
+            }
+        }
+
+        public bool DeleteDraft(long id, long userId)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _drafts.Count; i++)
+                {
+                    if (_drafts[i].Id != id || _drafts[i].User != userId) continue;
+                    _drafts.RemoveAt(i);
+                    MarkDrafts();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        public int CountDrafts(long userId)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _drafts.Count; i++) if (_drafts[i].User == userId) n++;
+                return n;
+            }
+        }
+
+        // =========================================================== scheduling
+
+        /// <summary>True when the post is not waiting for its publication time.</summary>
+        public static bool IsLive(Post p)
+        {
+            return p != null && (p.ScheduledFor == DateTime.MinValue || p.ScheduledFor <= DateTime.UtcNow);
+        }
+
+        /// <summary>Posts of the user that are waiting for their time.</summary>
+        public List<Post> ScheduledFor(long userId)
+        {
+            List<Post> list = new List<Post>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _posts.Count; i++)
+                {
+                    Post p = _posts[i];
+                    if (p.Deleted || p.Author != userId) continue;
+                    if (p.ScheduledFor == DateTime.MinValue || p.ScheduledFor <= DateTime.UtcNow) continue;
+                    list.Add(p);
+                }
+            }
+            list.Sort(delegate(Post a, Post b) { return a.ScheduledFor.CompareTo(b.ScheduledFor); });
+            return list;
+        }
+
+        /// <summary>
+        /// Publishes everything whose time has come. Returns the ids that went live so
+        /// the caller can log them; safe to call often.
+        /// </summary>
+        public List<long> PublishDue()
+        {
+            List<long> published = new List<long>();
+            lock (_sync)
+            {
+                if (_posts.Count == 0) return published;
+                DateTime now = DateTime.UtcNow;
+                bool changed = false;
+                for (int i = 0; i < _posts.Count; i++)
+                {
+                    Post p = _posts[i];
+                    if (p.Deleted) continue;
+                    if (p.ScheduledFor == DateTime.MinValue || p.ScheduledFor > now) continue;
+                    p.ScheduledFor = DateTime.MinValue;
+                    published.Add(p.Id);
+                    changed = true;
+                }
+                if (changed) MarkPosts();
+            }
+            return published;
         }
 
         // ============================================================ reports
@@ -2230,6 +2377,7 @@ namespace Social.Core
             d["nextNotificationId"] = m.NextNotificationId;
             d["nextGroupId"] = m.NextGroupId;
             d["nextReportId"] = m.NextReportId;
+            d["nextDraftId"] = m.NextDraftId;
             d["totalRegistrations"] = m.TotalRegistrations;
             d["lastBackup"] = m.LastBackup;
             d["installId"] = m.InstallId;
@@ -2330,6 +2478,7 @@ namespace Social.Core
                 d["legacySource"] = p.LegacySource; d["legacyId"] = p.LegacyId;
                 d["pollQuestion"] = p.PollQuestion; d["pollOptions"] = p.PollOptions; d["pollVotes"] = p.PollVotes;
                 d["reactions"] = p.Reactions;
+                if (p.ScheduledFor != DateTime.MinValue) d["scheduledFor"] = p.ScheduledFor;
                 list.Add(d);
             }
             return list;
@@ -2357,6 +2506,7 @@ namespace Social.Core
             p.PollOptions = Json.GetString(d, "pollOptions", "");
             p.PollVotes = Json.GetString(d, "pollVotes", "");
             p.Reactions = Json.GetString(d, "reactions", "");
+            p.ScheduledFor = Json.GetDate(d, "scheduledFor", DateTime.MinValue);
             object likes = Json.Get(d, "likes");
             List<object> arr = likes as List<object>;
             if (arr != null)
@@ -2562,6 +2712,40 @@ namespace Social.Core
             b.Created = Json.GetDate(d, "created", DateTime.UtcNow);
             if (b.User <= 0 || b.Post <= 0) return null;
             return b;
+        }
+
+        private List<object> DraftsToArray()
+        {
+            List<object> list = new List<object>(_drafts.Count);
+            for (int i = 0; i < _drafts.Count; i++)
+            {
+                Draft x = _drafts[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = x.Id; d["user"] = x.User; d["body"] = x.Body; d["video"] = x.Video;
+                d["visibility"] = x.Visibility; d["wall"] = x.Wall; d["group"] = x.Group;
+                d["pollQuestion"] = x.PollQuestion; d["pollOptions"] = x.PollOptions;
+                d["created"] = x.Created; d["updated"] = x.Updated;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static Draft DraftFromDict(Dictionary<string, object> d)
+        {
+            Draft x = new Draft();
+            x.Id = Json.GetLong(d, "id", 0);
+            x.User = Json.GetLong(d, "user", 0);
+            x.Body = Json.GetString(d, "body", "");
+            x.Video = Json.GetString(d, "video", "");
+            x.Visibility = Json.GetString(d, "visibility", "public");
+            x.Wall = Json.GetLong(d, "wall", 0);
+            x.Group = Json.GetLong(d, "group", 0);
+            x.PollQuestion = Json.GetString(d, "pollQuestion", "");
+            x.PollOptions = Json.GetString(d, "pollOptions", "");
+            x.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            x.Updated = Json.GetDate(d, "updated", x.Created);
+            if (x.Id <= 0 || x.User <= 0) return null;
+            return x;
         }
 
         private List<object> ReportsToArray()
