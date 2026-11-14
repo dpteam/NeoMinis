@@ -136,6 +136,35 @@ namespace Social.Web
             b.Prop("canPin", CanPinPost(viewer, p));
             b.Prop("canComment", viewer != null && _store.VisibleTo(viewer.Id, p));
             b.Prop("pinned", p.Pinned);
+            b.Prop("reposts", p.Reposts);
+            if (p.RepostOf > 0)
+            {
+                Post origin = _store.FindPost(p.RepostOf);
+                if (origin != null && !origin.Deleted)
+                {
+                    User originAuthor = _store.FindUser(origin.Author);
+                    b.Name("repostOf").BeginObject()
+                        .Prop("id", origin.Id)
+                        .Prop("body", Util.SingleLine(origin.Body, 600))
+                        .Prop("image", origin.Image)
+                        .Prop("video", origin.Video)
+                        .Prop("created", Util.Iso(origin.Created))
+                        .Prop("deleted", false)
+                        .Prop("likes", origin.Likes.Count)
+                        .Prop("comments", origin.Comments)
+                        .Prop("reposts", origin.Reposts)
+                        .EndObject();
+                    // the embedded card needs the original author's name and avatar
+                    b.Name("repostAuthor").Raw(UserSummary(originAuthor));
+                }
+                else
+                {
+                    b.Name("repostOf").BeginObject()
+                        .Prop("id", p.RepostOf)
+                        .Prop("deleted", true)
+                        .EndObject();
+                }
+            }
             b.Prop("scheduledFor", p.ScheduledFor == DateTime.MinValue ? "" : Util.Iso(p.ScheduledFor));
             b.Prop("bookmarked", viewer != null && _store.IsBookmarked(viewer.Id, p.Id));
             b.Prop("legacySource", p.LegacySource);

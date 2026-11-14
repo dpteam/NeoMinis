@@ -114,7 +114,7 @@ namespace Social.Web
             }
             if (ctx.Body.ContainsKey("notifyMute"))
             {
-                string[] allowed = new string[] { "like", "comment", "friend", "message", "wall", "group", "mention", "badge" };
+                string[] allowed = new string[] { "like", "comment", "friend", "message", "wall", "group", "mention", "badge", "reaction", "repost" };
                 List<string> mute = new List<string>();
                 List<object> raw = Json.Get(ctx.Body, "notifyMute") as List<object>;
                 if (raw != null)
@@ -341,6 +341,8 @@ namespace Social.Web
             Post p = RequirePost(id);
             if (!CanDeletePost(ctx.User, p)) throw new ApiException(403, "forbidden", "You cannot delete this post");
             if (!string.IsNullOrEmpty(p.Image)) _media.Delete(p.Image);
+            // a repost also takes one off the original's counter
+            _store.DetachRepost(id);
             _store.DeletePost(id, false);
             Log.Info("DATA", "post #" + id + " deleted by @" + ctx.User.Username);
             JsonBuilder b = new JsonBuilder(64);
@@ -410,6 +412,40 @@ namespace Social.Web
             SendOk(ctx, b);
         }
 
+        private void HandlePostRepost(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            Post origin = RequirePost(id);
+            if (!CanViewPost(ctx.User, origin))
+                throw new ApiException(403, "private", "This post is not available");
+            if (!Allow(ctx.User.Id, "post", _cfg.PostsPer10Min, 600))
+                throw new ApiException(429, "slow-down", "You are posting too fast");
+
+            // reposting a repost points at the first original, like VK does
+            long target = origin.RepostOf > 0 ? origin.RepostOf : origin.Id;
+            string comment = Util.CleanText(BodyStr(ctx, "body", ""), _cfg.MaxPostLength);
+            string visibility = BodyStr(ctx, "visibility", "public").Trim().ToLowerInvariant();
+            if (visibility != "public" && visibility != "friends" && visibility != "private")
+                visibility = "public";
+
+            Post post = _store.CreatePost(ctx.User.Id, 0, 0, comment, "", visibility, target);
+            ctx.User.LastPostAt = DateTime.UtcNow;
+            _store.MarkUserDirty(ctx.User);
+            _stats.OnPost();
+            GrantBadges(ctx.User);
+
+            Post first = _store.FindPost(target);
+            if (first != null && first.Author != ctx.User.Id)
+                _store.Notify(first.Author, ctx.User.Id, "repost", "shared your post", "#/post/" + post.Id);
+
+            Log.Debug("DATA", "post #" + target + " reposted as #" + post.Id + " by @" + ctx.User.Username);
+
+            JsonBuilder b = new JsonBuilder(1024);
+            b.BeginObject();
+            b.Name("post").Raw(PostView(post, ctx.User));
+            SendOk(ctx, b);
+        }
+
         private void HandlePostReact(ApiCtx ctx)
         {
             long id = BodyLong(ctx, "id", 0);
@@ -420,6 +456,10 @@ namespace Social.Web
             if (!CanViewPost(ctx.User, p)) throw new ApiException(403, "private", "This post is not available");
             Post updated = _store.ReactPost(p.Id, ctx.User.Id, emoji);
             if (updated == null) throw new ApiException(404, "no-post", "Post not found");
+
+            // tell the author, but only when the reaction actually stuck
+            if (p.Author != ctx.User.Id && Reactions.Mine(updated.Reactions, ctx.User.Id) == emoji)
+                _store.Notify(p.Author, ctx.User.Id, "reaction", "reacted " + emoji + " to your post", "#/post/" + p.Id);
 
             JsonBuilder b = new JsonBuilder(1024);
             b.BeginObject();

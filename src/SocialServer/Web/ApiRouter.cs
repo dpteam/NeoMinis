@@ -567,6 +567,7 @@ namespace Social.Web
             if (r == "likes") { RequireMethod(m, "GET"); HandleLikes(ctx); return; }
             if (r == "poll") { RequireMethod(m, "POST"); HandlePollVote(ctx); return; }
             if (r == "reaction") { RequireMethod(m, "POST"); HandlePostReact(ctx); return; }
+            if (r == "post/repost") { RequireMethod(m, "POST"); HandlePostRepost(ctx); return; }
             if (r == "photos") { RequireMethod(m, "GET"); HandlePhotos(ctx); return; }
             if (r == "like") { RequireMethod(m, "POST"); HandleLike(ctx); return; }
             if (r == "bookmarks") { RequireMethod(m, "GET"); HandleBookmarks(ctx); return; }

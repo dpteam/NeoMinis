@@ -1544,3 +1544,43 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
   .draft-row { flex-direction: column; }
   .draft-actions { flex-direction: row; }
 }
+
+/* -------------------------------------------------------------- reposts */
+
+.post-share .reposts-count { font-weight: 700; }
+
+.repost-card {
+  display: block; margin: 0 12px 10px;
+  padding: 8px 10px; border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: var(--radius-sm);
+  background: var(--hover); color: var(--text);
+}
+.repost-card:hover { text-decoration: none; border-color: var(--accent); }
+.repost-card.deleted {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--muted); font-size: 12px; font-style: italic;
+  border-left-color: var(--border);
+}
+.repost-head { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.repost-head .avatar { width: 24px; height: 24px; border-radius: 50%; }
+.repost-head .name { font-weight: 700; font-size: 12px; }
+.repost-head .when { font-size: 10.5px; color: var(--muted); margin-left: auto; }
+.repost-body { font-size: 12.5px; line-height: 1.45; margin-bottom: 5px; overflow-wrap: break-word; }
+.repost-img { display: block; max-height: 300px; max-width: 100%; border-radius: 6px; margin-bottom: 5px; }
+.repost-video { font-size: 11.5px; color: var(--muted); margin-bottom: 5px; }
+.repost-foot { font-size: 10.5px; color: var(--muted); display: flex; gap: 4px; align-items: center; }
+.repost-foot i { font-size: 9px; }
+
+.share-menu {
+  position: fixed; z-index: 60; min-width: 180px;
+  padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--panel); box-shadow: var(--shadow-hi);
+}
+.share-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 9px; border: 0; border-radius: var(--radius-xs);
+  background: transparent; color: var(--text); font: inherit; font-size: 12.5px;
+  text-align: left; cursor: pointer;
+}
+.share-item:hover { background: var(--hover); }
+.share-item i { width: 14px; text-align: center; color: var(--accent); }

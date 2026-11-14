@@ -297,6 +297,7 @@ var App = (function () {
     html += '<aside class="col-right">';
     if (site.motd) html += '<div class="card"><div class="card-h">' + UI.icon('bullhorn') + ' ' + T('motd.title') + '</div><div class="card-b" style="font-size:12px">' + UI.nl2br(site.motd) + '</div></div>';
     html += '<div class="card"><div class="card-h">' + UI.icon('hashtag') + ' ' + T('tags.title') + '</div><div class="card-b" id="tags-box">' + UI.spinner() + '</div></div>';
+    html += '<div class="card"><div class="card-h">' + UI.icon('user-group') + ' ' + T('online.friends') + '</div><div class="online-list" id="friends-online">' + UI.spinner() + '</div></div>';
     html += '<div class="card"><div class="card-h">' + UI.icon('chart-simple') + ' ' + T('stats.title') + '</div><div class="card-b" id="stats-box">' + UI.spinner() + '</div></div>';
     html += '<div class="card"><div class="card-h">' + UI.icon('comments') + ' ' + T('online.title') + '</div><div class="online-list" id="online-list">' + UI.spinner() + '</div></div>';
     html += '<div class="card"><div class="card-f" style="text-align:center;border-top:0">' + UI.esc(site.footer || T('footer.powered')) + '</div></div>';
@@ -309,6 +310,32 @@ var App = (function () {
     loadOnline();
     loadStats();
     loadTags();
+    loadFriendsOnline();
+  }
+
+  /// Right column block: friends who are online right now, like VK's "Friends
+  /// online". Reuses /api/friends so there is no new endpoint to keep in sync.
+  function loadFriendsOnline() {
+    Api.request('GET', '/api/friends', null, function (err, data) {
+      var box = document.getElementById('friends-online');
+      if (!box) return;
+      if (err) { box.innerHTML = '<div class="tiny muted" style="padding:8px">' + T('online.empty') + '</div>'; return; }
+      var list = (data && data.friends) || [];
+      var online = [];
+      for (var i = 0; i < list.length; i++) if (list[i].online) online.push(list[i]);
+      if (!online.length) {
+        box.innerHTML = '<div class="tiny muted" style="padding:8px">' +
+          (list.length ? T('online.noFriendsOnline') : T('friends.empty')) + '</div>';
+        return;
+      }
+      var html = '';
+      for (var j = 0; j < online.length && j < 12; j++) {
+        html += '<a class="online-user" href="#/u/' + encodeURIComponent(online[j].username) + '">' +
+          UI.avatar(online[j], 24) + '<span class="name">' + UI.esc(online[j].displayName) + '</span>' +
+          '<span class="presence"></span></a>';
+      }
+      box.innerHTML = html;
+    });
   }
 
   function tab(href, iconName, label, key, count, badgeId) {
@@ -1178,13 +1205,14 @@ var App = (function () {
       (body ? '<div class="post-body">' + body + '</div>' : '') +
       (img ? '<div class="post-media"><img class="post-img" src="' + UI.attr(img) + '" alt="" loading="lazy"></div>' : '') +
       vid +
+      repostCardHtml(p) +
       poll +
       postReactionsHtml(p) +
       '<div class="post-actions">' +
       '<button type="button" class="pa post-like' + (p.liked ? ' liked' : '') + '" data-id="' + p.id + '">' + UI.icon(p.liked ? 'heart' : 'heart') + ' <span>' + (p.liked ? T('feed.liked') : T('feed.like')) + '</span> <b class="likes-count" data-id="' + p.id + '" title="' + UI.attr(T('feed.likedBy')) + '">' + (p.likes || 0) + '</b></button>' +
       '<button type="button" class="pa post-react" data-id="' + p.id + '" title="' + UI.attr(T('feed.react')) + '">' + UI.icon('face-smile') + ' <span>' + T('feed.react') + '</span></button>' +
       '<button type="button" class="pa post-comment-toggle" data-id="' + p.id + '">' + UI.icon('comment') + ' <span>' + T('feed.comment') + '</span> <b>' + (p.comments || 0) + '</b></button>' +
-      '<button type="button" class="pa post-share" data-id="' + p.id + '">' + UI.icon('share') + ' <span>' + T('feed.share') + '</span></button>' +
+      '<button type="button" class="pa post-share" data-id="' + p.id + '">' + UI.icon('share') + ' <span>' + T('feed.share') + '</span> <b class="reposts-count">' + (p.reposts || 0) + '</b></button>' +
       '<button type="button" class="pa post-bookmark' + (p.bookmarked ? ' active' : '') + '" data-id="' + p.id + '" title="' + UI.attr(T('feed.bookmark')) + '">' + UI.icon('bookmark') + ' <span>' + (p.bookmarked ? T('feed.bookmarked') : T('feed.bookmark')) + '</span></button>' +
       '<a class="pa" href="#/post/' + p.id + '">' + UI.icon('up-right-from-square') + '</a>' +
       '</div>' +
@@ -1193,8 +1221,114 @@ var App = (function () {
     return html;
   }
 
-  // ------------------------------------------------------- post reactions
+  // -------------------------------------------------------------- reposts
 
+  function repostCardHtml(p) {
+    var r = p.repostOf;
+    if (!r) return '';
+    if (r.deleted) {
+      return '<div class="repost-card deleted">' + UI.icon('circle-exclamation') + ' ' + T('feed.repostGone') + '</div>';
+    }
+    var a = p.repostAuthor || {};
+    var img = UI.safeUrl(r.image);
+    var html = '<a class="repost-card" href="#/post/' + r.id + '">' +
+      '<div class="repost-head">' + UI.avatar(a, 24) +
+      '<span class="name">' + UI.esc(a.displayName || a.username || '?') + '</span>' +
+      '<span class="when">' + UI.timeAgo(r.created) + '</span></div>';
+    if (r.body) html += '<div class="repost-body">' + UI.linkify(r.body).replace(/\n/g, '<br>') + '</div>';
+    if (img) html += '<img class="repost-img" src="' + UI.attr(img) + '" alt="" loading="lazy">';
+    else if (r.video) html += '<div class="repost-video">' + UI.icon('video') + ' ' + UI.esc(String(r.video).replace(/^https?:\/\//i, '').slice(0, 60)) + '</div>';
+    html += '<div class="repost-foot">' + UI.icon('heart') + ' ' + (r.likes || 0) +
+      ' · ' + UI.icon('comment') + ' ' + (r.comments || 0) +
+      ' · ' + UI.icon('share') + ' ' + (r.reposts || 0) + '</div>';
+    return html + '</a>';
+  }
+
+  var shareOutside = null;
+
+  function closeShareMenu() {
+    var menu = document.getElementById('share-menu');
+    if (menu && menu.parentNode) menu.parentNode.removeChild(menu);
+    if (shareOutside) {
+      document.removeEventListener('mousedown', shareOutside, true);
+      shareOutside = null;
+    }
+  }
+
+  function openShareMenu(anchor, postId) {
+    closeShareMenu();
+    var menu = document.createElement('div');
+    menu.className = 'share-menu';
+    menu.id = 'share-menu';
+    menu.innerHTML =
+      '<button type="button" class="share-item" data-act="repost">' + UI.icon('retweet') + ' ' + T('feed.repost') + '</button>' +
+      '<button type="button" class="share-item" data-act="link">' + UI.icon('link') + ' ' + T('feed.copyLink') + '</button>';
+    document.body.appendChild(menu);
+
+    var rect = anchor.getBoundingClientRect();
+    var width = menu.offsetWidth || 190;
+    var left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.left));
+    var top = rect.top - (menu.offsetHeight || 70) - 6;
+    if (top < 8) top = rect.bottom + 6;
+    menu.style.left = Math.round(left) + 'px';
+    menu.style.top = Math.round(top) + 'px';
+
+    menu.querySelector('[data-act="repost"]').addEventListener('click', function () {
+      closeShareMenu();
+      openRepostModal(postId);
+    });
+    menu.querySelector('[data-act="link"]').addEventListener('click', function () {
+      closeShareMenu();
+      sharePost(postId);
+    });
+
+    shareOutside = function (e) {
+      if (menu.parentNode && !menu.contains(e.target)) closeShareMenu();
+    };
+    setTimeout(function () {
+      if (shareOutside) document.addEventListener('mousedown', shareOutside, true);
+    }, 0);
+  }
+
+  function openRepostModal(postId) {
+    var body = '<div class="field"><label>' + T('feed.repostComment') + '</label>' +
+      '<textarea class="textarea" id="rp-body" rows="3" maxlength="' + (state.site.maxPostLength || 8000) + '" placeholder="' + UI.attr(T('feed.repostPlaceholder')) + '"></textarea></div>' +
+      '<div class="field"><label>' + T('feed.visibility') + '</label><select class="select" id="rp-vis">' + visibilityOptions('public') + '</select></div>' +
+      '<div style="display:flex;gap:6px;justify-content:flex-end">' +
+      '<button type="button" class="btn btn-ghost" id="rp-cancel">' + T('common.cancel') + '</button>' +
+      '<button type="button" class="btn btn-primary" id="rp-go">' + UI.icon('retweet') + ' ' + T('feed.repost') + '</button>' +
+      '</div>';
+
+    UI.modal({ title: T('feed.repost'), icon: 'retweet', body: body, actions: [] });
+    var boxes = document.querySelectorAll('.modal');
+    var box = boxes[boxes.length - 1];
+    if (!box) return;
+
+    function close() {
+      var scrim = box.parentNode;
+      if (scrim && scrim.parentNode) scrim.parentNode.removeChild(scrim);
+    }
+
+    box.querySelector('#rp-cancel').addEventListener('click', close);
+    box.querySelector('#rp-go').addEventListener('click', function () {
+      var btn = this;
+      btn.disabled = true;
+      Api.request('POST', '/api/post/repost', {
+        id: Number(postId),
+        body: box.querySelector('#rp-body').value,
+        visibility: box.querySelector('#rp-vis').value
+      }, function (err, data) {
+        btn.disabled = false;
+        if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+        close();
+        UI.toast(T('feed.reposted'), 'ok');
+        SoundFX.play('post');
+        if (state.route === 'feed') route();
+      });
+    });
+  }
+
+  // ------------------------------------------------------- post reactions
   var POST_REACTIONS = ['👍', '😂', '😮', '😢', '🔥', '🎉'];
 
   function postReactionsHtml(p) {
@@ -1520,7 +1654,7 @@ var App = (function () {
     for (var k = 0; k < shares.length; k++) {
       if (shares[k].getAttribute('data-bound')) continue;
       shares[k].setAttribute('data-bound', '1');
-      shares[k].addEventListener('click', function () { sharePost(this.getAttribute('data-id')); });
+      shares[k].addEventListener('click', function () { openShareMenu(this, this.getAttribute('data-id')); });
     }
     var marks = (scope || document).querySelectorAll('.post-bookmark');
     for (var bm = 0; bm < marks.length; bm++) {

@@ -103,6 +103,7 @@ permission, `404` missing, `409` conflict, `413` too large, `429` rate limit,
 | POST | `/api/post/delete` | `id` | `{ ok }` |
 | POST | `/api/post/edit` | `id`, `body`, `video`, `visibility`, `imageAction` (`keep|remove|replace`), `image` | `{ post }` |
 | POST | `/api/post/pin` | `id`, `on` | `{ pinned }` |
+| POST | `/api/post/repost` | `id`, `body`, `visibility` | `{ post }` |
 | POST | `/api/like` | `id` | `{ liked, likes }` |
 | GET | `/api/comments` | `post`, `before`, `limit` | `{ comments[], hasMore, next }` |
 | POST | `/api/comment` | `post`, `body` | `{ comment, comments }` |
@@ -137,6 +138,14 @@ with a poll carries `poll: { question, total, myVote, options[{ text, votes, per
 author, the wall owner, the group owner and the staff may pin. Only one post per
 wall/group stays pinned. `canEdit` / `canPin` come back with every post so the SPA
 can render the buttons without guessing.
+
+`POST /api/post/repost` shares a post onto your own wall with an optional comment
+(`body`) and its own `visibility`. The copy carries `repostOf` — a compact snapshot
+of the original (`id`, `body`, `image`, `video`, `created`, `likes`, `comments`,
+`reposts`, `deleted`) plus `repostAuthor` — and the original's `reposts` counter goes
+up by one. Reposting a repost points at the first original, so the counter never
+double-counts. Deleting a repost takes one off the counter; if the original is gone
+the card says so instead of breaking. The author gets a `repost` notification.
 
 ### Profiles, people, search
 

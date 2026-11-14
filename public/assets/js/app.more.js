@@ -1440,7 +1440,7 @@
           var a = item.actor || {};
           var ic = item.type === 'like' ? 'heart' : item.type === 'comment' ? 'comment' : item.type === 'friend' ? 'user-plus'
             : item.type === 'message' ? 'envelope' : item.type === 'admin' ? 'bullhorn' : item.type === 'badge' ? 'trophy'
-            : item.type === 'mention' ? 'at' : 'bell';
+            : item.type === 'mention' ? 'at' : item.type === 'reaction' ? 'face-smile' : item.type === 'repost' ? 'retweet' : 'bell';
           html += '<a class="notif' + (item.read ? '' : ' unread') + '" data-id="' + item.id + '" href="' + UI.attr(item.link || '#/notifications') + '">' +
             UI.avatar(a, 32) + '<div class="notif-main"><span class="who">' + UI.esc(a.displayName || a.username || '?') + '</span> ' + UI.esc(item.text) +
             '<div class="when">' + UI.timeAgo(item.created) + '</div></div><span class="type">' + UI.icon(ic) + '</span></a>';
@@ -1742,7 +1742,8 @@
       var notifTypes = [
         ['like', 'notify.like'], ['comment', 'notify.comment'], ['friend', 'notify.friend'],
         ['message', 'notify.message'], ['wall', 'notify.wall'], ['group', 'notify.group'],
-        ['mention', 'notify.mention'], ['badge', 'notify.badge']
+        ['mention', 'notify.mention'], ['badge', 'notify.badge'],
+        ['reaction', 'notify.reaction'], ['repost', 'notify.repost']
       ];
       var notifHtml = '';
       for (var nti = 0; nti < notifTypes.length; nti++) {

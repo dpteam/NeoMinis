@@ -535,6 +535,34 @@ async function main() {
   const postReactHeart = await alice.call('POST', '/api/reaction', { id: postId, emoji: '❤️' });
   ok('like emoji is not a post reaction', postReactHeart.status === 400, String(postReactHeart.status));
 
+  // ---- reposts
+  const originPost = await alice.call('POST', '/api/post', { body: 'original to repost' });
+  const originId = originPost.data.post.id;
+  const repost = await bob.call('POST', '/api/post/repost', { id: originId, body: 'look at this' });
+  ok('repost created', repost.status === 200 && repost.data.post.repostOf &&
+    repost.data.post.repostOf.id === originId && repost.data.post.body === 'look at this',
+    String(repost.status));
+  const repostId = repost.data && repost.data.post.id;
+  const originAfter = await alice.call('GET', '/api/post?id=' + originId);
+  ok('origin counts the repost', originAfter.data.post.reposts === 1, String(originAfter.data.post.reposts));
+  const repostTwice = await bob.call('POST', '/api/post/repost', { id: repostId });
+  ok('reposting a repost points at the original',
+    repostTwice.data.post.repostOf.id === originId, String(repostTwice.data.post.repostOf.id));
+  const originAfter2 = await alice.call('GET', '/api/post?id=' + originId);
+  ok('nested repost bumps the same counter', originAfter2.data.post.reposts === 2, '');
+  const reactionsBefore = await alice.call('GET', '/api/notifications?limit=5');
+  const reactNotify = await bob.call('POST', '/api/reaction', { id: originId, emoji: '🎉' });
+  ok('reaction accepted', reactNotify.status === 200, String(reactNotify.status));
+  const notifAfter = await alice.call('GET', '/api/notifications?limit=5');
+  ok('repost notifies the author',
+    notifAfter.data.notifications.some(n => n.type === 'repost'), '');
+  ok('reaction notifies the author',
+    notifAfter.data.notifications.some(n => n.type === 'reaction'), '');
+  const deleteRepost = await bob.call('POST', '/api/post/delete', { id: repostId });
+  const originAfter3 = await alice.call('GET', '/api/post?id=' + originId);
+  ok('deleting a repost lowers the counter', deleteRepost.status === 200 && originAfter3.data.post.reposts === 1,
+    String(originAfter3.data.post.reposts));
+
   await bob.call('POST', '/api/messages/typing', { to: alice.user.id });
   const typingWait = await alice.call('GET', '/api/messages/wait?with=' + bob.user.id + '&after=0&timeout=3');
   ok('typing is visible', typingWait.status === 200 && typingWait.data.typing === true, JSON.stringify(typingWait.data && typingWait.data.typing));

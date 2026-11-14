@@ -88,6 +88,11 @@ namespace Social.Core
 
         // future publication time; MinValue = published right away
         public DateTime ScheduledFor = DateTime.MinValue;
+
+        // repost: id of the original post (0 = original) and how many times this
+        // post has been shared further
+        public long RepostOf;
+        public int Reposts;
     }
 
     public sealed class Bookmark

@@ -579,6 +579,11 @@ namespace Social.Core
 
         public Post CreatePost(long author, long wall, long group, string body, string image, string visibility)
         {
+            return CreatePost(author, wall, group, body, image, visibility, 0);
+        }
+
+        public Post CreatePost(long author, long wall, long group, string body, string image, string visibility, long repostOf)
+        {
             lock (_sync)
             {
                 EnsureWritable();
@@ -590,10 +595,32 @@ namespace Social.Core
                 p.Body = body ?? "";
                 p.Image = image ?? "";
                 p.Visibility = visibility ?? "public";
+                p.RepostOf = repostOf;
                 p.Created = DateTime.UtcNow;
                 _posts.Insert(0, p);
+                if (repostOf > 0)
+                {
+                    Post origin = FindPost(repostOf);
+                    if (origin != null && !origin.Deleted) origin.Reposts++;
+                }
                 MarkPosts();
                 return p;
+            }
+        }
+
+        /// <summary>
+        /// Removes a repost and takes one off the original's counter. Returns the
+        /// original id (0 when the post was not a repost) so callers can react.
+        /// </summary>
+        public long DetachRepost(long id)
+        {
+            lock (_sync)
+            {
+                Post p = FindPost(id);
+                if (p == null || p.RepostOf <= 0) return 0;
+                Post origin = FindPost(p.RepostOf);
+                if (origin != null && origin.Reposts > 0) origin.Reposts--;
+                return p.RepostOf;
             }
         }
 
@@ -2479,6 +2506,8 @@ namespace Social.Core
                 d["pollQuestion"] = p.PollQuestion; d["pollOptions"] = p.PollOptions; d["pollVotes"] = p.PollVotes;
                 d["reactions"] = p.Reactions;
                 if (p.ScheduledFor != DateTime.MinValue) d["scheduledFor"] = p.ScheduledFor;
+                if (p.RepostOf > 0) d["repostOf"] = p.RepostOf;
+                if (p.Reposts > 0) d["reposts"] = p.Reposts;
                 list.Add(d);
             }
             return list;
@@ -2507,6 +2536,8 @@ namespace Social.Core
             p.PollVotes = Json.GetString(d, "pollVotes", "");
             p.Reactions = Json.GetString(d, "reactions", "");
             p.ScheduledFor = Json.GetDate(d, "scheduledFor", DateTime.MinValue);
+            p.RepostOf = Json.GetLong(d, "repostOf", 0);
+            p.Reposts = Json.GetInt(d, "reposts", 0);
             object likes = Json.Get(d, "likes");
             List<object> arr = likes as List<object>;
             if (arr != null)
