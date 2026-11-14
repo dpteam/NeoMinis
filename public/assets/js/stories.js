@@ -246,9 +246,39 @@ var StoriesUI = (function () {
         media.innerHTML = '<video id="story-video" src="' + UI.attr(src) + '" playsinline autoplay></video>';
         var v = byId('story-video');
         if (v) {
-          v.addEventListener('loadedmetadata', function () { armTimer(Math.min(30, v.duration || 15)); });
+          // A clip's bar must follow the clip's own clock, not a fixed CSS
+          // animation: a 20-second video used to fill the 7-second default bar
+          // and then sit at 100% while the clip kept playing.
+          freezeBar(0);
+          v.addEventListener('timeupdate', function () {
+            var dur = v.duration;
+            if (dur > 0 && isFinite(dur)) freezeBar(v.currentTime / dur);
+            // keep the watchdog alive: only a stall or a missing "ended" fires it
+            armWatchdog();
+          });
           v.addEventListener('ended', function () { step(1); });
-          v.play().catch(function () { armTimer(15); });
+          // Some screen recordings carry no duration at all (Infinity); seeking
+          // far ahead makes the browser scan the file and report the real one.
+          v.addEventListener('loadedmetadata', function () {
+            if (v.duration !== Infinity) return;
+            var once = function () {
+              v.removeEventListener('timeupdate', once);
+              try { v.currentTime = 0; } catch (e) { }
+              var again = v.play();
+              if (again && again.catch) again.catch(function () { });
+            };
+            v.addEventListener('timeupdate', once);
+            try { v.currentTime = 1e101; } catch (e) { }
+          });
+          var started = v.play();
+          if (started && started.catch) {
+            started.catch(function () {
+              // autoplay refused: fall back to a fixed bar and a fixed dwell
+              armTimer(15);
+            });
+          }
+          // generous first wait: a slow clip may take a while to start
+          armWatchdog(15000);
         }
       } else if (src) {
         media.innerHTML = '<img src="' + UI.attr(src) + '" alt="">';
@@ -310,9 +340,52 @@ var StoriesUI = (function () {
     return 0;
   }
 
+  /// <summary>The fill of the segment being watched.</summary>
+  function barEl() {
+    return document.querySelector('#story-progress .story-seg.now i');
+  }
+
+  /// <summary>
+  /// Runs the bar over the given number of seconds. Used for photos and for the
+  /// autoplay fallback, where there is no media clock to follow.
+  /// </summary>
+  function animateBar(seconds) {
+    var i = barEl();
+    if (!i) return;
+    i.style.animation = 'none';
+    i.style.width = '0%';
+    void i.offsetWidth; // restart the animation even if it already ran
+    i.style.animation = 'story-fill ' + Math.max(2, seconds) + 's linear forwards';
+  }
+
+  /// <summary>
+  /// Pins the bar at a ratio between 0 and 1 and stops the animation. A clip
+  /// calls this on every timeupdate, so the bar is exactly as far along as the
+  /// clip itself, whatever its length, buffering included.
+  /// </summary>
+  function freezeBar(ratio) {
+    var i = barEl();
+    if (!i) return;
+    if (!isFinite(ratio) || ratio < 0) ratio = 0;
+    if (ratio > 1) ratio = 1;
+    i.style.animation = 'none';
+    i.style.width = (ratio * 100).toFixed(2) + '%';
+  }
+
+  /// <summary>
+  /// Safety net for a clip: if no timeupdate arrives for a while the video has
+  /// stalled or ended without firing "ended", so move on. Every timeupdate
+  /// pushes it back, which is why a long clip is never cut short.
+  /// </summary>
+  function armWatchdog(ms) {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(function () { step(1); }, ms || 5000);
+  }
+
   function armTimer(seconds) {
     if (timer) clearTimeout(timer);
     openedAt = Date.now();
+    animateBar(seconds);
     timer = setTimeout(function () { step(1); }, Math.max(2, seconds) * 1000);
   }
 
