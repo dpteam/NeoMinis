@@ -250,14 +250,21 @@ namespace Social.Web
                 Json.Get(ctx.Body, "poll") == null)
                 throw new ApiException(400, "empty", "Write something first");
 
+            Group postGroup = null;
             if (groupId > 0)
             {
                 Group g = _store.FindGroup(groupId);
                 if (g == null) throw new ApiException(404, "no-group", "Group not found");
                 if (!g.Members.Contains(ctx.User.Id) && g.Owner != ctx.User.Id)
-                    throw new ApiException(403, "not-member", "Join the group first");
+                    throw new ApiException(403, "not-member", "Join the community first");
+                if (g.PostPolicy == "editors" && !SocialStore.CanModerate(g, ctx.User))
+                    throw new ApiException(403, "editors-only", "Only the community editors post here");
                 wallId = 0;
-                visibility = g.Visibility == "private" ? "private" : "public";
+                // The community gate decides who may read the wall (see VisibleTo),
+                // so the post itself is stored as public; otherwise a member's post
+                // in a closed community would look "private" to everybody.
+                visibility = "public";
+                postGroup = g;
             }
             else if (wallId > 0)
             {
@@ -321,11 +328,21 @@ namespace Social.Web
 
             if (wallId > 0 && wallId != ctx.User.Id)
                 _store.Notify(wallId, ctx.User.Id, "wall", "posted on your wall", "#/post/" + post.Id);
-            if (groupId > 0)
+            if (postGroup != null)
             {
-                Group g = _store.FindGroup(groupId);
-                if (g != null && g.Owner != ctx.User.Id)
-                    _store.Notify(g.Owner, ctx.User.Id, "group", "posted in " + g.Name, "#/group/" + g.Id);
+                if (postGroup.PostPolicy == "review" && !SocialStore.CanModerate(postGroup, ctx.User))
+                {
+                    // the post waits for an editor; nobody sees it yet
+                    post.Pending = true;
+                    _store.MarkPostDirty(post);
+                    NotifyGroupModerators(postGroup, ctx.User, "sent a post for review", "#/group/" + postGroup.Id);
+                    Log.Info("GROUP", "post #" + post.Id + " queued in " + postGroup.Name);
+                }
+                else if (postGroup.Owner != ctx.User.Id)
+                {
+                    _store.Notify(postGroup.Owner, ctx.User.Id, "group", "posted in " + postGroup.Name,
+                                  "#/group/" + postGroup.Id);
+                }
             }
             GrantBadges(ctx.User);
             NotifyMentions(ctx.User, text, "#/post/" + post.Id);
@@ -1903,7 +1920,20 @@ namespace Social.Web
             Group g = _store.FindGroup(id);
             if (g == null) throw new ApiException(404, "no-group", "Group not found");
             bool member = g.Members.Contains(ctx.User.Id) || g.Owner == ctx.User.Id;
-            if (g.Visibility == "private" && !member) throw new ApiException(403, "private", "This group is private");
+
+            // A closed community is not a black box: outsiders get a teaser with
+            // the name, the description and a "ask to join" button, but no posts.
+            if (g.Visibility == "private" && !member)
+            {
+                JsonBuilder teaser = new JsonBuilder(1024);
+                teaser.BeginObject();
+                teaser.Name("group").Raw(GroupView(g, ctx.User));
+                teaser.Prop("limited", true);
+                teaser.Name("posts").BeginArray().EndArray();
+                teaser.Name("members").BeginArray().EndArray();
+                SendOk(ctx, teaser);
+                return;
+            }
 
             List<Post> posts = _store.GroupFeed(g.Id, ctx.User.Id, 0, 10);
             List<User> members = new List<User>();
@@ -1920,6 +1950,18 @@ namespace Social.Web
             b.Name("members").BeginArray();
             for (int i = 0; i < members.Count; i++) b.Raw(UserView(members[i], ctx.User, false));
             b.EndArray();
+            // the editor list and the queue are for moderators only
+            if (SocialStore.CanModerate(g, ctx.User))
+            {
+                b.Name("editors").BeginArray();
+                for (int i = 0; i < g.Editors.Count; i++)
+                {
+                    User u = _store.FindUser(g.Editors[i]);
+                    if (u != null) b.Raw(UserSummary(u));
+                }
+                b.EndArray();
+            }
+            b.Prop("limited", false);
             SendOk(ctx, b);
         }
 
@@ -1928,13 +1970,30 @@ namespace Social.Web
             long id = BodyLong(ctx, "id", 0);
             Group g = _store.FindGroup(id);
             if (g == null) throw new ApiException(404, "no-group", "Group not found");
-            if (join) _store.JoinGroup(id, ctx.User.Id);
+
+            bool requested = false;
+            if (join)
+            {
+                // a closed community needs an editor to let you in
+                if (g.Visibility == "private" && g.Owner != ctx.User.Id && !g.Members.Contains(ctx.User.Id))
+                {
+                    _store.RequestJoin(g.Id, ctx.User.Id);
+                    NotifyGroupModerators(g, ctx.User, "wants to join " + g.Name, "#/group/" + g.Id);
+                    requested = true;
+                    Log.Info("GROUP", "@" + ctx.User.Username + " asked to join " + g.Name);
+                }
+                else
+                {
+                    _store.JoinGroup(id, ctx.User.Id);
+                }
+            }
             else if (!_store.LeaveGroup(id, ctx.User.Id))
-                throw new ApiException(400, "owner", "The owner cannot leave the group");
+                throw new ApiException(400, "owner", "The owner cannot leave the community");
 
             JsonBuilder b = new JsonBuilder(512);
             b.BeginObject();
             b.Name("group").Raw(GroupView(g, ctx.User));
+            b.Prop("requested", requested);
             SendOk(ctx, b);
         }
 
@@ -1952,6 +2011,8 @@ namespace Social.Web
 
             _store.UpdateGroup(g.Id, name, BodyStr(ctx, "description", g.Description),
                 BodyStr(ctx, "visibility", g.Visibility));
+            if (ctx.Body.ContainsKey("postPolicy"))
+                _store.SetGroupPolicy(g.Id, BodyStr(ctx, "postPolicy", g.PostPolicy));
             Log.Info("DATA", "group #" + g.Id + " edited by @" + ctx.User.Username);
 
             JsonBuilder b = new JsonBuilder(512);
@@ -1987,9 +2048,11 @@ namespace Social.Web
             long userId = BodyLong(ctx, "user", 0);
             Group g = _store.FindGroup(id);
             if (g == null) throw new ApiException(404, "no-group", "Group not found");
-            if (g.Owner != ctx.User.Id && !ctx.User.IsAdmin)
-                throw new ApiException(403, "not-owner", "Only the owner can remove members");
+            RequireModerator(g, ctx.User);
             if (userId == g.Owner) throw new ApiException(400, "owner", "The owner cannot be removed");
+            // an editor can remove members, but not another editor
+            if (g.Editors.Contains(userId) && g.Owner != ctx.User.Id && !ctx.User.IsAdmin)
+                throw new ApiException(403, "owner-only", "Only the owner can remove an editor");
             if (!_store.RemoveGroupMember(g.Id, userId))
                 throw new ApiException(400, "not-member", "That user is not a member");
 

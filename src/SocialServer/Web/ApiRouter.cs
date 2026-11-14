@@ -710,6 +710,12 @@ namespace Social.Web
             if (r == "group/edit") { RequireMethod(m, "POST"); HandleGroupEdit(ctx); return; }
             if (r == "group/avatar") { RequireMethod(m, "POST"); HandleGroupAvatar(ctx); return; }
             if (r == "group/kick") { RequireMethod(m, "POST"); HandleGroupKick(ctx); return; }
+            if (r == "group/role") { RequireMethod(m, "POST"); HandleGroupRole(ctx); return; }
+            if (r == "group/request") { RequireMethod(m, "POST"); HandleGroupRequest(ctx); return; }
+            if (r == "group/requests") { RequireMethod(m, "GET"); HandleGroupRequests(ctx); return; }
+            if (r == "group/answer") { RequireMethod(m, "POST"); HandleGroupAnswer(ctx); return; }
+            if (r == "group/pending") { RequireMethod(m, "GET"); HandleGroupPending(ctx); return; }
+            if (r == "group/review") { RequireMethod(m, "POST"); HandleGroupReview(ctx); return; }
             if (r == "tag") { RequireMethod(m, "GET"); HandleTag(ctx); return; }
             if (r == "tags") { RequireMethod(m, "GET"); HandleTags(ctx); return; }
             if (r == "report") { RequireMethod(m, "POST"); HandleReport(ctx); return; }

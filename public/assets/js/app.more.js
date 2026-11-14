@@ -1237,42 +1237,107 @@
     Api.request('GET', '/api/group?id=' + encodeURIComponent(id), null, function (err, data) {
       if (err) { main.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
       var g = data.group;
+      var roleLabel = g.role === 'owner' ? T('groups.roleOwner')
+        : g.role === 'editor' ? T('groups.roleEditor')
+        : g.role === 'member' ? T('groups.roleMember') : '';
       var html = '<div class="card"><div class="group-head">' +
         UI.avatar({ id: g.id, displayName: g.name, avatar: g.avatar }, 72, false) +
-        '<div style="flex:1;min-width:0"><h1>' + UI.esc(g.name) + '</h1><div class="desc">' + UI.esc(g.description || '') + '</div>' +
-        '<div class="tiny" style="opacity:.8;margin-top:4px">' + T('groups.members') + ': ' + g.members + ' · ' + (g.visibility === 'private' ? T('groups.private') : T('groups.public')) + '</div></div>' +
+        '<div style="flex:1;min-width:0"><h1>' + UI.esc(g.name) + ' ' +
+        (roleLabel ? '<span class="badge role-' + g.role + '">' + UI.esc(roleLabel) + '</span>' : '') + '</h1>' +
+        '<div class="desc">' + UI.esc(g.description || '') + '</div>' +
+        '<div class="tiny" style="opacity:.8;margin-top:4px">' + T('groups.members') + ': ' + g.members +
+        ' · ' + (g.visibility === 'private' ? T('groups.private') : T('groups.public')) +
+        (g.editors ? ' · ' + T('groups.editors') + ': ' + g.editors : '') + '</div></div>' +
         (g.canManage ? '<button class="btn" id="group-edit">' + UI.icon('pen') + ' ' + T('groups.edit') + '</button>' : '') +
-        '<button class="btn" id="group-toggle">' + (g.isMember ? (g.isOwner ? UI.icon('crown') + ' ' + T('groups.owner') : UI.icon('right-from-bracket') + ' ' + T('groups.leave')) : UI.icon('plus') + ' ' + T('groups.join')) + '</button>' +
+        (data.limited && !g.isMember ? '' :
+        '<button class="btn" id="group-toggle">' + (g.isMember ? (g.isOwner ? UI.icon('crown') + ' ' + T('groups.owner') : UI.icon('right-from-bracket') + ' ' + T('groups.leave'))
+          : (g.requested ? UI.icon('clock') + ' ' + T('groups.requested') : UI.icon('plus') + ' ' + T('groups.join'))) + '</button>') +
         '</div><div class="card-b">';
-      html += '<div class="feed-tabs"><a class="tab2 active" href="#/group/' + g.id + '">' + T('groups.posts') + '</a></div>';
-      if (g.isMember) html += App.composerHtml(0);
-      html += '<div id="group-posts"></div><div id="group-more"></div>';
+
+      // tabs: wall, the moderation queue and join requests (moderators only)
+      var tab = App.qs('tab') || 'posts';
+      if (!g.canModerate && (tab === 'queue' || tab === 'requests')) tab = 'posts';
+      html += '<div class="feed-tabs">' +
+        '<a class="tab2' + (tab === 'posts' ? ' active' : '') + '" href="#/group/' + g.id + '">' + T('groups.posts') + '</a>' +
+        (g.canModerate ? '<a class="tab2' + (tab === 'queue' ? ' active' : '') + '" href="#/group/' + g.id + '?tab=queue">' +
+          T('groups.queue') + (g.pending ? ' <span class="count">' + g.pending + '</span>' : '') + '</a>' : '') +
+        (g.canModerate ? '<a class="tab2' + (tab === 'requests' ? ' active' : '') + '" href="#/group/' + g.id + '?tab=requests">' +
+          T('groups.requests') + (g.requests ? ' <span class="count">' + g.requests + '</span>' : '') + '</a>' : '') +
+        '</div>';
+
+      if (tab === 'posts') {
+        if (data.limited) {
+          html += '<div class="card-b"><div class="alert info">' + T('groups.closedHint') + '</div>' +
+            (g.requested
+              ? '<div class="tiny muted">' + T('groups.requestPending') + '</div>'
+              : '<button class="btn btn-primary" id="group-ask">' + UI.icon('user-clock') + ' ' +
+                T('groups.askJoin') + '</button>') + '</div>';
+        } else {
+          if (g.canPost) html += App.composerHtml(0);
+          else if (g.isMember) html += '<div class="alert info">' + T('groups.editorsOnly') + '</div>';
+          html += '<div id="group-posts"></div><div id="group-more"></div>';
+        }
+      } else {
+        html += '<div id="group-panel"><div class="center" style="padding:16px">' + UI.spinner() + '</div></div>';
+      }
       html += '</div></div>';
 
-      // members: owners get a "remove" button on everyone but themselves
+      // members: moderators get role buttons, the owner gets a "remove" on everyone else
       var members = data.members || [];
       var ownerId = (g.owner && g.owner.id) || 0;
+      var editorIds = {};
+      var editors = data.editors || [];
+      for (var e = 0; e < editors.length; e++) editorIds[editors[e].id] = true;
       html += '<div class="card"><div class="card-h">' + UI.icon('users') + ' ' + T('groups.members') +
         '<span class="right tiny muted">' + g.members + '</span></div><div class="card-b"><div class="user-grid">';
       for (var i = 0; i < members.length; i++) {
         var m = members[i];
-        if (g.canManage && Number(m.id) !== Number(ownerId)) {
+        var isOwner = Number(m.id) === Number(ownerId);
+        var isEditor = !!editorIds[m.id];
+        var tag = isOwner ? '<span class="badge role-owner">' + T('groups.roleOwner') + '</span>'
+          : isEditor ? '<span class="badge role-editor">' + T('groups.roleEditor') + '</span>' : '';
+        if (g.canModerate && !isOwner) {
+          var canDemote = isOwner || !isEditor || g.isOwner || (state.user && state.user.role === 'admin');
           html += '<div class="user-card"><a href="#/u/' + encodeURIComponent(m.username) + '">' + UI.avatar(m, 52) + '</a>' +
-            '<a class="name" href="#/u/' + encodeURIComponent(m.username) + '">' + UI.esc(m.displayName) + '</a>' +
+            '<a class="name" href="#/u/' + encodeURIComponent(m.username) + '">' + UI.esc(m.displayName) + ' ' + tag + '</a>' +
             '<div class="sub">' + (m.online ? T('profile.online') : '@' + UI.esc(m.username)) + '</div>' +
-            '<button class="btn btn-sm btn-danger g-kick" data-id="' + m.id + '">' + T('groups.kick') + '</button></div>';
+            '<div class="member-actions">' +
+            (isEditor
+              ? (canDemote ? '<button class="btn btn-xs g-role" data-id="' + m.id + '" data-role="member">' +
+                  UI.icon('user-minus') + ' ' + T('groups.demote') + '</button>' : '')
+              : '<button class="btn btn-xs g-role" data-id="' + m.id + '" data-role="editor">' +
+                UI.icon('user-shield') + ' ' + T('groups.promote') + '</button>') +
+            (g.isOwner || (state.user && state.user.role === 'admin') || !isEditor
+              ? '<button class="btn btn-xs btn-danger g-kick" data-id="' + m.id + '">' + T('groups.kick') + '</button>' : '') +
+            '</div></div>';
         } else {
-          html += App.userCard(m);
+          html += '<div class="user-card"><a href="#/u/' + encodeURIComponent(m.username) + '">' + UI.avatar(m, 52) + '</a>' +
+            '<a class="name" href="#/u/' + encodeURIComponent(m.username) + '">' + UI.esc(m.displayName) + ' ' + tag + '</a>' +
+            '<div class="sub">' + (m.online ? T('profile.online') : '@' + UI.esc(m.username)) + '</div></div>';
         }
       }
       html += '</div></div></div>';
       main.innerHTML = html;
-      if (g.isMember) {
+      if (g.isMember && g.canPost) {
         // group posts go through /api/post with the group id
         App.bindComposer(0, g.id);
       }
       var ge = document.getElementById('group-edit');
       if (ge) ge.addEventListener('click', function () { groupEditModal(g); });
+
+      var roles = main.querySelectorAll('.g-role');
+      for (var rl = 0; rl < roles.length; rl++) {
+        roles[rl].addEventListener('click', function () {
+          var uid = Number(this.getAttribute('data-id'));
+          var role = this.getAttribute('data-role');
+          Api.request('POST', '/api/group/role', { id: g.id, user: uid, role: role }, function (e2) {
+            if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+            UI.toast(role === 'editor' ? T('groups.promoted') : T('groups.demoted'), 'ok');
+            SoundFX.play('success');
+            App.route();
+          });
+        });
+      }
 
       var kicks = main.querySelectorAll('.g-kick');
       for (var k = 0; k < kicks.length; k++) {
@@ -1290,18 +1355,140 @@
       }
       var tg = document.getElementById('group-toggle');
       if (tg) tg.addEventListener('click', function () {
+        if (!g.isMember && g.requested) {
+          // withdrawing a pending request
+          Api.request('POST', '/api/group/request', { id: g.id, cancel: true }, function (err2) {
+            if (err2) { UI.toast(Api.errorText(err2), 'err'); return; }
+            UI.toast(T('groups.requestCancelled'), 'ok');
+            App.route();
+          });
+          return;
+        }
         var action = g.isMember ? 'leave' : 'join';
         Api.request('POST', '/api/group/' + action, { id: g.id }, function (err2, data2) {
           if (err2) { UI.toast(Api.errorText(err2), 'err'); return; }
-          UI.toast(action === 'join' ? T('groups.joined') : T('groups.left'), 'ok');
+          if (data2 && data2.requested) UI.toast(T('groups.requestSent'), 'ok');
+          else UI.toast(action === 'join' ? T('groups.joined') : T('groups.left'), 'ok');
           SoundFX.play('success');
           App.route();
         });
       });
-      renderGroupPosts(g, data.posts || []);
+
+      if (tab === 'posts') {
+        if (!data.limited) renderGroupPosts(g, data.posts || []);
+      }
+      else if (tab === 'queue') renderGroupQueue(g);
+      else renderGroupRequests(g);
+
+      var ask = document.getElementById('group-ask');
+      if (ask) ask.addEventListener('click', function () {
+        ask.disabled = true;
+        Api.request('POST', '/api/group/request', { id: g.id }, function (e2) {
+          if (e2) { ask.disabled = false; UI.toast(Api.errorText(e2), 'err'); return; }
+          UI.toast(T('groups.requestSent'), 'ok');
+          SoundFX.play('success');
+          App.route();
+        });
+      });
+
       App.bindFriendActions(main);
     });
   };
+
+  // ------------------------------------------------- moderation queue
+
+  function renderGroupQueue(g) {
+    var box = document.getElementById('group-panel');
+    if (!box) return;
+    Api.request('GET', '/api/group/pending?id=' + g.id, null, function (err, data) {
+      if (!box.parentNode) return;
+      if (err) { box.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+      var posts = (data && data.posts) || [];
+      if (!posts.length) {
+        box.innerHTML = UI.empty('check', T('groups.queueEmpty'), T('groups.queueEmptyHint'));
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < posts.length; i++) {
+        var p = posts[i];
+        var author = p.author || {};
+        html += '<div class="queue-item" data-post="' + p.id + '">' +
+          '<div class="queue-head">' + UI.avatar(author, 32) +
+          '<a href="#/profile/' + author.id + '">' + UI.esc(author.displayName || author.username || '?') + '</a>' +
+          '<span class="tiny muted">' + UI.timeAgo(p.created) + '</span></div>' +
+          '<div class="queue-body">' + (p.body ? UI.nl2br(UI.esc(p.body)) : '<span class="muted">—</span>') + '</div>' +
+          (p.image ? '<img class="queue-image" src="' + UI.attr(UI.safeUrl(p.image)) + '" alt="">' : '') +
+          '<div class="queue-actions">' +
+          '<button class="btn btn-sm btn-ok q-review" data-post="' + p.id + '" data-approve="1">' +
+          UI.icon('check') + ' ' + T('groups.approve') + '</button>' +
+          '<button class="btn btn-sm btn-danger q-review" data-post="' + p.id + '" data-approve="0">' +
+          UI.icon('xmark') + ' ' + T('groups.reject') + '</button>' +
+          '</div></div>';
+      }
+      box.innerHTML = html;
+      var buttons = box.querySelectorAll('.q-review');
+      for (var b = 0; b < buttons.length; b++) {
+        buttons[b].addEventListener('click', function () {
+          var btn = this;
+          var postId = Number(btn.getAttribute('data-post'));
+          var approve = btn.getAttribute('data-approve') === '1';
+          btn.disabled = true;
+          Api.request('POST', '/api/group/review', {
+            id: g.id, post: postId, approve: approve
+          }, function (e2) {
+            if (e2) { btn.disabled = false; UI.toast(Api.errorText(e2), 'err'); return; }
+            UI.toast(approve ? T('groups.approved') : T('groups.rejected'), 'ok');
+            SoundFX.play(approve ? 'success' : 'error');
+            App.route();
+          });
+        });
+      }
+    });
+  }
+
+  function renderGroupRequests(g) {
+    var box = document.getElementById('group-panel');
+    if (!box) return;
+    Api.request('GET', '/api/group/requests?id=' + g.id, null, function (err, data) {
+      if (!box.parentNode) return;
+      if (err) { box.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+      var list = (data && data.requests) || [];
+      if (!list.length) {
+        box.innerHTML = UI.empty('user-clock', T('groups.noRequests'), T('groups.noRequestsHint'));
+        return;
+      }
+      var html = '<div class="user-grid">';
+      for (var i = 0; i < list.length; i++) {
+        var u = list[i].account || {};
+        html += '<div class="user-card"><a href="#/u/' + encodeURIComponent(u.username) + '">' + UI.avatar(u, 52) + '</a>' +
+          '<a class="name" href="#/u/' + encodeURIComponent(u.username) + '">' + UI.esc(u.displayName) + '</a>' +
+          '<div class="sub">@' + UI.esc(u.username) + '</div>' +
+          '<div class="member-actions">' +
+          '<button class="btn btn-xs btn-ok g-answer" data-id="' + u.id + '" data-accept="1">' +
+          UI.icon('check') + ' ' + T('groups.accept') + '</button>' +
+          '<button class="btn btn-xs btn-danger g-answer" data-id="' + u.id + '" data-accept="0">' +
+          UI.icon('xmark') + '</button>' +
+          '</div></div>';
+      }
+      html += '</div>';
+      box.innerHTML = html;
+      var buttons = box.querySelectorAll('.g-answer');
+      for (var b = 0; b < buttons.length; b++) {
+        buttons[b].addEventListener('click', function () {
+          var btn = this;
+          btn.disabled = true;
+          Api.request('POST', '/api/group/answer', {
+            id: g.id, user: Number(btn.getAttribute('data-id')),
+            accept: btn.getAttribute('data-accept') === '1'
+          }, function (e2) {
+            if (e2) { btn.disabled = false; UI.toast(Api.errorText(e2), 'err'); return; }
+            SoundFX.play('success');
+            App.route();
+          });
+        });
+      }
+    });
+  }
 
   function groupEditModal(g) {
     var avatar = UI.safeUrl(g.avatar);
@@ -1312,7 +1499,12 @@
       '<div class="field"><label>' + T('groups.visibility') + '</label><select class="select" id="ge-vis">' +
       '<option value="public"' + (g.visibility === 'public' ? ' selected' : '') + '>' + T('groups.public') + '</option>' +
       '<option value="private"' + (g.visibility === 'private' ? ' selected' : '') + '>' + T('groups.private') + '</option>' +
-      '</select></div>' +
+      '</select><div class="hint">' + T('groups.visibilityHint') + '</div></div>' +
+      '<div class="field"><label>' + T('groups.postPolicy') + '</label><select class="select" id="ge-policy">' +
+      '<option value="all"' + (g.postPolicy === 'all' ? ' selected' : '') + '>' + T('groups.policyAll') + '</option>' +
+      '<option value="editors"' + (g.postPolicy === 'editors' ? ' selected' : '') + '>' + T('groups.policyEditors') + '</option>' +
+      '<option value="review"' + (g.postPolicy === 'review' ? ' selected' : '') + '>' + T('groups.policyReview') + '</option>' +
+      '</select><div class="hint">' + T('groups.postPolicyHint') + '</div></div>' +
       '<div class="field"><label>' + T('groups.avatar') + '</label>' +
       '<div style="display:flex;gap:10px;align-items:center">' +
       UI.avatar({ id: g.id, displayName: g.name, avatar: g.avatar }, 56, false) +
@@ -1345,7 +1537,8 @@
           id: g.id,
           name: box.querySelector('#ge-name').value.trim(),
           description: box.querySelector('#ge-desc').value,
-          visibility: box.querySelector('#ge-vis').value
+          visibility: box.querySelector('#ge-vis').value,
+          postPolicy: box.querySelector('#ge-policy').value
         }, function (err) {
           if (err) { btn.disabled = false; UI.toast(Api.errorText(err), 'err'); return; }
           done();

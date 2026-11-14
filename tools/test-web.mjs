@@ -665,6 +665,132 @@ async function main() {
   ok('deleted game is gone', gone.status === 404, String(gone.status));
   }
 
+  // ---- communities: roles, join requests, moderation queue
+  const comm = await alice.call('POST', '/api/group/create', {
+    name: 'Review comm ' + stamp, description: 'needs approval', visibility: 'private'
+  });
+  ok('private community created', comm.status === 200 && comm.data.group.visibility === 'private' &&
+    comm.data.group.role === 'owner' && comm.data.group.postPolicy === 'all',
+    JSON.stringify(comm.data && comm.data.group));
+  const commId = comm.data.group.id;
+
+  // a stranger who never joins: used to prove closed communities stay closed
+  const stranger0 = await new Client('stranger0');
+  await stranger0.register('str0_' + stamp, 'outsider-pass-1');
+
+  // a closed community cannot be joined directly
+  const directJoin = await bob.call('POST', '/api/group/join', { id: commId });
+  ok('joining a closed community sends a request', directJoin.status === 200 &&
+    directJoin.data.requested === true && directJoin.data.group.isMember === false,
+    JSON.stringify(directJoin.data && directJoin.data.group && directJoin.data.group.isMember));
+
+  const reqs = await alice.call('GET', '/api/group/requests?id=' + commId);
+  ok('owner sees the request', reqs.status === 200 &&
+    reqs.data.requests.some(r => r.user === bob.user.id), '');
+  const bobReqs = await bob.call('GET', '/api/group/requests?id=' + commId);
+  ok('outsiders cannot read the request list', bobReqs.status === 403, String(bobReqs.status));
+
+  const accepted = await alice.call('POST', '/api/group/answer', { id: commId, user: bob.user.id, accept: true });
+  ok('owner accepts the request', accepted.status === 200 && accepted.data.group.members === 2, '');
+  const acceptedAgain = await alice.call('POST', '/api/group/answer', { id: commId, user: bob.user.id, accept: true });
+  ok('answering twice fails cleanly', acceptedAgain.status === 404, String(acceptedAgain.status));
+
+  // roles
+  const promote = await alice.call('POST', '/api/group/role', { id: commId, user: bob.user.id, role: 'editor' });
+  ok('owner promotes a member to editor', promote.status === 200, String(promote.status));
+  const bobGroup = await bob.call('GET', '/api/group?id=' + commId);
+  ok('editor sees the role and the tools', bobGroup.data.group.role === 'editor' &&
+    bobGroup.data.group.canModerate === true, JSON.stringify(bobGroup.data.group.role));
+
+  const selfPromote = await bob.call('POST', '/api/group/role', { id: commId, user: bob.user.id, role: 'member' });
+  ok('an editor cannot demote themselves', selfPromote.status === 403, String(selfPromote.status));
+  const ownerRole = await alice.call('POST', '/api/group/role', { id: commId, user: alice.user.id, role: 'editor' });
+  ok('the owner keeps the owner role', ownerRole.status === 400, String(ownerRole.status));
+  const badRole = await alice.call('POST', '/api/group/role', { id: commId, user: bob.user.id, role: 'king' });
+  ok('unknown role rejected', badRole.status === 400, String(badRole.status));
+
+  // moderation queue: members post, editors approve
+  const policy = await alice.call('POST', '/api/group/edit', {
+    id: commId, name: 'Review comm ' + stamp, description: 'needs approval',
+    visibility: 'private', postPolicy: 'review'
+  });
+  ok('community switched to review-before-publish', policy.status === 200 &&
+    policy.data.group.postPolicy === 'review', JSON.stringify(policy.data.group.postPolicy));
+
+  // bob is an editor, so his posts skip the queue
+  const editorPost = await bob.call('POST', '/api/post', { body: 'editor post', group: commId });
+  ok('editors post without review', editorPost.status === 200 &&
+    editorPost.data.post.pending === false, JSON.stringify(editorPost.data.post.pending));
+
+  // demote bob, then his post waits for approval
+  await alice.call('POST', '/api/group/role', { id: commId, user: bob.user.id, role: 'member' });
+  const queued = await bob.call('POST', '/api/post', { body: 'member post awaiting review', group: commId });
+  ok('a member post lands in the queue', queued.status === 200 && queued.data.post.pending === true,
+    JSON.stringify(queued.data.post.pending));
+  const queuedId = queued.data.post.id;
+
+  const wallBefore = await bob.call('GET', '/api/group?id=' + commId);
+  ok('queued post is not on the wall', !wallBefore.data.posts.some(p => p.id === queuedId), '');
+  const outsideFeed = await bob.call('GET', '/api/post?id=' + queuedId);
+  ok('queued post is not readable by id', outsideFeed.status === 403 || outsideFeed.status === 404,
+    String(outsideFeed.status));
+
+  const queue = await alice.call('GET', '/api/group/pending?id=' + commId);
+  ok('owner sees the queue', queue.status === 200 &&
+    queue.data.posts.some(p => p.id === queuedId), '');
+  const bobQueue = await bob.call('GET', '/api/group/pending?id=' + commId);
+  ok('a plain member cannot read the queue', bobQueue.status === 403, String(bobQueue.status));
+
+  const approved = await alice.call('POST', '/api/group/review', { id: commId, post: queuedId, approve: true });
+  ok('owner publishes the queued post', approved.status === 200 && approved.data.approved === true, '');
+  const nowVisible = await bob.call('GET', '/api/group?id=' + commId);
+  ok('approved post appears on the wall', nowVisible.data.posts.some(p => p.id === queuedId), '');
+  const ownerSees = await alice.call('GET', '/api/group?id=' + commId);
+  ok('the owner sees a member post in a closed community',
+    ownerSees.data.posts.some(p => p.id === queuedId), '');
+  const outsiderSees = await stranger0.call('GET', '/api/group?id=' + commId);
+  ok('an outsider gets a teaser, not the wall',
+    outsiderSees.status === 200 && outsiderSees.data.limited === true &&
+    outsiderSees.data.posts.length === 0, JSON.stringify(outsiderSees.data && outsiderSees.data.limited));
+  const outsiderPost = await stranger0.call('GET', '/api/post?id=' + queuedId);
+  ok('an outsider cannot read the post by id', outsiderPost.status === 403 || outsiderPost.status === 404,
+    String(outsiderPost.status));
+  const reviewTwice = await alice.call('POST', '/api/group/review', { id: commId, post: queuedId, approve: true });
+  ok('reviewing twice fails cleanly', reviewTwice.status === 400, String(reviewTwice.status));
+
+  // reject path
+  const second = await bob.call('POST', '/api/post', { body: 'spam for the queue', group: commId });
+  const rejected = await alice.call('POST', '/api/group/review', {
+    id: commId, post: second.data.post.id, approve: false
+  });
+  ok('owner rejects a queued post', rejected.status === 200 && rejected.data.approved === false, '');
+  const goneQueued = await bob.call('GET', '/api/post?id=' + second.data.post.id);
+  ok('rejected post is gone', goneQueued.status === 404, String(goneQueued.status));
+
+  // editors-only mode
+  await alice.call('POST', '/api/group/edit', {
+    id: commId, name: 'Review comm ' + stamp, description: 'needs approval',
+    visibility: 'private', postPolicy: 'editors'
+  });
+  const memberTries = await bob.call('POST', '/api/post', { body: 'not allowed', group: commId });
+  ok('editors-only blocks a member', memberTries.status === 403, String(memberTries.status));
+
+  // leaving drops the editor badge too
+  await alice.call('POST', '/api/group/role', { id: commId, user: bob.user.id, role: 'editor' });
+  const left = await bob.call('POST', '/api/group/leave', { id: commId });
+  ok('member can leave', left.status === 200 && left.data.group.isMember === false, '');
+  const back = await alice.call('POST', '/api/group/answer', { id: commId, user: bob.user.id, accept: true });
+  ok('a left member needs a new request', back.status === 404, String(back.status));
+
+  // an editor may not remove another editor
+  await bob.call('POST', '/api/group/join', { id: commId });
+  await alice.call('POST', '/api/group/answer', { id: commId, user: bob.user.id, accept: true });
+  await alice.call('POST', '/api/group/role', { id: commId, user: bob.user.id, role: 'editor' });
+  const stranger = await new Client('stranger');
+  await stranger.register('out_' + stamp, 'outsider-pass-1');
+  const outsiderKick = await stranger.call('POST', '/api/group/kick', { id: commId, user: bob.user.id });
+  ok('a stranger cannot kick editors', outsiderKick.status === 403, String(outsiderKick.status));
+
   // ---- file attachments
   const TXT = 'data:text/plain;base64,' + Buffer.from('attachment body').toString('base64');
   const fileMsg = await bob.call('POST', '/api/messages/send', {

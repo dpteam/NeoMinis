@@ -73,6 +73,13 @@ The player itself (Ruffle, ~28 MB of wasm) is deliberately *not* in git: it is
 fetched by `tools\fetch-ruffle.ps1` into `public/assets/vendor/ruffle/`, served from
 our own origin, and only ever started inside the sandboxed `/play/<id>` iframe.
 
+Communities extend the group row rather than adding a table: `editors` and
+`requests` are id lists, `postPolicy` is a single string, and a queued post is just
+`pending: true` on the post itself. That keeps the storage flat and means an old
+`groups.json` from before this feature loads unchanged (`postPolicy` defaults to
+`all`, the lists to empty). Visibility of a community post is decided by the
+community, not by the post's own `visibility` flag - see `SocialStore.VisibleTo`.
+
 ## Request pipeline
 
 1. `HttpConnection` parses the request (limits: 8 KB request line, 64 KB headers,

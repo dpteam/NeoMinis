@@ -1799,3 +1799,21 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 @media (max-width: 640px) {
   .game-frame { height: 300px; }
 }
+
+/* ------------------------------------------------------------ communities */
+
+.badge.role-owner { background: rgba(201, 162, 39, .18); color: #d8b34a; border: 1px solid rgba(201, 162, 39, .35); }
+.badge.role-editor { background: rgba(124, 140, 255, .16); color: #93a4ff; border: 1px solid rgba(124, 140, 255, .32); }
+.badge.role-member { background: var(--field); color: var(--muted); border: 1px solid var(--border); }
+
+.member-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+
+.queue-item {
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+}
+.queue-item:last-child { border-bottom: 0; }
+.queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12.5px; }
+.queue-head .tiny { margin-left: auto; }
+.queue-body { font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.queue-image { display: block; max-width: 100%; max-height: 220px; border-radius: 8px; margin-top: 8px; }
+.queue-actions { display: flex; gap: 6px; margin-top: 8px; }

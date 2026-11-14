@@ -1240,7 +1240,9 @@ var App = (function () {
           state.composerDraftId = 0;
         }
         SoundFX.play('post');
-        UI.toast(scheduledFor ? T('feed.scheduled') : T('feed.posted'), 'ok');
+        var queued = data.post && data.post.pending;
+        UI.toast(queued ? T('feed.queued')
+          : scheduledFor ? T('feed.scheduled') : T('feed.posted'), queued ? 'info' : 'ok');
         if (state.route === 'feed' && !groupId && !scheduledFor) {
           state.feed.posts.unshift(data.post);
           renderFeedList(null);
@@ -1257,7 +1259,7 @@ var App = (function () {
     var meta = '<a class="name" href="#/u/' + encodeURIComponent(author.username || '') + '">' + UI.esc(author.displayName || author.username) + '</a>' +
       '<span>' + UI.timeAgo(p.created) + '</span>' +
       (p.edited ? '<span>· ' + T('feed.edited') + '</span>' : '') +
-      (p.visibility && p.visibility !== 'public' ? '<span>· ' + UI.icon(p.visibility === 'private' ? 'lock' : 'user-group') + ' ' + T(p.visibility === 'private' ? 'feed.private' : 'feed.friendsOnly') + '</span>' : '') +
+      (p.visibility && p.visibility !== 'public' && !p.group ? '<span>· ' + UI.icon(p.visibility === 'private' ? 'lock' : 'user-group') + ' ' + T(p.visibility === 'private' ? 'feed.private' : 'feed.friendsOnly') + '</span>' : '') +
       (p.wallUser ? '<span>· ' + UI.icon('arrow-right') + ' ' + UI.esc(p.wallUser.displayName) + '</span>' : '') +
       (p.pinned ? '<span class="pin-mark">' + UI.icon('thumbtack') + ' ' + T('feed.pinned') + '</span>' : '');
     var body = UI.linkify(p.body || '').replace(/\n/g, '<br>');

@@ -7,13 +7,11 @@ is a promise — it is a parking lot so good ideas do not get lost.
 
 | Idea | Notes |
 | --- | --- |
-| **Communities with roles** | Owner / editor / member, a moderation queue and join requests, on top of the current groups. |
+| **Photo albums in the profile** | Named albums with covers instead of the flat gallery, drag a photo between albums, album link in the profile. |
+| **Stories** | Full-screen photos and short clips that expire after 24 hours, with a "seen by" list. |
 
 ## Later
 
-- Photo albums in the profile (named, with covers) instead of the flat gallery.
-- Communities with roles (owner / editor / member) and moderation queue.
-- Stories that expire after 24 hours.
 - Full-text search across posts, comments and messages in one place, with filters.
 - Push notifications in the browser (Service Worker) on top of the current long poll.
 - WebDAV/S3-style offload of `/media/` for large instances.
@@ -29,6 +27,8 @@ Kept here so the list above stays honest.
 - Private messages: live delivery, typing, read receipts, replies, reactions,
   forwarding, search, pictures/GIFs, albums, voice messages, file attachments.
 - Groups with editable settings, pictures and member management.
+- Communities: owner / editor / member roles, join requests for closed groups and
+  a moderation queue ("members post, editors approve").
 - Mentions, hashtags, tag pages, filtered post search.
 - Notifications: live long poll, per-type mutes, filters, desktop notifications.
 - Music and video library with uploads, playlists and configurable limits.

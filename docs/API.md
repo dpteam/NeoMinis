@@ -429,14 +429,43 @@ Types: `like`, `comment`, `friend`, `message`, `wall`, `group`, `mention`, `badg
 | POST | `/api/group/join` | `id` | `{ group }` |
 | POST | `/api/group/leave` | `id` | `{ group }` (owner cannot leave) |
 | GET | `/api/group/feed` | `id`, `before`, `limit` | `{ group, posts[], hasMore, next }` |
-| POST | `/api/group/edit` | `id`, `name`, `description`, `visibility` | `{ group }` |
+| POST | `/api/group/edit` | `id`, `name`, `description`, `visibility`, `postPolicy` | `{ group }` |
 | POST | `/api/group/avatar` | `id`, `data` (data URL) | `{ avatar }` |
 | POST | `/api/group/kick` | `id`, `user` | `{ group }` |
 
 Only the group owner (or an administrator) may edit a group, change its picture or
-remove a member; the owner can never be removed.
+remove a member; the owner can never be removed. Editors may also remove ordinary
+members, but only the owner may remove another editor.
 
-### Tags
+### Communities
+
+A community is a group with roles, a join-request queue and post moderation.
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| POST | `/api/group/role` | `id`, `user`, `role` (`editor`/`member`) | `{ group, members }` |
+| POST | `/api/group/request` | `id`, `cancel` | `{ group }` |
+| GET | `/api/group/requests` | `id` | `{ requests[] }` |
+| POST | `/api/group/answer` | `id`, `user`, `accept` | `{ group }` |
+| GET | `/api/group/pending` | `id` | `{ group, posts[] }` |
+| POST | `/api/group/review` | `id`, `post`, `approve` | `{ approved, pending }` |
+
+Roles are `owner` (the creator, cannot be demoted or removed), `editor` (may
+approve posts, answer requests, remove ordinary members) and `member`. Site
+moderators count as editors everywhere. An editor may promote others, but only the
+owner may demote an editor — otherwise two editors could demote each other in a
+loop.
+
+`visibility=private` turns joining into a request: `/api/group/join` returns
+`requested: true` and the editors get a notification. An outsider still sees the
+name, the description and a "ask to join" button, but the wall and the member list
+come back empty with `limited: true`.
+
+`postPolicy` decides who writes: `all` (any member), `editors` (only moderators) or
+`review` (members, but the post is stored with `pending: true` and stays invisible
+until an editor approves it in the queue). A queued post is hidden from every
+feed, from `/api/post` and from search; approving it publishes it with a fresh
+timestamp, rejecting it deletes the post and its image.
 
 | Method | Path | Body / query | Result |
 | --- | --- | --- | --- |

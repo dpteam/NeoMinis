@@ -78,6 +78,9 @@ namespace Social.Core
         public string LegacySource = "";
         public string LegacyId = "";
 
+        // community moderation: a post waiting for an editor to approve it
+        public bool Pending;
+
         // poll attached to the post (see Core/Polls.cs)
         public string PollQuestion = "";
         public string PollOptions = "";   // one option per line
@@ -237,6 +240,12 @@ namespace Social.Core
         public DateTime Created = DateTime.UtcNow;
         public string Visibility = "public";
         public bool Deleted;
+
+        // communities: who may moderate, who asked to join, and what happens to
+        // an ordinary member's post
+        public List<long> Editors = new List<long>();
+        public List<long> Requests = new List<long>();
+        public string PostPolicy = "all";   // all | editors | review
     }
 
     public sealed class Report

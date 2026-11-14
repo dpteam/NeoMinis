@@ -136,6 +136,7 @@ namespace Social.Web
             b.Prop("canPin", CanPinPost(viewer, p));
             b.Prop("canComment", viewer != null && _store.VisibleTo(viewer.Id, p));
             b.Prop("pinned", p.Pinned);
+            b.Prop("pending", p.Pending);
             b.Prop("reposts", p.Reposts);
             if (p.RepostOf > 0)
             {
@@ -323,6 +324,8 @@ namespace Social.Web
         {
             if (g == null) return "null";
             bool member = viewer != null && (g.Members.Contains(viewer.Id) || g.Owner == viewer.Id);
+            string role = SocialStore.RoleIn(g, viewer == null ? 0 : viewer.Id);
+            bool moderate = SocialStore.CanModerate(g, viewer);
             JsonBuilder b = new JsonBuilder(768);
             b.BeginObject();
             b.Prop("id", g.Id);
@@ -337,7 +340,17 @@ namespace Social.Web
             b.Prop("canManage", viewer != null && (g.Owner == viewer.Id || viewer.IsAdmin));
             b.Prop("visibility", g.Visibility);
             b.Prop("created", Util.Iso(g.Created));
-            b.Prop("canPost", member && !g.Deleted);
+
+            // communities
+            b.Prop("role", role);
+            b.Prop("canModerate", moderate);
+            b.Prop("postPolicy", g.PostPolicy);
+            b.Prop("editors", g.Editors.Count);
+            b.Prop("requested", viewer != null && g.Requests.Contains(viewer.Id));
+            b.Prop("requests", moderate ? g.Requests.Count : 0);
+            b.Prop("pending", moderate ? _store.CountPending(g.Id) : 0);
+            b.Prop("canPost", member && !g.Deleted &&
+                              (g.PostPolicy != "editors" || moderate));
             b.EndObject();
             return b.ToString();
         }

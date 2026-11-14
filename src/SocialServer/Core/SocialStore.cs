@@ -489,6 +489,15 @@ namespace Social.Core
             }
         }
 
+        /// <summary>Flags a post that the caller mutated directly (e.g. queued it).</summary>
+        public void MarkPostDirty(Post p)
+        {
+            lock (_sync)
+            {
+                if (p != null) MarkPosts();
+            }
+        }
+
         public bool SetVerifier(User u, string verifier)
         {
             lock (_sync)
@@ -908,6 +917,20 @@ namespace Social.Core
             if (p == null || p.Deleted) return false;
             // a scheduled post stays invisible until its time comes
             if (!IsLive(p)) return false;
+            // a post waiting for a community editor is visible only in the queue
+            if (p.Pending) return false;
+
+            // A community post is gated by the community, not by the post's own
+            // visibility: the wall is private for outsiders and fully readable for
+            // members, so the same rule must apply to every post on it.
+            if (p.Group > 0)
+            {
+                Group g = FindGroup(p.Group);
+                if (g == null) return false;
+                if (viewerId > 0 && (g.Owner == viewerId || g.Members.Contains(viewerId))) return true;
+                return g.Visibility != "private" && p.Visibility == "public";
+            }
+
             if (p.Visibility == "public") return true;
             if (viewerId == p.Author) return true;
             if (p.Visibility == "private") return false;
@@ -1769,7 +1792,11 @@ namespace Social.Core
                 Group g = FindGroup(groupId);
                 if (g == null) return false;
                 if (g.Owner == userId) return false;
-                if (g.Members.Remove(userId)) MarkGroups();
+                // leaving also drops the editor badge and any pending request
+                bool changed = g.Members.Remove(userId);
+                if (g.Editors.Remove(userId)) changed = true;
+                if (g.Requests.Remove(userId)) changed = true;
+                if (changed) MarkGroups();
                 return true;
             }
         }
@@ -1826,8 +1853,168 @@ namespace Social.Core
                 Group g = FindGroup(groupId);
                 if (g == null || g.Owner == userId) return false;
                 if (!g.Members.Remove(userId)) return false;
+                g.Editors.Remove(userId);
+                g.Requests.Remove(userId);
                 MarkGroups();
                 return true;
+            }
+        }
+
+        // ======================================================== communities
+
+        /// <summary>"owner", "editor", "member" or "" for an outsider.</summary>
+        public static string RoleIn(Group g, long userId)
+        {
+            if (g == null || userId <= 0) return "";
+            if (g.Owner == userId) return "owner";
+            if (g.Editors.Contains(userId)) return "editor";
+            if (g.Members.Contains(userId)) return "member";
+            return "";
+        }
+
+        /// <summary>Owner, an appointed editor, or a site administrator.</summary>
+        public static bool CanModerate(Group g, User viewer)
+        {
+            if (g == null || viewer == null) return false;
+            if (viewer.IsModerator) return true;
+            string role = RoleIn(g, viewer.Id);
+            return role == "owner" || role == "editor";
+        }
+
+        public bool HasGroupRequest(Group g, long userId)
+        {
+            lock (_sync)
+            {
+                return g != null && g.Requests.Contains(userId);
+            }
+        }
+
+        /// <summary>Asks to join a closed community. Returns false when it is pointless.</summary>
+        public bool RequestJoin(long groupId, long userId)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Group g = FindGroup(groupId);
+                if (g == null || userId <= 0) return false;
+                if (g.Owner == userId || g.Members.Contains(userId)) return false;
+                if (g.Requests.Contains(userId)) return true;
+                g.Requests.Add(userId);
+                MarkGroups();
+                return true;
+            }
+        }
+
+        public bool CancelJoinRequest(long groupId, long userId)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Group g = FindGroup(groupId);
+                if (g == null || !g.Requests.Remove(userId)) return false;
+                MarkGroups();
+                return true;
+            }
+        }
+
+        /// <summary>Accepts or refuses a pending request; the request always disappears.</summary>
+        public bool AnswerJoinRequest(long groupId, long userId, bool accept)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Group g = FindGroup(groupId);
+                if (g == null || !g.Requests.Remove(userId)) return false;
+                if (accept && !g.Members.Contains(userId)) g.Members.Add(userId);
+                MarkGroups();
+                return true;
+            }
+        }
+
+        /// <summary>Makes somebody an editor, or takes the role away. The owner is untouchable.</summary>
+        public bool SetEditor(long groupId, long userId, bool editor)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Group g = FindGroup(groupId);
+                if (g == null || userId == g.Owner) return false;
+                if (!g.Members.Contains(userId)) return false;
+                bool changed;
+                if (editor) changed = !g.Editors.Contains(userId) && AddOnce(g.Editors, userId);
+                else changed = g.Editors.Remove(userId);
+                if (changed) MarkGroups();
+                return changed;
+            }
+        }
+
+        private static bool AddOnce(List<long> list, long value)
+        {
+            if (list.Contains(value)) return false;
+            list.Add(value);
+            return true;
+        }
+
+        /// <summary>Changes who may post and whether their posts need review.</summary>
+        public bool SetGroupPolicy(long groupId, string policy)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Group g = FindGroup(groupId);
+                if (g == null) return false;
+                g.PostPolicy = policy == "editors" || policy == "review" ? policy : "all";
+                MarkGroups();
+                return true;
+            }
+        }
+
+        /// <summary>Posts of a community that wait for an editor, newest first.</summary>
+        public List<Post> PendingPosts(long groupId, int limit)
+        {
+            List<Post> list = new List<Post>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _posts.Count && list.Count < limit; i++)
+                {
+                    Post p = _posts[i];
+                    if (p.Deleted || !p.Pending || p.Group != groupId) continue;
+                    list.Add(p);
+                }
+            }
+            return list;
+        }
+
+        public int CountPending(long groupId)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _posts.Count; i++)
+                    if (!_posts[i].Deleted && _posts[i].Pending && _posts[i].Group == groupId) n++;
+                return n;
+            }
+        }
+
+        /// <summary>Publishes a queued post, or drops it when it is refused.</summary>
+        public Post ReviewPost(long postId, bool approve)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Post p = FindPost(postId);
+                if (p == null || !p.Pending) return null;
+                if (approve)
+                {
+                    p.Pending = false;
+                    p.Created = DateTime.UtcNow;
+                }
+                else
+                {
+                    p.Deleted = true;
+                }
+                MarkPosts();
+                return p;
             }
         }
 
@@ -3354,6 +3541,7 @@ namespace Social.Core
                 d["created"] = p.Created; d["edited"] = p.Edited;
                 d["visibility"] = p.Visibility; d["likes"] = p.Likes; d["comments"] = p.Comments;
                 d["deleted"] = p.Deleted; d["pinned"] = p.Pinned;
+                if (p.Pending) d["pending"] = true;
                 d["legacySource"] = p.LegacySource; d["legacyId"] = p.LegacyId;
                 d["pollQuestion"] = p.PollQuestion; d["pollOptions"] = p.PollOptions; d["pollVotes"] = p.PollVotes;
                 d["reactions"] = p.Reactions;
@@ -3380,6 +3568,7 @@ namespace Social.Core
             p.Comments = Json.GetInt(d, "comments", 0);
             p.Deleted = Json.GetBool(d, "deleted", false);
             p.Pinned = Json.GetBool(d, "pinned", false);
+            p.Pending = Json.GetBool(d, "pending", false);
             p.Video = Json.GetString(d, "video", "");
             p.LegacySource = Json.GetString(d, "legacySource", "");
             p.LegacyId = Json.GetString(d, "legacyId", "");
@@ -3540,6 +3729,9 @@ namespace Social.Core
                 d["id"] = g.Id; d["name"] = g.Name; d["slug"] = g.Slug; d["description"] = g.Description;
                 d["avatar"] = g.Avatar; d["owner"] = g.Owner; d["members"] = g.Members;
                 d["created"] = g.Created; d["visibility"] = g.Visibility; d["deleted"] = g.Deleted;
+                if (g.Editors.Count > 0) d["editors"] = g.Editors;
+                if (g.Requests.Count > 0) d["requests"] = g.Requests;
+                if (g.PostPolicy != "all") d["postPolicy"] = g.PostPolicy;
                 list.Add(d);
             }
             return list;
@@ -3571,7 +3763,25 @@ namespace Social.Core
                     }
                 }
             }
+            ReadIds(d, "editors", g.Editors);
+            ReadIds(d, "requests", g.Requests);
+            g.PostPolicy = Json.GetString(d, "postPolicy", "all");
+            if (g.PostPolicy != "editors" && g.PostPolicy != "review") g.PostPolicy = "all";
             return g;
+        }
+
+        /// <summary>Reads a JSON array of ids into a list, ignoring junk.</summary>
+        private static void ReadIds(Dictionary<string, object> d, string key, List<long> into)
+        {
+            List<object> arr = Json.Get(d, key) as List<object>;
+            if (arr == null) return;
+            for (int i = 0; i < arr.Count; i++)
+            {
+                long v;
+                if (arr[i] is long) v = (long)arr[i];
+                else if (!long.TryParse(Convert.ToString(arr[i], CultureInfo.InvariantCulture), out v)) continue;
+                if (v > 0 && !into.Contains(v)) into.Add(v);
+            }
         }
 
         private List<object> BookmarksToArray()
