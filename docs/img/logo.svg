@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="NeoMinis">
+  <title>NeoMinis</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7aa6d4"/>
+      <stop offset=".45" stop-color="#4a76a8"/>
+      <stop offset="1" stop-color="#25466a"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".3"/>
+      <stop offset=".62" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="dot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b8fc4"/>
+      <stop offset="1" stop-color="#26456a"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="256" height="256" rx="56" fill="url(#tile)"/>
+  <rect width="256" height="136" rx="56" fill="url(#sheen)"/>
+  <rect x="1.5" y="1.5" width="253" height="253" rx="54.5" fill="none"
+        stroke="#ffffff" stroke-opacity=".24" stroke-width="3"/>
+
+  <!-- one speech bubble: the whole network in it -->
+  <path d="M66 40h124a34 34 0 0 1 34 34v64a34 34 0 0 1-34 34h-62l-57 37V172H66a34 34 0 0 1-34-34V74a34 34 0 0 1 34-34z"
+        fill="#ffffff"/>
+  <circle cx="82" cy="106" r="11.5" fill="url(#dot)"/>
+  <circle cx="128" cy="106" r="11.5" fill="url(#dot)"/>
+  <circle cx="174" cy="106" r="11.5" fill="url(#dot)"/>
+</svg>

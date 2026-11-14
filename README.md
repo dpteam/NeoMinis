@@ -1,40 +1,44 @@
-# Social Server
+<div align="center">
 
-A small, fast, **self-hosted social network** in a single `.exe`.
-.NET Framework 4.0 / C# 4, BCL only, no NuGet, no MSBuild, no database server —
-runs on Windows XP SP3 and anything newer, including behind Nginx Proxy Manager.
+<img src="docs/img/logo.svg" width="112" height="112" alt="NeoMinis">
 
-Everything is branding-neutral: rename the site, change ports, languages and
-limits from `config.ini` and ship your own network.
+# NeoMinis
+
+**A small, fast, self-hosted social network that fits in one `.exe`.**
+
+.NET Framework 4.0 · C# 4 · BCL only · no NuGet · no MSBuild · no database server
+Runs on Windows XP SP3 and anything newer, including behind Nginx Proxy Manager
+
+[![.NET Framework](https://img.shields.io/badge/.NET_Framework-4.0-512bd4)](https://dotnet.microsoft.com/)
+[![C#](https://img.shields.io/badge/C%23-4.0-239120)](https://learn.microsoft.com/dotnet/csharp/)
+[![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#why-this-exists)
+[![API tests](https://img.shields.io/badge/API_tests-474_passing-brightgreen)](#testing)
+[![License](https://img.shields.io/badge/license-use_it_fork_it-blue)](#license)
+
+[Quick start](#quick-start) · [Screenshots](#screenshots) · [Features](#features) · [Configuration](#configuration) · [API](#api-and-security) · [Docs](#documentation) · [Testing](#testing)
+
+</div>
+
+<img src="docs/img/screenshot-feed.png" alt="The feed: posts, polls, reactions, friends online">
 
 ---
 
-## Features
+## Why this exists
 
-| Area | What you get |
-| --- | --- |
-| **Feed** | home / everything / friends-only tabs, posts with images, video links (YouTube previews, inline mp4/webm) and polls, likes (with a "who liked" list), emoji reactions, comments, **reposts to your own wall**, edit and pin your own posts, **drafts and scheduled publication**, visibility (`public` / `friends` / `private`), delete with cascade |
-| **Profiles** | avatar, status, bio, city/country, birthday, gender, website, interests (games / films / music / books), mood, achievements, photo gallery, privacy level, friends wall |
-| **Friends** | requests, accept/decline, remove, block, incoming/outgoing lists |
-| **Messages** | private conversations with live delivery (long poll), typing indicator, read receipts with "read up to", unread divider, replies with quotes, emoji reactions, forwarding, message search, picture/GIF attachments, **photo albums**, **voice messages**, **file attachments**, inline image and video links, emoji picker, Enter to send, per-side delete, thread list with unread counters |
-| **Groups** | public/private groups, membership, group feed, owner role, editable name/description/picture and member management (kick) |
-| **Notifications** | likes, comments, reactions, reposts, friend requests, messages, mentions, badges, admin broadcasts, reports — delivered **live** over a long poll (instant toast, sound, tab title counter, optional desktop notification), with per-type switches in Settings and All / Unread / Mentions filters |
-| **Search** | people and posts, plus a top-bar quick search; the post search has filters (type: picture / video / poll / text, author, tag, dates) and sorting (newest / oldest / popular) |
-| **Media library** | personal music and video shelves with upload, inline players, "save to my library" from somebody else's shelf, playlists, and size/count limits from `config.ini` / Admin → Settings |
-| **Feedback** | anonymous "message the developers" form, reachable from the login screen and the sidebar; lands in an admin tab with kinds (bug / idea / other), statuses, internal notes, honeypot and per-IP rate limit |
-| **Roadmap** | planned features (Flash games through Ruffle, playlists, gifts, stories…) live in [docs/ROADMAP.md](docs/ROADMAP.md) |
-| **Tags** | `#hashtags` become tag pages, trending tags in the right column |
-| **Mentions** | `@username` with autocomplete in the composer, links in posts and a notification for every mentioned person |
-| **Bookmarks** | toggle "save" on any post, a dedicated list with paging |
-| **Achievements** | 13 badges, auto-granted from activity (posts, comments, likes, friends, messages, bookmarks, age) plus manual awards; admin can grant/revoke any badge |
-| **AI citizens** | imported personas that post / comment / like on their own — Markov chain or any OpenAI-compatible endpoint (LM Studio, Ollama, OpenAI, OpenRouter). Off by default. See [docs/AI.md](docs/AI.md) |
-| **Admin** | **separate board on its own port** — dashboard, users (ban / unban / grant or revoke admin & moderator / warn / reset / badges / delete), reports queue, live log tail, broadcast, backup, storage repair, config reload, AI panel, and a Settings tab that writes straight back to `config.ini` |
-| **Themes** | `light` / `dark` / `oled`, instant switch, remembered per user |
-| **Sounds** | WebAudio synth (no audio files): click, post, like, comment, message, notification, friend, login, error, success, theme — with per-event toggles and volume |
-| **i18n** | Russian, English, Ukrainian, Lithuanian; auto-detect + selector |
-| **Security** | PBKDF2-HMAC-SHA256 logins, HMAC-signed and encrypted `/api/`, single-use SVG captcha, rate limits, bans, CSP/XFO/nosniff |
-| **Resilience** | supervisor with exponential backoff, port fallbacks, atomic JSON writes, `.bak` recovery, read-only degraded mode, snapshots |
-| **Logging** | `Trace` with one rolling file listener in `logs/` (`social-YYYYMMDD.log`), levels, retention — no `App.config`, no console duplication |
+Most social networks want a cloud account, a container runtime and a database
+cluster. NeoMinis wants a folder and a double-click. It is one process, one
+executable, and a pile of JSON files you can read with Notepad — no SQLite, no
+ORM, no `npm install` before the first page loads.
+
+It is also deliberately *branding-neutral*. The application ships no name, no
+colours and no logo baked into its source: the site name, the palette and every
+limit come from `config.ini`, and `[branding]` generates a `brand.css` on the fly,
+so you can rebrand a deployment without editing a single file in `public/`. The
+logo in this README is the project's, not the application's.
+
+**What it is not:** a scalable platform. It is one process with a shared lock and
+flat files, which is a great fit for a few hundred people on one box and a poor
+fit for a million. That is the trade, made on purpose.
 
 ---
 
@@ -50,34 +54,26 @@ administrator** (`site.firstUserAdmin=true`).
 
 The **admin board** runs on its own port in the same process — by default
 <http://localhost:55160/>. `/api/admin/` does not exist on the public port at all
-(it answers 404), so the admin surface is never reachable through the reverse
+(it answers `404`), so the admin surface is never reachable through a reverse
 proxy unless you deliberately publish it.
 
-Console is a full operator CLI: type `help` at the `social>` prompt, or run one
-command offline with `SocialServer.exe --cmd "user role 9 admin"`.
-See **[docs/CLI.md](docs/CLI.md)**.
-
-### Two boards, one process
-
-| Board | Default port | Contents |
-| --- | --- | --- |
-| public | `55150` (+ fallbacks) | SPA, `/api/…` for normal users, `/media/…` |
-| admin | `55160` (+ fallbacks) | the same SPA plus `/api/admin/…` |
+```text
+public board   55150   SPA, /api/… for members, /media/…
+admin board    55160   the same SPA plus /api/admin/…
+```
 
 Both are configurable (`server.port` / `server.adminPort`, separate `bind`s and
 fallback lists), and the admin board can be switched off entirely with
 `server.adminEnabled=false` or `--no-admin`.
 
-### Windows Firewall
+### Requirements
 
-```cmd
-tools\firewall.cmd              :: LAN / private sources (default, for a reverse proxy)
-tools\firewall.cmd -PublicAny   :: allow the ports from anywhere (direct expose)
-tools\firewall.cmd -Remove      :: delete the "Social Server" rules
-```
-
-The script reads both port lists from `bin\config.ini` (public and admin,
-including fallbacks), asks for UAC and scopes rules to `SocialServer.exe`.
+| | |
+| --- | --- |
+| **OS** | Windows XP SP3 or newer (the HTTP server is written on `TcpListener`, so no `netsh http add urlacl` and no `http.sys`) |
+| **Runtime** | .NET Framework 4.0+ — ships with Windows 8 and newer |
+| **Compiler** | `csc.exe` from `%WINDIR%\Microsoft.NET\Framework\v4.0.30319` — nothing else to install |
+| **Browser** | any modern one; the SPA uses ES5 only, so old browsers degrade instead of breaking |
 
 ### Behind Nginx Proxy Manager
 
@@ -88,21 +84,71 @@ including fallbacks), asks for UAC and scopes rules to `SocialServer.exe`.
 4. Set `site.baseUrl=https://your.domain` so links and the invite box are correct.
 5. Optional sub-path: `server.publicBasePath=/social`.
 6. Enable `security.hsts=true` only when TLS really terminates in front.
-7. Do **not** publish the admin port through NPM unless you want it on the internet;
-   if you do, give it its own hostname (e.g. `admin.your.domain`) and keep
-   `security.adminPrivateOnly=false` only while you really need remote access.
+7. Do **not** publish the admin port through NPM unless you want it on the
+   internet; if you do, give it its own hostname (e.g. `admin.your.domain`) and
+   keep `security.adminPrivateOnly=false` only while you really need remote access.
 
-No `netsh http add urlacl` is needed: HTTP/1.1 is implemented on top of
-`TcpListener`, which also keeps it working on XP.
+---
+
+## Screenshots
+
+All screenshots are rendered from standalone demo pages that use the real
+`app.css` with invented people and posts — no real instance data is shown.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/img/screenshot-profile.png" alt="Profile: cover strip, rating, photos"><br><sub><b>Profile</b> — cover strip, completeness rating, achievements, photo grid</sub></td>
+<td width="50%"><img src="docs/img/screenshot-messages.png" alt="Messenger: threads, replies, read receipts"><br><sub><b>Messenger</b> — live threads, replies, read receipts, attachments</sub></td>
+</tr>
+<tr>
+<td><img src="docs/img/screenshot-calls.png" alt="Voice channels"><br><sub><b>Calls</b> — always-on voice channels with live occupancy</sub></td>
+<td><img src="docs/img/screenshot-apps.png" alt="Games and apps hub"><br><sub><b>Apps</b> — games and third-party apps in one hub with consent</sub></td>
+</tr>
+<tr>
+<td><img src="docs/img/screenshot-feed-light.png" alt="Light theme"><br><sub><b>Light theme</b> — same page, instant switch</sub></td>
+<td><img src="docs/img/screenshot-login.png" alt="Login screen"><br><sub><b>Login</b> — captcha, registration, account recovery</sub></td>
+</tr>
+</table>
+
+---
+
+## Features
+
+| Area | What you get |
+| --- | --- |
+| **Feed** | home / everything / friends-only tabs, posts with images, video links and polls, likes (with a "who liked" list), emoji reactions, comments, **reposts to your own wall**, edit and pin your own posts, **drafts and scheduled publication**, visibility (`public` / `friends` / `private`), delete with cascade |
+| **Profiles** | avatar and cover, status, bio, city/country, birthday, gender, website, interests, mood, achievements, photo gallery, a **completeness rating**, friends wall, per-area privacy |
+| **Friends** | requests, accept/decline, remove, block, incoming/outgoing lists, "friends online" |
+| **Messages** | live delivery (long poll), typing indicator, read receipts, unread divider, replies with quotes, emoji reactions, forwarding, search, picture/GIF/album attachments, **voice messages**, **file attachments**, video clips, **delete for everyone** with tombstones, **pinned messages**, per-side delete |
+| **Calls** | 1:1 audio/video over WebRTC, **always-on voice channels**, speaking ring from a real audio level meter, mute badges, camera on mid-call, minimised floating window, avatars of who is on the line with a blue join dot, re-join after reload, call history |
+| **Groups** | public/private groups, membership, group feed, owner role, editable name/description/picture, member management, join requests, a post review queue, per-member roles |
+| **Notifications** | likes, comments, reactions, reposts, friend requests, messages, mentions, badges, broadcasts, reports — delivered **live** over a long poll (instant toast, sound, tab title counter, optional desktop notification), per-type switches, All / Unread / Mentions filters, plus **Web Push** with a VAPID tickle |
+| **Search** | people and posts, quick search in the top bar, post filters (type, author, tag, dates) and sorting (newest / oldest / popular) |
+| **Media** | personal music and video shelves with upload, inline players, playlists, "save to my library" from somebody else's shelf, size and count limits |
+| **Stories** | 24-hour photo and video stories with a progress bar, view tracking and per-story viewer lists |
+| **Gifts** | a catalogue of 14 gifts, each with its own icon and colour, sent to a profile with a message |
+| **Games and apps** | a Flash shelf through vendored Ruffle, and a real **Applications API** — third-party apps register, get scopes, ask for consent, exchange a code for a bearer token, get per-user storage with a quota, and publish leaderboards |
+| **Achievements** | 34 badges, auto-granted from activity (posts, comments, likes, friends, messages, bookmarks, age) plus manual awards; admin can grant or revoke any badge |
+| **Peer file transfer** | direct browser-to-browser transfer between friends with an 8-digit code, consent, SHA-256 verification and no server-side storage |
+| **AI citizens** | imported personas that post, comment and like on their own — Markov chain or any OpenAI-compatible endpoint. Off by default. See [docs/AI.md](docs/AI.md) |
+| **Admin** | **a separate board on its own port** — dashboard, users (ban / unban / grant or revoke admin & moderator / warn / mute / reset / badges / delete), reports queue, live log tail, broadcast, backup, storage repair, config reload, AI panel, and a Settings tab that writes straight back to `config.ini` |
+| **Moderation** | a permission matrix for moderators (8 flags, empty means "all", for backwards compatibility), warnings, chat mutes, reports, per-IP account caps |
+| **Themes** | `light` / `dark` / `oled`, instant switch, remembered per user, and a generated `brand.css` from `[branding]` |
+| **Sounds** | WebAudio synth (no audio files): click, post, like, comment, message, notification, friend, login, error, success, theme — with per-event toggles and volume |
+| **i18n** | **English and Russian complete**; Ukrainian and Lithuanian cover the shell and fall back to English for the rest. Auto-detect plus a selector |
+| **Guest mode** | a real read-only session (not an auth bypass) with an endpoint whitelist, optional password, and a kiosk mode with idle timeout |
+| **Security** | PBKDF2-HMAC-SHA256 logins, HMAC-signed and encrypted `/api/`, single-use SVG captcha, rate limits, bans, CSP / XFO / nosniff, `Permissions-Policy` for camera and mic |
+| **Resilience** | supervisor with exponential backoff, port fallbacks, atomic JSON writes, `.bak` recovery, read-only degraded mode, snapshots, quarantine of corrupt files |
+| **Logging** | `Trace` with one rolling file listener in `logs/` (`social-YYYYMMDD.log`), levels, retention — no `App.config`, no console duplication |
 
 ---
 
 ## Layout
 
-```
+```text
 build.cmd                stock csc.exe build, no NuGet/MSBuild
 run.cmd                  start from bin\
-config.example.ini       every setting, documented
+config.example.ini       every setting, documented (169 keys)
 src/SocialServer/
   Program.cs             CLI, crash handler, --selftest / --backup / --import-deadvk
   SocialApp.cs           owns store, sessions, stats, captcha, media, AI, web
@@ -111,15 +157,25 @@ src/SocialServer/
   SelfTest.cs            crypto vectors, envelope tampering, JSON, captcha, storage
   Core/                  Config, Log, Crypto, Json, Models, SocialStore, Sessions,
                          Captcha, Media, StatsStore, Store (atomic IO), Util,
-                         Branding, Ai + AiRunner, DeadVkImport, Cli
+                         Branding, Perms, Privacy, ProfileScore, Polls, Reactions,
+                         Badges, Gifts, Calls, Transfers, WebPush, AppScopes,
+                         Ai + AiRunner, DeadVkImport, Cli
   Web/                   HttpCore (HTTP/1.1), WebServer (static/media/routing),
-                         ApiRouter (auth, views, social, admin, ai)
+                         ApiRouter (auth, views, social, admin, ai, calls,
+                         channels, apps, games, gifts, stories, push, transfers,
+                         albums, communities, search, settings)
 public/                  SPA: index.html, 404/403, assets/css, assets/js
-tools/                   firewall.ps1/.cmd, test-web.mjs, ci-test.ps1, rename-user.mjs
-docs/                    ARCHITECTURE, API, SECURITY, I18N, AI, IMPORT, CLI
+  assets/js/             crypto, api, app, app.more, calls, apps, games, gifts,
+                         stories, transfers, push, i18n, ui, sound, player
+docs/                    ARCHITECTURE, API, CLI, AI, IMPORT, ROADMAP, img/
+tools/                   firewall, test-web.mjs, ci-test.ps1, rename-user.mjs,
+                         make-logo.mjs, make-demo-screens.mjs
 ```
 
 Runtime folders (git-ignored): `bin/`, `data/`, `logs/`, `config.ini`.
+
+Roughly **23k lines of C#**, **12.6k lines of JavaScript** and **2.1k lines of
+CSS**, with **138 API routes** and zero external packages.
 
 ---
 
@@ -162,7 +218,6 @@ cookieSalt=                 ; generated on first run
 kdfIterations=12000
 encryptApi=true
 requireCaptcha=true
-; admin board: refuse non-private client addresses
 adminPrivateOnly=false
 
 [limits]
@@ -194,33 +249,83 @@ model=local-model
 intervalSec=180
 ```
 
-Changing `port`, `bind`, `adminPort`, `webRoot` or `dataDir` needs a restart;
-everything else can be re-read with `R` in the console or `POST /api/admin/reload`.
+Every setting here is also editable from **Admin → Settings**, which writes back
+to `config.ini`. Changing `port`, `bind`, `adminPort`, `webRoot` or `dataDir` needs
+a restart; everything else can be re-read with `R` in the console or
+`POST /api/admin/reload`.
 
 CLI overrides: `--port N`, `--admin-port N`, `--no-admin`, `--bind IP`,
 `--config PATH`, `--data DIR`, `--no-console`.
 
+### Rebranding a deployment
+
+```ini
+[branding]
+accent=#0088ff
+accentHi=#33a0ff
+accentLo=#0080ff
+darkAccent=#0088ff
+darkBg=#070c14
+darkPanel=#0e1725
+```
+
+The server generates `/brand.css` from this section and the SPA links it after
+`app.css`, so the repository itself stays neutral. Leave the section empty for the
+stock palette. Hover, link, top-bar and cover colours are all derived by mixing,
+so you only give the handful of base colours.
+
+### Adding a language
+
+A language is one object in `public/assets/js/i18n.js`, plus one entry in the
+selector. Nothing on the server has to change:
+
+```js
+pl: {
+  'nav.feed': 'Aktualności',
+  'nav.friends': 'Znajomi',
+  // …any subset; a missing key falls back to English, then Russian, then the key
+},
+```
+
+`i18n.t()` resolves `lang → en → ru → key`, so a half-finished dictionary shows
+English instead of `nav.feed` on screen. Then add the code to the `languages` array
+in `SiteJson` (`src/SocialServer/Web/ApiRouter.cs`) so the selector offers it, and
+to the admin dropdown in Settings if you want it as a default. The shipped state
+is: English and Russian complete (~1.2k keys each), Ukrainian and Lithuanian at 39
+keys each (the shell and the auth forms).
+
 ---
 
-## API
+## API and security
 
-Passwords and tokens never travel over the wire, and no plaintext body does either.
-Details: **[docs/API.md](docs/API.md)**, **[docs/SECURITY.md](docs/SECURITY.md)**.
+Passwords and tokens never travel over the wire, and no plaintext body does
+either. Details: **[docs/API.md](docs/API.md)**.
 
 ```text
-verifier = PBKDF2-SHA256(password, "social.login.v1|username", N, 32)
-K        = PBKDF2-SHA256(verifier, sessionSalt, N, 32)
-request  = METHOD \n path?query \n timestamp \n nonce \n sha256(body)
-signature= HMAC-SHA256(HMAC(K,"social.v1.mac"), request)
-body     = base64(iv16 | HMAC-CTR(HMAC(K,"social.v1.enc"), iv) XOR json | tag16)
+verifier  = PBKDF2-SHA256(password, "social.login.v1|username", N, 32)
+K         = PBKDF2-SHA256(verifier, sessionSalt, N, 32)
+request   = METHOD \n path?query \n timestamp \n nonce \n sha256(body)
+signature = HMAC-SHA256(HMAC(K, "social.v1.mac"), request)
+body      = base64( iv16 | HMAC-CTR(HMAC(K, "social.v1.enc"), iv) XOR json | tag16 )
 ```
 
 Pure BCL (`HMACSHA256`, `RNGCryptoServiceProvider`), mirrored bit-for-bit in
-`public/assets/js/crypto.js`.
+`public/assets/js/crypto.js`. A captured request cannot be replayed (nonce and
+timestamp), altered (signature) or read (encryption) — and the same code path
+serves the browser, the test suite and the CLI.
+
+Additional layers:
+
+- **Two listeners, one process.** The public board returns `404` for
+  `/api/admin/` — the admin surface does not exist there at all.
+- **Guest mode is a real signed session** with `UserId = 0` plus an endpoint
+  whitelist, never an auth bypass.
+- **Per-IP account cap** (`site.accountsPerIp`) to blunt throwaway registrations.
+- **Single-use SVG captcha** with an HMAC-bound code, plus rate limits and bans.
 
 ---
 
-## Tests
+## Testing
 
 ```cmd
 bin\SocialServer.exe --selftest                  :: crypto vectors, sealing, JSON, captcha, storage
@@ -228,13 +333,14 @@ node tools\test-web.mjs http://127.0.0.1:55150 http://127.0.0.1:55160
 powershell -ExecutionPolicy Bypass -File tools\ci-test.ps1
 ```
 
-`ci-test.ps1` builds, runs the self-test, starts a clean instance in a temp folder,
-runs the Node suite against **both boards**, restarts the server and verifies that
-data survived.
+`ci-test.ps1` builds, runs the self-test, starts a clean instance in a temp
+folder, runs the Node suite against **both boards**, restarts the server and
+verifies that data survived.
 
-`tools/test-web.mjs` speaks the same crypto as the browser: registration, login,
-signature enforcement, replay rejection, encryption enforcement, posts, likes,
-comments, friends, messages, groups, notifications, admin actions, recovery, logout.
+`tools/test-web.mjs` speaks the same crypto as the browser: **474 checks** covering
+registration, login, signature enforcement, replay rejection, encryption
+enforcement, posts, likes, comments, friends, messages, groups, notifications,
+calls, channels, apps, push, transfers, admin actions, recovery and logout.
 
 Admin checks need an administrator's credentials and the admin board address:
 
@@ -243,17 +349,29 @@ $env:SOCIAL_ADMIN_USER="admin"; $env:SOCIAL_ADMIN_PASSWORD="..."
 node tools\test-web.mjs http://127.0.0.1:55150 http://127.0.0.1:55160
 ```
 
-On a fresh instance the first account created by the suite is already the
-administrator, so the admin block runs automatically there.
+### Regenerating the artwork
 
-### Maintenance
+```cmd
+node tools\make-logo.mjs               :: docs/img/logo.png from the same geometry as the SVG
+node tools\make-demo-screens.mjs       :: docs/img/screenshot-*.png from standalone demo pages
+```
+
+The screenshots come from self-contained demo HTML that uses the real `app.css`
+with invented people and posts, so README images never leak a real instance's
+content. Both scripts need Node 22+ (for a global `WebSocket`) and a locally
+installed Chrome or Edge to render — no other dependency and no network access.
+`--keep` writes the demo pages to `bin/demo/` if you want to poke at them.
+
+---
+
+## Maintenance
 
 ```cmd
 bin\SocialServer.exe --backup                     :: snapshot data/ and exit
 bin\SocialServer.exe --cmd "user list humans"     :: any console command, server may be stopped
 bin\SocialServer.exe --cmd "user role 9 admin"    :: promote an account
 bin\SocialServer.exe --reset-admin NAME           :: same thing, older spelling
-bin\SocialServer.exe --import-deadvk <db folder>  :: import an old DeadVK history
+bin\SocialServer.exe --import-deadvk <db folder>  :: import an old history
 node tools\rename-user.mjs old new "New Name" [password]
 ```
 
@@ -261,14 +379,30 @@ node tools\rename-user.mjs old new "New Name" [password]
 `user …`, `post del …`, `recovery export`, `import purge-bots`, `ai …`,
 `broadcast`, `backup`, `reload`). Full reference: **[docs/CLI.md](docs/CLI.md)**.
 
-`--import-deadvk` copies users, posts, comments, likes, messages, friends,
-bookmarks, blocks, notifications, avatars and post images from the old project and
-prefixes every imported status with *"Импортировано из старого проекта DeadVK"*.
-Imported accounts cannot log in (their password scheme is different) — they are
-content and AI personas. Details: **[docs/IMPORT.md](docs/IMPORT.md)**.
-
 `rename-user.mjs` re-derives the login verifier, because it is bound to the
-username (`social.login.v1|username`) — without that the account would be locked out.
+username (`social.login.v1|username`) — without that the account would be locked
+out.
+
+### Windows Firewall
+
+```cmd
+tools\firewall.cmd              :: LAN / private sources (default, for a reverse proxy)
+tools\firewall.cmd -PublicAny   :: allow the ports from anywhere (direct expose)
+tools\firewall.cmd -Remove      :: delete the "Social Server" rules
+```
+
+---
+
+## Documentation
+
+| | |
+| --- | --- |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the process, storage and HTTP stack fit together |
+| [docs/API.md](docs/API.md) | Every endpoint, the envelope, errors, long polls |
+| [docs/CLI.md](docs/CLI.md) | The operator console and `--cmd` |
+| [docs/AI.md](docs/AI.md) | AI personas: Markov and OpenAI-compatible providers |
+| [docs/IMPORT.md](docs/IMPORT.md) | Importing an old database |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | What is done and what is parked, honestly |
 
 ---
 
@@ -283,8 +417,9 @@ username (`social.login.v1|username`) — without that the account would be lock
 | "Wrong username or password" but it is correct | username is case-insensitive, password is exact; `security.kdfIterations` must not change after registration |
 | Behind a proxy everyone looks like `127.0.0.1` | add the proxy to `trustedProxies`, keep `trustProxyHeaders=true` |
 | Admin menu is missing | you are on the public board: open the admin port (`server.adminPort`), the SPA tells you where it is |
+| A call never connects | symmetric NAT: configure `limits.callTurn` / `callTurnUser` / `callTurnPass` |
 | AI posts nothing | check Admin → AI: provider/enabled, then *Test connection*. Reasoning models need `maxTokens` around 1000+ |
-| AI writes nonsense | that is the Markov provider learning from old posts; switch to `openai` or raise `temperature`/`intervalSec` |
+| AI writes nonsense | that is the Markov provider learning from old posts; switch to `openai` or raise `temperature` / `intervalSec` |
 | Secure cookie not set behind HTTPS | set `cookieSecure=true` or make the proxy send `X-Forwarded-Proto: https` |
 | Captcha unreadable | click it for a new code; disable with `security.requireCaptcha=false` |
 | `data/*.json` corrupt after a crash | the server restores `.bak` automatically and quarantines the broken file as `*.bad-YYYYMMDD-HHMMSS` |
@@ -294,3 +429,6 @@ username (`social.login.v1|username`) — without that the account would be lock
 ## License
 
 Use it, fork it, rebrand it. Attribution appreciated, not required.
+
+Vendored third-party assets keep their own licences — see
+`public/assets/vendor/ruffle/LICENSE_*` for Ruffle (MIT / Apache-2.0).
