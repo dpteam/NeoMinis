@@ -343,6 +343,7 @@
 
   views.im = function (main, r) {
     var withId = Number(r.parts[1] || 0);
+    if (window.TransferUI) TransferUI.detach();
     if (state.im.timer) { clearInterval(state.im.timer); state.im.timer = null; }
     if (state.im.stopRec) { try { state.im.stopRec(); } catch (e) { } state.im.stopRec = null; }
     state.im.withId = withId;
@@ -473,6 +474,7 @@
         body += bubbleHtml(messages[i], other);
       }
       body += '</div>';
+      body += '<div id="xfer-slot">' + (window.TransferUI ? TransferUI.panelHtml() : '') + '</div>';
       body += chatComposerHtml();
       chat.innerHTML = body;
       chat.setAttribute('data-last', lastId);
@@ -512,6 +514,7 @@
   function bindChat(withId, other) {
     var form = document.getElementById('chat-form');
     if (!form) return;
+    if (window.TransferUI) TransferUI.attach(withId);
     var ta = document.getElementById('chat-text');
     var file = document.getElementById('chat-file');
     var doc = document.getElementById('chat-doc');
@@ -3747,6 +3750,12 @@
         field('cfg-videofiles', T('admin.maxVideoFiles'), lim.maxVideoFiles, 'number', ' min="1"') +
         '</div>' +
         field('cfg-msgvideokb', T('admin.maxMessageVideoKB'), lim.maxMessageVideoKB, 'number', ' min="64"') +
+        '<div class="inline-fields">' +
+        field('cfg-xfermb', T('admin.maxTransferMB'), lim.maxTransferMB, 'number', ' min="0" max="512"') +
+        field('cfg-xferttl', T('admin.transferTtlMin'), lim.transferTtlMin, 'number', ' min="1" max="240"') +
+        '</div>' +
+        field('cfg-xferchunk', T('admin.transferChunkKB'), lim.transferChunkKB, 'number', ' min="32" max="2048"') +
+        '<div class="hint">' + T('admin.transferHint') + '</div>' +
         field('cfg-editwin', T('admin.editWindow'), lim.editWindowMin, 'number', ' min="0"') +
         field('cfg-fbph', T('admin.feedbackPerHour'), lim.feedbackPerHour, 'number', ' min="1"') +
         field('cfg-giftph', T('admin.giftPerHour'), lim.giftPerHour, 'number', ' min="0"') +
@@ -3863,6 +3872,9 @@
             maxAudioKB: Number(App.val('cfg-audiokb')),
             maxVideoKB: Number(App.val('cfg-videokb')),
             maxMessageVideoKB: Number(App.val('cfg-msgvideokb')),
+            maxTransferMB: Number(App.val('cfg-xfermb')),
+            transferChunkKB: Number(App.val('cfg-xferchunk')),
+            transferTtlMin: Number(App.val('cfg-xferttl')),
             maxAudioFiles: Number(App.val('cfg-audiofiles')),
             maxVideoFiles: Number(App.val('cfg-videofiles')),
             maxAvatarKB: Number(App.val('cfg-avatarkb')),

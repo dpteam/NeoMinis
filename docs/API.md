@@ -114,6 +114,46 @@ Where each scope is enforced: `write` in `CanMessageUser`, `call` in
 `friends` in `/api/friends`. The owner and moderators always pass; a block always
 wins over a permissive setting.
 
+### Peer file transfer (friends only)
+
+Files move browser to browser. The server is a relay: it holds the chunks in
+memory while the transfer is alive and drops them the moment it ends, so nothing
+is written to `data/media`, nothing survives a restart, and the EXE/APK blocklist
+that protects ordinary attachments does not apply here.
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| GET | `/api/transfers` | — | `{ transfers[], offers }` (newest first, max 20) |
+| GET | `/api/transfer` | `id` | `{ transfer }` |
+| POST | `/api/transfer/start` | `to`, `name`, `size`, `sha256` | `{ transfer }` with an 8-digit `code` |
+| POST | `/api/transfer/claim` | `code` | `{ transfer }` (state `claimed`) |
+| POST | `/api/transfer/accept` | `id` | `{ transfer }` with `chunkSize` and `chunkCount` |
+| POST | `/api/transfer/decline` | `id` | `{ transfer }` (state `declined`) |
+| POST | `/api/transfer/cancel` | `id` | `{ transfer }` (either side may) |
+| POST | `/api/transfer/chunk` | `id`, `index`, `data` (base64) | `{ received, chunkCount }` |
+| GET | `/api/transfer/chunk` | `id`, `index` | `{ index, data }` |
+| POST | `/api/transfer/finish` | `id`, `ok`, `error` | `{ transfer }` |
+
+The flow is deliberately paranoid about consent:
+
+1. **Friends only.** `start` refuses a stranger with `403 not-friend`, so the
+   code alone never reaches somebody who is not on your list.
+2. **A code pairs the two sides.** The sender reads it out; the receiver types
+   it into `claim`. Only the addressed receiver can claim, and only while the
+   offer is open. The code is returned to the sender only — the receiver's
+   `transfer.code` is empty.
+3. **Nothing moves before `accept`.** Until then `chunk` refuses with `400`, so a
+   refused or ignored offer transfers exactly zero bytes.
+4. **The receiver verifies.** `sha256` is what the sender announced; the client
+   compares it with what it assembled and reports the outcome through `finish`.
+   Either way the payload is dropped at that moment.
+5. **Bounded.** `limits.maxTransferMB` (32) caps the file, `transferChunkKB`
+   (256) the chunk, `transferTtlMin` (30) how long an offer stays claimable.
+   Setting `maxTransferMB=0` switches the whole feature off (`403 transfers-off`).
+
+States: `offered` → `claimed` → `active` → `done`, or `declined` / `cancelled` /
+`expired`. Everything lives in `Core/Transfers.cs` and is swept on every call.
+
 ### Guest / kiosk (read-only)
 
 | Method | Path | Headers | Result |

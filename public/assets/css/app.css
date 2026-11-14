@@ -859,6 +859,34 @@ img { max-width: 100%; }
 .chat-form textarea { flex: 1; min-height: 36px; max-height: 120px; resize: none; }
 .chat-empty { flex: 1; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
 
+/* ------------------------------------------------------- file transfers */
+.xfer-panel {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; border-top: 1px solid var(--border);
+  background: var(--panel-2); font-size: 12px;
+}
+.xfer-panel.in { border-left: 3px solid var(--accent); }
+.xfer-panel.ok { border-left: 3px solid var(--ok); color: var(--text-soft); }
+.xfer-panel.err { border-left: 3px solid var(--err); color: var(--text-soft); }
+.xfer-panel.ok i, .xfer-panel.err i { margin-right: 4px; }
+.xfer-main { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.xfer-main b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.xfer-main i { color: var(--accent); margin-right: 3px; }
+.xfer-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.xfer-code { font-variant-numeric: tabular-nums; letter-spacing: .06em; }
+.xfer-code b { color: var(--accent); font-size: 13px; }
+.xfer-code-input { width: 104px; padding: 4px 6px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.xfer-bar { flex: 1 1 120px; min-width: 80px; height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.xfer-bar i { display: block; height: 100%; background: var(--accent); transition: width .2s linear; }
+.xfer-hint { flex: 1 1 100%; }
+.xfer-actions { display: flex; gap: 6px; }
+.xfer-panel .btn-xs { padding: 2px 8px; }
+
+@media (max-width: 720px) {
+  .xfer-panel { padding: 7px 9px; }
+  .xfer-main b { max-width: 140px; }
+}
+
 /* ------------------------------------------------------------ notifications */
 
 .notif { display: flex; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--border); align-items: flex-start; transition: background .15s var(--ease); }

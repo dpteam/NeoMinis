@@ -81,6 +81,9 @@ namespace Social.Web
                 .Prop("storyPerDay", _cfg.StoryPerDay)
                 .Prop("maxStoryCaption", _cfg.MaxStoryCaption)
                 .Prop("maxMessageVideoKB", _cfg.MaxMessageVideoKB)
+                .Prop("maxTransferMB", _cfg.MaxTransferMB)
+                .Prop("transferChunkKB", _cfg.TransferChunkKB)
+                .Prop("transferTtlMin", _cfg.TransferTtlMin)
                 .Prop("maxAvatarKB", _cfg.MaxAvatarKB)
                 .Prop("maxPostImageKB", _cfg.MaxPostImageKB)
                 .Prop("editWindowMin", _cfg.EditWindowMin)
@@ -352,6 +355,9 @@ namespace Social.Web
                 ApplyLimit(limits, "storyPerDay", _cfg.StoryPerDay, 0, delegate(int v) { _cfg.StoryPerDay = v; });
                 ApplyLimit(limits, "maxStoryCaption", _cfg.MaxStoryCaption, 0, delegate(int v) { _cfg.MaxStoryCaption = v; });
                 ApplyLimit(limits, "maxMessageVideoKB", _cfg.MaxMessageVideoKB, 64, delegate(int v) { _cfg.MaxMessageVideoKB = v; });
+                ApplyLimit(limits, "maxTransferMB", _cfg.MaxTransferMB, 1, delegate(int v) { _cfg.MaxTransferMB = v; });
+                ApplyLimit(limits, "transferChunkKB", _cfg.TransferChunkKB, 32, delegate(int v) { _cfg.TransferChunkKB = v; });
+                ApplyLimit(limits, "transferTtlMin", _cfg.TransferTtlMin, 1, delegate(int v) { _cfg.TransferTtlMin = v; });
                 if (limits.ContainsKey("callStun"))
                 {
                     _cfg.CallStun = Util.SingleLine(Json.GetString(limits, "callStun", _cfg.CallStun), 400);

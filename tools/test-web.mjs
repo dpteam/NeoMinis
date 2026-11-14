@@ -1612,6 +1612,106 @@ async function main() {
     ok('a demoted janitor loses the board', demotedUsers.status === 403, String(demotedUsers.status));
   }
 
+  // ---- peer file transfer (chunks live in memory only)
+  // Fresh sessions: the admin block above bans and unbans bob, which drops his
+  // old session, and this block runs after it.
+  const xferAlice = new Client('xfer-alice');
+  const xferBob = new Client('xfer-bob');
+  await xferAlice.login(ua, 'alice-password-1');
+  await xferBob.login(ub, 'bob-password-1');
+
+  const xferPayload = crypto.randomBytes(300 * 1024);
+  const xferHash = crypto.createHash('sha256').update(xferPayload).digest('hex');
+
+  const xferStart = await xferAlice.call('POST', '/api/transfer/start', {
+    to: bob.user.id, name: 'holiday.bin', size: xferPayload.length, sha256: xferHash
+  });
+  ok('transfer offer created', xferStart.status === 200 && !!xferStart.data.transfer &&
+    /^\d{4}-\d{4}$/.test(xferStart.data.transfer.code), String(xferStart.status));
+  const xfer = xferStart.data.transfer;
+
+  const xferStranger = new Client('xfer-stranger');
+  await xferStranger.register('xf_' + stamp, 'stranger-pass-1');
+  const strangerStart = await xferStranger.call('POST', '/api/transfer/start', {
+    to: bob.user.id, name: 'nope.bin', size: 10
+  });
+  ok('a non-friend cannot open a transfer', strangerStart.status === 403, String(strangerStart.status));
+
+  const wrongCode = await xferBob.call('POST', '/api/transfer/claim', { code: '00000000' });
+  ok('a wrong code is refused', wrongCode.status === 404, String(wrongCode.status));
+
+  const strangerClaim = await xferStranger.call('POST', '/api/transfer/claim', { code: xfer.code });
+  ok('a stranger cannot claim somebody else\'s transfer', strangerClaim.status === 404,
+    String(strangerClaim.status));
+
+  const claim = await xferBob.call('POST', '/api/transfer/claim', { code: xfer.code });
+  ok('the receiver opens the transfer with the code', claim.status === 200 &&
+    claim.data.transfer.state === 'claimed', String(claim.status));
+
+  const noAcceptYet = await xferAlice.call('GET', '/api/transfer/chunk?id=' + xfer.id + '&index=0');
+  ok('nothing can be uploaded before the receiver accepts', noAcceptYet.status === 400 ||
+    noAcceptYet.status === 403, String(noAcceptYet.status));
+
+  const xferAccept = await xferBob.call('POST', '/api/transfer/accept', { id: xfer.id });
+  const acc = xferAccept.data && xferAccept.data.transfer;
+  ok('the receiver accepts and gets the chunk plan', xferAccept.status === 200 &&
+    acc.chunkCount >= 2 && acc.chunkSize > 0, JSON.stringify(acc && { n: acc.chunkCount, s: acc.chunkSize }));
+
+  const cs = acc.chunkSize;
+  let pushed = 0;
+  for (let i = 0; i < acc.chunkCount; i++) {
+    const slice = xferPayload.subarray(i * cs, Math.min(xferPayload.length, (i + 1) * cs));
+    const put = await xferAlice.call('POST', '/api/transfer/chunk',
+      { id: xfer.id, index: i, data: slice.toString('base64') });
+    if (put.status === 200) pushed++;
+  }
+  ok('the sender can push every chunk', pushed === acc.chunkCount, pushed + '/' + acc.chunkCount);
+
+  const wrongSide = await xferAlice.call('GET', '/api/transfer/chunk?id=' + xfer.id + '&index=0');
+  ok('the sender cannot read the chunks back', wrongSide.status === 403, String(wrongSide.status));
+
+  const parts = [];
+  for (let i = 0; i < acc.chunkCount; i++) {
+    const r = await xferBob.call('GET', '/api/transfer/chunk?id=' + xfer.id + '&index=' + i);
+    if (r.status === 200) parts.push(Buffer.from(r.data.data, 'base64'));
+  }
+  const assembled = Buffer.concat(parts);
+  ok('the receiver gets the file back byte for byte',
+    assembled.length === xferPayload.length &&
+    crypto.createHash('sha256').update(assembled).digest('hex') === xferHash,
+    assembled.length + ' bytes');
+
+  const finished = await xferBob.call('POST', '/api/transfer/finish', { id: xfer.id, ok: true });
+  ok('the receiver closes the transfer', finished.status === 200 &&
+    finished.data.transfer.state === 'done', String(finished.status));
+
+  const goneChunk = await xferBob.call('GET', '/api/transfer/chunk?id=' + xfer.id + '&index=0');
+  ok('the payload is dropped once the transfer ends', goneChunk.status === 404,
+    String(goneChunk.status));
+
+  const senderView = await xferAlice.call('GET', '/api/transfer?id=' + xfer.id);
+  ok('the sender sees it finished', senderView.status === 200 &&
+    senderView.data.transfer.state === 'done', String(senderView.status));
+
+  // a refused transfer moves nothing
+  const xfer2 = await xferAlice.call('POST', '/api/transfer/start', {
+    to: bob.user.id, name: 'refused.bin', size: 1024, sha256: xferHash
+  });
+  const id2 = xfer2.data.transfer.id;
+  await xferBob.call('POST', '/api/transfer/claim', { code: xfer2.data.transfer.code });
+  const refused = await xferBob.call('POST', '/api/transfer/decline', { id: id2 });
+  ok('the receiver can refuse', refused.status === 200 && refused.data.transfer.state === 'declined',
+    String(refused.status));
+  const afterRefuse = await xferBob.call('POST', '/api/transfer/accept', { id: id2 });
+  ok('a refused transfer cannot be accepted afterwards', afterRefuse.status === 400,
+    String(afterRefuse.status));
+
+  // a transfer bigger than the cap is refused up front
+  const tooBig = await xferAlice.call('POST', '/api/transfer/start', {
+    to: bob.user.id, name: 'huge.bin', size: 512 * 1024 * 1024
+  });
+  ok('an oversized transfer is refused', tooBig.status === 400, String(tooBig.status));
+
   // ---- guest / kiosk (read-only browsing)
   const guest = new Client('guest');
   const gLogin = await guest.guest('');

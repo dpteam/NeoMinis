@@ -231,6 +231,11 @@ namespace Social.Web
             b.Prop("maxNameLength", _cfg.MaxNameLength);
             b.Prop("maxAvatarKB", _cfg.MaxAvatarKB);
             b.Prop("maxPostImageKB", _cfg.MaxPostImageKB);
+            // peer file transfer: the SPA needs the ceiling and the chunk size up front
+            b.Prop("transfersEnabled", _cfg.MaxTransferMB > 0);
+            b.Prop("maxTransferMB", _cfg.MaxTransferMB);
+            b.Prop("transferChunkKB", _cfg.TransferChunkKB);
+            b.Prop("transferTtlMin", _cfg.TransferTtlMin);
             b.Prop("allowSounds", _cfg.AllowSounds);
             b.Name("themes").BeginArray();
             string[] themes = _cfg.Themes();
@@ -854,6 +859,16 @@ namespace Social.Web
             if (r == "tag") { RequireMethod(m, "GET"); HandleTag(ctx); return; }
             if (r == "tags") { RequireMethod(m, "GET"); HandleTags(ctx); return; }
             if (r == "report") { RequireMethod(m, "POST"); HandleReport(ctx); return; }
+
+            if (r == "transfer") { RequireMethod(m, "GET"); HandleTransferGet(ctx); return; }
+            if (r == "transfers") { RequireMethod(m, "GET"); HandleTransferList(ctx); return; }
+            if (r == "transfer/start") { RequireMethod(m, "POST"); HandleTransferStart(ctx); return; }
+            if (r == "transfer/claim") { RequireMethod(m, "POST"); HandleTransferClaim(ctx); return; }
+            if (r == "transfer/accept") { RequireMethod(m, "POST"); HandleTransferAccept(ctx); return; }
+            if (r == "transfer/decline") { RequireMethod(m, "POST"); HandleTransferDecline(ctx); return; }
+            if (r == "transfer/cancel") { RequireMethod(m, "POST"); HandleTransferCancel(ctx); return; }
+            if (r == "transfer/chunk") { if (IsMethod(ctx.Req, "GET")) HandleTransferChunkGet(ctx); else HandleTransferChunkPut(ctx); return; }
+            if (r == "transfer/finish") { RequireMethod(m, "POST"); HandleTransferFinish(ctx); return; }
 
             if (r.StartsWith("admin/", StringComparison.Ordinal)) { DispatchAdmin(ctx, r.Substring(6)); return; }
 

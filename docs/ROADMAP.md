@@ -35,34 +35,30 @@ New subsystem or a real chunk of work.
 
 ### File transfer in DMs (a Send-Anywhere / TransFerry for our own site)
 
-`C:\Servers\WebServers\send.dartpower.xyz` already does this and is the reference:
-a three-tier transfer (WebRTC P2P → WebSocket relay → plain HTTP(S) PUT/GET), an
-8-digit code to pair two people, 256 KB chunks, SHA-256 checked on both sides, rooms
-with a TTL, and a relay that only ever stores ciphertext. What it does not do is tie
-into accounts, which is exactly what we need.
+**Shipped:** the HTTP relay tier. `Core/Transfers.cs` holds chunks in memory,
+`ApiRouter.Transfers.cs` exposes `/api/transfer*`, and the panel above the chat
+composer (`public/assets/js/transfers.js`) does the pairing, the consent step,
+the progress bar and the hash check. Friends only, 8-digit code, nothing stored,
+payload dropped the moment the transfer ends.
 
-Our version, as a panel inside a conversation:
+What is left, in the order that makes sense:
 
-1. **Pairing.** The sender starts a transfer, gets an 8-digit code (valid ~30
-   minutes), the recipient types it in the chat. **Friends only** — a stranger can
-   never receive, so the code alone is not enough.
-2. **Consent before a byte moves.** The recipient sees the file name, size, type and
-   the sender, and can accept or refuse. Refusing tells the sender, and nothing is
-   ever written to disk.
-3. **No extension limits.** The EXE/APK ban exists because files live on our origin
-   and get served back; a transfer only moves bytes between two browsers, so the
-   blocklist does not apply. Files are hashed, never executed, never stored in
-   `data/media/` for more than the transfer's lifetime.
-4. **Three tiers, same as TransFerry.** Direct WebRTC when both sides are reachable,
-   the WebSocket relay when they are not, plain chunked PUT/GET when even WebSocket
-   is blocked by a proxy. The client picks automatically and says which one it uses.
-5. **Relay mode for NAT hairpin.** If two people sit behind the same NAT (or the
-   same host publishes an app), the browser cannot connect to its own public address.
-   That is the DPTDOOM2 problem: force the transfer through the relay when the
-   detected public address matches, or let the user pick "relay only".
-6. **Housekeeping.** Rooms expire, the relay has a disk cap (`maxRelayBytes`) and a
-   per-user concurrency cap; a finished transfer leaves a normal message in the chat
-   with the file name, size and hash.
+1. **Direct WebRTC tier.** `RTCDataChannel` between the two browsers when they can
+   reach each other, falling back to the relay above. This is the piece that makes
+   big files cheap; the relay already works, so this is an optimisation with a
+   clean fallback.
+2. **NAT hairpin.** If both sides sit behind the same NAT (the DPTDOOM2 problem),
+   the browser cannot connect to its own public address, so force the relay when the
+   detected public address matches.
+3. **A message in the chat when it finishes.** Today the panel says "delivered";
+   the conversation should also get a normal row with the file name, size and hash,
+   so the history explains what happened a week later.
+4. **Disk cap for the relay** (`maxRelayBytes`) if it ever grows a tier that spools
+   to disk — the in-memory version needs no such knob.
+
+The reference implementation is `C:\Servers\WebServers\send.dartpower.xyz`:
+three tiers (WebRTC P2P → WebSocket relay → plain HTTP PUT/GET), 8-digit codes,
+256 KB chunks and SHA-256 on both sides.
 
 ### Calls like Telegram / Discord
 
@@ -199,6 +195,9 @@ Kept here so the list above stays honest.
 - Profile rating: a derived percentage from how filled the profile is (avatar, cover,
   bio, status, birthday, city, country, gender, website, the four interests, a first
   post) plus a separate achievement counter. Nothing is stored, so it cannot drift.
+- Peer file transfer between friends: an 8-digit code, consent before a byte moves,
+  SHA-256 checked by the receiver, chunks relayed in memory and dropped the moment
+  the transfer ends. 32 MB cap, no extension blocklist, nothing written to disk.
 - Groups with editable settings, pictures and member management.
 - Communities: owner / editor / member roles, join requests for closed groups and a
   moderation queue ("members post, editors approve").
