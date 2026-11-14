@@ -116,7 +116,22 @@ namespace Social.Core
         public string Url = "";
         public long Size;
         public int Duration;            // seconds, 0 when the browser could not tell
+        public long SavedFrom;          // owner id of the original when copied from a shelf
         public DateTime Created = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// A named list of library items. Items are media ids in play order; a playlist
+    /// never owns the files, so deleting a track simply leaves a gap.
+    /// </summary>
+    public sealed class Playlist
+    {
+        public long Id;
+        public long Owner;
+        public string Name = "";
+        public List<long> Items = new List<long>();
+        public DateTime Created = DateTime.UtcNow;
+        public DateTime Updated = DateTime.UtcNow;
     }
 
     /// <summary>
@@ -232,6 +247,7 @@ namespace Social.Core
         public long NextReportId = 1;
         public long NextDraftId = 1;
         public long NextMediaId = 1;
+        public long NextPlaylistId = 1;
         public long TotalRegistrations;
         public DateTime LastBackup = DateTime.MinValue;
         public string InstallId = "";

@@ -341,6 +341,12 @@ notification for every mentioned user (at most 10 per post/comment, never yourse
 | GET | `/api/media` | `kind` (`audio|video`), `user` | `{ items[], user? }` |
 | POST | `/api/media/upload` | `kind`, `fileName`, `data`, `title`, `artist`, `duration` | `{ item }` |
 | POST | `/api/media/delete` | `id` | `{ ok }` |
+| POST | `/api/media/save` | `id` | `{ item }` (copy on your own shelf) |
+| GET | `/api/playlists` | `user` (optional) | `{ playlists[{ id, name, count, mine, created, updated }] }` |
+| GET | `/api/playlist` | `id` | `{ id, name, items[] }` |
+| POST | `/api/playlist/save` | `id`, `name` | `{ id, name, count }` |
+| POST | `/api/playlist/delete` | `id` | `{ ok }` |
+| POST | `/api/playlist/item` | `id`, `media`, `add` | `{ ok }` |
 
 Every account has a music and a video shelf. `GET /api/media` without `user`
 returns the shared shelf (everything, with `mine` telling what is yours); with
@@ -351,6 +357,20 @@ editable in Admin → Settings. A file whose extension does not belong to the
 requested kind is refused, so a "video" upload can never smuggle in a document.
 Files live under `/media/library/` and are served inline with the type derived
 from the extension, which is what lets the browser play them.
+
+`POST /api/media/save` copies somebody else's track to your own shelf: the record
+points at the same file and remembers `savedFrom` (the original owner). Files are
+reference counted, so deleting one copy only removes the file from disk when no
+shelf points at it any more.
+
+Playlists group media ids in play order (max 200 items, 50 playlists per account).
+They are private to their owner; a deleted track simply disappears from the list.
+
+### Flash games
+
+Planned, see [ROADMAP.md](ROADMAP.md): `.swf` uploads played through
+[Ruffle](https://ruffle.rs), self-hosted under `/assets/vendor/ruffle/`, with their
+own size and count limits and a sandboxed player.
 
 ### Drafts and scheduling
 

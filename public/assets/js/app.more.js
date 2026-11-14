@@ -1734,9 +1734,169 @@
         (isVideo ? 'video/mp4,video/webm,video/quicktime,video/ogg' : 'audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/flac,audio/aac,audio/webm') + '">' +
         '<div id="media-list"><div class="center" style="padding:20px">' + UI.spinner() + '</div></div></div></div>';
 
+      main.insertAdjacentHTML('beforeend',
+        '<div class="card"><div class="card-h">' + UI.icon('list') + ' ' + T('playlists.title') +
+        '<span class="right"><button class="btn btn-xs" id="playlist-new">' + UI.icon('plus') + ' ' +
+        T('playlists.create') + '</button></span></div><div class="card-b" id="playlist-list">' +
+        '<div class="tiny muted">' + T('playlists.hint') + '</div></div></div>');
+
       var list = document.getElementById('media-list');
       var fileInput = document.getElementById('media-file');
       var uploadBtn = document.getElementById('media-upload');
+      var playlists = [];
+
+      function loadPlaylists() {
+        Api.request('GET', '/api/playlists', null, function (err, data) {
+          var box = document.getElementById('playlist-list');
+          if (!box) return;
+          if (err) { box.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+          playlists = (data && data.playlists) || [];
+          if (!playlists.length) {
+            box.innerHTML = '<div class="tiny muted">' + T('playlists.empty') + '</div>';
+            return;
+          }
+          var html = '';
+          for (var i = 0; i < playlists.length; i++) {
+            var p = playlists[i];
+            html += '<div class="playlist-row" data-id="' + p.id + '">' +
+              '<button type="button" class="playlist-open" data-id="' + p.id + '">' + UI.icon('list') +
+              ' <b>' + UI.esc(p.name) + '</b> <span class="tiny muted">' + T('playlists.count', p.count) + '</span></button>' +
+              '<button type="button" class="btn btn-xs btn-danger playlist-del" data-id="' + p.id + '">' +
+              T('common.delete') + '</button></div>';
+          }
+          box.innerHTML = html;
+          var opens = box.querySelectorAll('.playlist-open');
+          for (var k = 0; k < opens.length; k++) {
+            opens[k].addEventListener('click', function () { openPlaylist(this.getAttribute('data-id')); });
+          }
+          var dels = box.querySelectorAll('.playlist-del');
+          for (var d = 0; d < dels.length; d++) {
+            dels[d].addEventListener('click', function () {
+              var id = this.getAttribute('data-id');
+              var btn = this;
+              UI.confirm(T('common.delete'), T('playlists.deleteConfirm'), T('common.delete'), function () {
+                btn.disabled = true;
+                Api.request('POST', '/api/playlist/delete', { id: Number(id) }, function (e2) {
+                  btn.disabled = false;
+                  if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+                  UI.toast(T('playlists.deleted'), 'ok');
+                  loadPlaylists();
+                });
+              }, true);
+            });
+          }
+        });
+      }
+
+      function openPlaylist(id) {
+        Api.request('GET', '/api/playlist?id=' + encodeURIComponent(id), null, function (err, data) {
+          if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+          var items = (data && data.items) || [];
+          var body = '';
+          if (!items.length) body = '<div class="tiny muted">' + T('playlists.emptyItems') + '</div>';
+          else {
+            body = '<div class="media-list">';
+            for (var i = 0; i < items.length; i++) {
+              var m = items[i];
+              body += '<div class="media-row"><div class="media-main">' +
+                '<div class="media-title">' + UI.esc(m.title || T('media.untitled')) +
+                (m.artist ? ' <span class="media-artist">— ' + UI.esc(m.artist) + '</span>' : '') + '</div>' +
+                '<div class="media-player">' +
+                (m.kind === 'video'
+                  ? '<video controls preload="metadata" src="' + UI.attr(UI.safeUrl(m.url)) + '"></video>'
+                  : '<audio controls preload="metadata" src="' + UI.attr(UI.safeUrl(m.url)) + '"></audio>') +
+                '</div></div>' +
+                '<button type="button" class="btn btn-xs playlist-remove" data-playlist="' + id +
+                '" data-media="' + m.id + '">' + UI.icon('xmark') + '</button></div>';
+            }
+            body += '</div>';
+          }
+          UI.modal({ title: UI.esc(data.name || T('playlists.title')), icon: 'list', wide: true, body: body,
+            actions: [{ label: T('common.close'), cls: 'btn-primary' }] });
+          var boxes = document.querySelectorAll('.modal');
+          var box = boxes[boxes.length - 1];
+          if (!box) return;
+          var rm = box.querySelectorAll('.playlist-remove');
+          for (var r = 0; r < rm.length; r++) {
+            rm[r].addEventListener('click', function () {
+              var self = this;
+              Api.request('POST', '/api/playlist/item', {
+                id: Number(self.getAttribute('data-playlist')),
+                media: Number(self.getAttribute('data-media')),
+                add: false
+              }, function (e2) {
+                if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+                var row = self;
+                while (row && row.className.indexOf('media-row') < 0) row = row.parentNode;
+                if (row && row.parentNode) row.parentNode.removeChild(row);
+                loadPlaylists();
+              });
+            });
+          }
+        });
+      }
+
+      function addToPlaylist(mediaId) {
+        if (!playlists.length) { createPlaylist(mediaId); return; }
+        var body = '<div class="tiny muted" style="margin-bottom:8px">' + T('playlists.pick') + '</div>';
+        for (var i = 0; i < playlists.length; i++) {
+          body += '<button type="button" class="fwd-item pl-pick" data-id="' + playlists[i].id + '">' +
+            UI.icon('list') + '<span class="name">' + UI.esc(playlists[i].name) + '</span></button>';
+        }
+        body += '<button type="button" class="fwd-item pl-new">' + UI.icon('plus') +
+          '<span class="name">' + T('playlists.create') + '</span></button>';
+        var close = UI.modal({ title: T('playlists.addTo'), icon: 'list', body: body,
+          actions: [{ label: T('common.cancel'), cls: 'btn-ghost' }] });
+        var boxes = document.querySelectorAll('.modal');
+        var box = boxes[boxes.length - 1];
+        if (!box) return;
+        var picks = box.querySelectorAll('.pl-pick');
+        for (var p = 0; p < picks.length; p++) {
+          picks[p].addEventListener('click', function () {
+            var id = Number(this.getAttribute('data-id'));
+            Api.request('POST', '/api/playlist/item', { id: id, media: Number(mediaId), add: true }, function (e2) {
+              if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+              UI.toast(T('playlists.added'), 'ok');
+              if (close) close();
+              loadPlaylists();
+            });
+          });
+        }
+        var fresh = box.querySelector('.pl-new');
+        if (fresh) fresh.addEventListener('click', function () {
+          if (close) close();
+          createPlaylist(mediaId);
+        });
+      }
+
+      function createPlaylist(mediaId) {
+        var body = '<div class="field"><label>' + T('playlists.name') + '</label>' +
+          '<input class="input" id="pl-name" maxlength="80" placeholder="' + UI.attr(T('playlists.namePlaceholder')) + '"></div>';
+        var close = UI.modal({
+          title: T('playlists.create'), icon: 'list', body: body,
+          actions: [
+            { label: T('common.cancel'), cls: 'btn-ghost' },
+            {
+              label: T('common.create'), cls: 'btn-primary', onClick: function (box) {
+                var name = box.querySelector('#pl-name').value.trim();
+                if (!name) { UI.toast(T('playlists.name'), 'err'); return false; }
+                Api.request('POST', '/api/playlist/save', { name: name }, function (err, data) {
+                  if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+                  if (!mediaId) { UI.toast(T('playlists.created'), 'ok'); loadPlaylists(); return; }
+                  Api.request('POST', '/api/playlist/item', { id: data.id, media: Number(mediaId), add: true }, function (e2) {
+                    if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+                    UI.toast(T('playlists.added'), 'ok');
+                    loadPlaylists();
+                  });
+                });
+              }
+            }
+          ]
+        });
+      }
+
+      var newBtn = document.getElementById('playlist-new');
+      if (newBtn) newBtn.addEventListener('click', function () { createPlaylist(0); });
 
       function render() {
         if (!items.length) {
@@ -1758,9 +1918,15 @@
               ? '<video controls preload="metadata" src="' + UI.attr(UI.safeUrl(m.url)) + '"></video>'
               : '<audio controls preload="metadata" src="' + UI.attr(UI.safeUrl(m.url)) + '"></audio>') +
             '</div></div>' +
-            (m.mine ? '<button type="button" class="btn btn-xs btn-danger media-del" data-id="' + m.id + '">' +
-              T('common.delete') + '</button>' : '') +
-            '</div>';
+            '<div class="media-actions">' +
+            '<button type="button" class="btn btn-xs media-pl" data-id="' + m.id + '" title="' +
+              UI.attr(T('playlists.addTo')) + '">' + UI.icon('plus') + '</button>' +
+            (m.mine
+              ? '<button type="button" class="btn btn-xs btn-danger media-del" data-id="' + m.id + '">' +
+                T('common.delete') + '</button>'
+              : '<button type="button" class="btn btn-xs media-save" data-id="' + m.id + '">' +
+                UI.icon('download') + ' ' + T('media.saveMine') + '</button>') +
+            '</div></div>';
         }
         list.innerHTML = html + '</div>';
 
@@ -1779,6 +1945,27 @@
               });
             }, true);
           });
+        }
+
+        var saves = list.querySelectorAll('.media-save');
+        for (var s = 0; s < saves.length; s++) {
+          saves[s].addEventListener('click', function () {
+            var id = this.getAttribute('data-id');
+            var btn = this;
+            btn.disabled = true;
+            Api.request('POST', '/api/media/save', { id: Number(id) }, function (err) {
+              btn.disabled = false;
+              if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+              UI.toast(T('media.savedMine'), 'ok');
+              SoundFX.play('success');
+              load();
+            });
+          });
+        }
+
+        var pls = list.querySelectorAll('.media-pl');
+        for (var q = 0; q < pls.length; q++) {
+          pls[q].addEventListener('click', function () { addToPlaylist(this.getAttribute('data-id')); });
         }
       }
 
@@ -1851,6 +2038,7 @@
       });
 
       load();
+      loadPlaylists();
     };
   }
 

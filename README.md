@@ -20,7 +20,8 @@ limits from `config.ini` and ship your own network.
 | **Groups** | public/private groups, membership, group feed, owner role, editable name/description/picture and member management (kick) |
 | **Notifications** | likes, comments, reactions, reposts, friend requests, messages, mentions, badges, admin broadcasts, reports — delivered **live** over a long poll (instant toast, sound, tab title counter, optional desktop notification), with per-type switches in Settings and All / Unread / Mentions filters |
 | **Search** | people and posts, plus a top-bar quick search; the post search has filters (type: picture / video / poll / text, author, tag, dates) and sorting (newest / oldest / popular) |
-| **Media library** | personal music and video shelves with upload, inline players, size and count limits from `config.ini` / Admin → Settings |
+| **Media library** | personal music and video shelves with upload, inline players, "save to my library" from somebody else's shelf, playlists, and size/count limits from `config.ini` / Admin → Settings |
+| **Roadmap** | planned features (Flash games through Ruffle, playlists, gifts, stories…) live in [docs/ROADMAP.md](docs/ROADMAP.md) |
 | **Tags** | `#hashtags` become tag pages, trending tags in the right column |
 | **Mentions** | `@username` with autocomplete in the composer, links in posts and a notification for every mentioned person |
 | **Bookmarks** | toggle "save" on any post, a dedicated list with paging |

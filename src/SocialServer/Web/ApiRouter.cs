@@ -590,6 +590,12 @@ namespace Social.Web
             if (r == "media") { RequireMethod(m, "GET"); HandleMedia(ctx); return; }
             if (r == "media/upload") { RequireMethod(m, "POST"); HandleMediaUpload(ctx); return; }
             if (r == "media/delete") { RequireMethod(m, "POST"); HandleMediaDelete(ctx); return; }
+            if (r == "media/save") { RequireMethod(m, "POST"); HandleMediaSave(ctx); return; }
+            if (r == "playlists") { RequireMethod(m, "GET"); HandlePlaylists(ctx); return; }
+            if (r == "playlist") { RequireMethod(m, "GET"); HandlePlaylist(ctx); return; }
+            if (r == "playlist/save") { RequireMethod(m, "POST"); HandlePlaylistSave(ctx); return; }
+            if (r == "playlist/delete") { RequireMethod(m, "POST"); HandlePlaylistDelete(ctx); return; }
+            if (r == "playlist/item") { RequireMethod(m, "POST"); HandlePlaylistItem(ctx); return; }
             if (r == "friends") { RequireMethod(m, "GET"); HandleFriends(ctx); return; }
             if (r == "friend") { RequireMethod(m, "POST"); HandleFriendAction(ctx); return; }
             if (r == "messages/threads") { RequireMethod(m, "GET"); HandleThreads(ctx); return; }

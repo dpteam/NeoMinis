@@ -1016,6 +1016,7 @@ namespace Social.Web
                     .Prop("duration", m.Duration)
                     .Prop("created", Util.Iso(m.Created))
                     .Prop("owner", m.Owner)
+                    .Prop("savedFrom", m.SavedFrom)
                     .Prop("mine", ctx.User != null && m.Owner == ctx.User.Id)
                     .EndObject();
             }
@@ -1076,9 +1077,119 @@ namespace Social.Web
             long id = BodyLong(ctx, "id", 0);
             string url = _store.RemoveMedia(id, ctx.User.Id);
             if (url == null) throw new ApiException(404, "no-item", "Item not found");
-            if (!string.IsNullOrEmpty(url)) _media.Delete(url);
+            // the file may be referenced by people who saved the track to their shelf
+            if (!string.IsNullOrEmpty(url) && !_store.IsMediaUrlUsed(url)) _media.Delete(url);
             Log.Info("DATA", "@" + ctx.User.Username + " deleted media #" + id);
 
+            JsonBuilder b = new JsonBuilder(64);
+            b.BeginObject();
+            SendOk(ctx, b);
+        }
+
+        private void HandleMediaSave(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            MediaItem src = _store.FindMedia(id);
+            if (src == null) throw new ApiException(404, "no-item", "Item not found");
+            if (src.Owner == ctx.User.Id) throw new ApiException(400, "own-item", "That is already yours");
+
+            int limit = src.Kind == "video" ? _cfg.MaxVideoFiles : _cfg.MaxAudioFiles;
+            if (_store.CountMedia(ctx.User.Id, src.Kind) >= limit)
+                throw new ApiException(400, "too-many-files",
+                    "The " + src.Kind + " library is full (" + limit + " files)");
+
+            MediaItem copy = _store.SaveMediaTo(id, ctx.User.Id);
+            if (copy == null) throw new ApiException(400, "already-saved", "Already in your library");
+
+            Log.Debug("DATA", "@" + ctx.User.Username + " saved media #" + id + " to the own shelf");
+            JsonBuilder b = new JsonBuilder(512);
+            b.BeginObject();
+            b.Name("item").Raw(MediaJson(copy, ctx.User));
+            SendOk(ctx, b);
+        }
+
+        // ============================================================ playlists
+
+        private void HandlePlaylists(ApiCtx ctx)
+        {
+            long userId = LongQuery(ctx, "user");
+            User owner = userId > 0 ? RequireUser(userId) : ctx.User;
+            if (owner.Id != ctx.User.Id && !CanViewProfile(ctx.User, owner))
+                throw new ApiException(403, "private", "This profile is private");
+
+            List<Playlist> list = _store.PlaylistsFor(owner.Id);
+            JsonBuilder b = new JsonBuilder(8192);
+            b.BeginObject();
+            b.Name("playlists").BeginArray();
+            for (int i = 0; i < list.Count; i++)
+            {
+                Playlist p = list[i];
+                b.BeginObject()
+                    .Prop("id", p.Id)
+                    .Prop("name", p.Name)
+                    .Prop("count", p.Items.Count)
+                    .Prop("mine", owner.Id == ctx.User.Id)
+                    .Prop("created", Util.Iso(p.Created))
+                    .Prop("updated", Util.Iso(p.Updated))
+                    .EndObject();
+            }
+            b.EndArray();
+            SendOk(ctx, b);
+        }
+
+        private void HandlePlaylist(ApiCtx ctx)
+        {
+            long id = LongQuery(ctx, "id");
+            Playlist p = _store.FindPlaylist(id, ctx.User.Id);
+            if (p == null) throw new ApiException(404, "no-playlist", "Playlist not found");
+
+            JsonBuilder b = new JsonBuilder(8192);
+            b.BeginObject();
+            b.Prop("id", p.Id).Prop("name", p.Name);
+            b.Name("items").BeginArray();
+            for (int i = 0; i < p.Items.Count; i++)
+            {
+                MediaItem m = _store.FindMedia(p.Items[i]);
+                if (m == null) continue;
+                b.Raw(MediaJson(m, ctx.User));
+            }
+            b.EndArray();
+            SendOk(ctx, b);
+        }
+
+        private void HandlePlaylistSave(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            string name = Util.SingleLine(BodyStr(ctx, "name", ""), 80);
+            if (name.Length == 0) throw new ApiException(400, "bad-name", "A playlist needs a name");
+            if (_store.PlaylistsFor(ctx.User.Id).Count >= 50 && id <= 0)
+                throw new ApiException(400, "too-many-playlists", "Delete a playlist first");
+
+            Playlist p = _store.SavePlaylist(id, ctx.User.Id, name, null);
+            JsonBuilder b = new JsonBuilder(256);
+            b.BeginObject();
+            b.Prop("id", p.Id).Prop("name", p.Name).Prop("count", p.Items.Count);
+            SendOk(ctx, b);
+        }
+
+        private void HandlePlaylistDelete(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            if (!_store.DeletePlaylist(id, ctx.User.Id)) throw new ApiException(404, "no-playlist", "Playlist not found");
+            JsonBuilder b = new JsonBuilder(64);
+            b.BeginObject();
+            SendOk(ctx, b);
+        }
+
+        private void HandlePlaylistItem(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            long mediaId = BodyLong(ctx, "media", 0);
+            bool add = BodyBool(ctx, "add", true);
+            if (add && _store.FindMedia(mediaId) == null)
+                throw new ApiException(404, "no-item", "Item not found");
+            if (!_store.PlaylistAddItem(id, ctx.User.Id, mediaId, add))
+                throw new ApiException(404, "no-playlist", "Playlist not found");
             JsonBuilder b = new JsonBuilder(64);
             b.BeginObject();
             SendOk(ctx, b);
@@ -1097,6 +1208,7 @@ namespace Social.Web
                 .Prop("duration", m.Duration)
                 .Prop("created", Util.Iso(m.Created))
                 .Prop("owner", m.Owner)
+                .Prop("savedFrom", m.SavedFrom)
                 .Prop("mine", viewer != null && m.Owner == viewer.Id)
                 .EndObject();
             return b.ToString();

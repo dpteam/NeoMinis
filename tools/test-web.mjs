@@ -613,6 +613,62 @@ async function main() {
   const goneTrack = await alice.call('GET', '/api/media?kind=audio');
   ok('deleted track is gone', !goneTrack.data.items.some(i => i.id === trackId), '');
 
+  // ---- save to my library + reference counted files
+  const mineTrack = await alice.call('POST', '/api/media/upload', {
+    kind: 'audio', fileName: 'shared.wav', data: TRACK, title: 'Shared track', duration: 3
+  });
+  const sharedId = mineTrack.data.item.id;
+  const saveOwn = await alice.call('POST', '/api/media/save', { id: sharedId });
+  ok('cannot save your own track', saveOwn.status === 400, String(saveOwn.status));
+  const saveOther = await bob.call('POST', '/api/media/save', { id: sharedId });
+  ok('saving somebody else\'s track works', saveOther.status === 200 &&
+    saveOther.data.item.url === mineTrack.data.item.url && saveOther.data.item.savedFrom === alice.user.id,
+    JSON.stringify(saveOther.data && saveOther.data.item));
+  const savedTwice = await bob.call('POST', '/api/media/save', { id: sharedId });
+  ok('saving twice is refused', savedTwice.status === 400, String(savedTwice.status));
+
+  const fileUrl = mineTrack.data.item.url;
+  const delOrigin = await alice.call('POST', '/api/media/delete', { id: sharedId });
+  ok('origin deleted', delOrigin.status === 200, String(delOrigin.status));
+  const stillThere = await fetch(BASE + fileUrl);
+  ok('file survives while somebody still uses it', stillThere.status === 200, String(stillThere.status));
+  const bobCopy = await bob.call('GET', '/api/media?kind=audio&user=' + bob.user.id);
+  const bobSaved = bobCopy.data.items.find(i => i.url === fileUrl);
+  ok('saved copy remains on the other shelf', !!bobSaved, '');
+  if (bobSaved) {
+    await bob.call('POST', '/api/media/delete', { id: bobSaved.id });
+    const goneNow = await fetch(BASE + fileUrl);
+    ok('file removed once nobody uses it', goneNow.status === 404, String(goneNow.status));
+  }
+
+  // ---- playlists
+  const plCreate = await alice.call('POST', '/api/playlist/save', { name: 'Evening mix' });
+  ok('playlist created', plCreate.status === 200 && plCreate.data.id > 0, String(plCreate.status));
+  const plId = plCreate.data && plCreate.data.id;
+  const plEmptyName = await alice.call('POST', '/api/playlist/save', { name: '' });
+  ok('playlist needs a name', plEmptyName.status === 400, String(plEmptyName.status));
+
+  const plTrack = await alice.call('POST', '/api/media/upload', {
+    kind: 'audio', fileName: 'pl.wav', data: TRACK, title: 'Playlist track', duration: 2
+  });
+  const plTrackId = plTrack.data.item.id;
+  const plAdd = await alice.call('POST', '/api/playlist/item', { id: plId, media: plTrackId, add: true });
+  ok('track added to playlist', plAdd.status === 200, String(plAdd.status));
+  const plAddMissing = await alice.call('POST', '/api/playlist/item', { id: plId, media: 999999, add: true });
+  ok('unknown track refused', plAddMissing.status === 404, String(plAddMissing.status));
+  const plList = await alice.call('GET', '/api/playlists');
+  ok('playlist lists one item', plList.data.playlists.some(p => p.id === plId && p.count === 1), '');
+  const plItems = await alice.call('GET', '/api/playlist?id=' + plId);
+  ok('playlist items returned', plItems.data.items.length === 1 && plItems.data.items[0].title === 'Playlist track', '');
+  const plForeign = await bob.call('GET', '/api/playlist?id=' + plId);
+  ok('playlist is private', plForeign.status === 404, String(plForeign.status));
+  const plRemove = await alice.call('POST', '/api/playlist/item', { id: plId, media: plTrackId, add: false });
+  const plAfterRemove = await alice.call('GET', '/api/playlist?id=' + plId);
+  ok('track removed from playlist', plRemove.status === 200 && plAfterRemove.data.items.length === 0, '');
+  const plDelete = await alice.call('POST', '/api/playlist/delete', { id: plId });
+  ok('playlist deleted', plDelete.status === 200, String(plDelete.status));
+  await alice.call('POST', '/api/media/delete', { id: plTrackId });
+
   await bob.call('POST', '/api/messages/typing', { to: alice.user.id });
   const typingWait = await alice.call('GET', '/api/messages/wait?with=' + bob.user.id + '&after=0&timeout=3');
   ok('typing is visible', typingWait.status === 200 && typingWait.data.typing === true, JSON.stringify(typingWait.data && typingWait.data.typing));
