@@ -3878,6 +3878,9 @@
     var media = App.qs('media') || '';
     var sort = App.qs('sort') || 'recent';
     var author = App.qs('author') || '';
+    var kind = App.qs('kind') || 'all';
+    var since = App.qs('since') || '';
+    var until = App.qs('until') || '';
     var next = 0;
 
     function filterUrl(extra) {
@@ -3886,6 +3889,9 @@
       if (media) parts.push('media=' + encodeURIComponent(media));
       if (sort && sort !== 'recent') parts.push('sort=' + encodeURIComponent(sort));
       if (author) parts.push('author=' + encodeURIComponent(author));
+      if (kind && kind !== 'all') parts.push('kind=' + encodeURIComponent(kind));
+      if (since) parts.push('since=' + encodeURIComponent(since));
+      if (until) parts.push('until=' + encodeURIComponent(until));
       if (extra) parts.push(extra);
       return '#/search' + (parts.length ? '?' + parts.join('&') : '');
     }
@@ -3907,8 +3913,29 @@
       '<option value="popular"' + (sort === 'popular' ? ' selected' : '') + '>' + T('search.sortPopular') + '</option>' +
       '<option value="old"' + (sort === 'old' ? ' selected' : '') + '>' + T('search.sortOld') + '</option>' +
       '</select>' +
+      '<input class="input" type="date" id="search-since" title="' + UI.attr(T('search.since')) + '" value="' + UI.attr(since) + '">' +
+      '<input class="input" type="date" id="search-until" title="' + UI.attr(T('search.until')) + '" value="' + UI.attr(until) + '">' +
       (author ? '<a class="btn btn-sm" href="' + UI.attr(filterUrl('author=')) + '">' + UI.icon('user') + ' ' + T('search.clearAuthor') + '</a>' : '') +
       '</div></div></div>';
+
+    // kind tabs: everything, then one tab per source
+    var kinds = [
+      ['all', 'search.everything', 'layer-group'],
+      ['posts', 'search.posts', 'comments'],
+      ['comments', 'search.comments', 'comment-dots'],
+      ['messages', 'search.messages', 'envelope'],
+      ['people', 'search.users', 'users'],
+      ['groups', 'search.groups', 'people-group'],
+      ['games', 'search.games', 'gamepad']
+    ];
+    html += '<div class="feed-tabs search-tabs">';
+    for (var k = 0; k < kinds.length; k++) {
+      html += '<a class="tab2' + (kind === kinds[k][0] ? ' active' : '') + '" href="' +
+        UI.attr(filterUrl(kind === kinds[k][0] ? '' : 'kind=' + kinds[k][0])) + '">' +
+        UI.icon(kinds[k][2]) + ' ' + T(kinds[k][1]) +
+        '<span class="count' + (kind === 'all' ? ' hidden' : '') + '" data-count="' + kinds[k][0] + '"></span></a>';
+    }
+    html += '</div>';
 
     html += '<div id="search-body"></div>';
     main.innerHTML = html;
@@ -3928,19 +3955,178 @@
       sort = this.value;
       App.go(filterUrl(''));
     });
+    var sinceInput = document.getElementById('search-since');
+    if (sinceInput) sinceInput.addEventListener('change', function () {
+      since = this.value;
+      App.go(filterUrl(''));
+    });
+    var untilInput = document.getElementById('search-until');
+    if (untilInput) untilInput.addEventListener('change', function () {
+      until = this.value;
+      App.go(filterUrl(''));
+    });
 
-    if (!q && !media && !author) {
+    if (!q && !media && !author && !since && !until) {
       body.innerHTML = '<div class="card"><div class="card-b">' + UI.empty('magnifying-glass', T('search.hint'), T('search.hintSub')) + '</div></div>';
       return;
     }
 
     body.innerHTML = '<div class="card"><div class="card-b center" style="padding:22px">' + UI.spinner() + '</div></div>';
 
+    // ------------------------------------------------------ everything mode
+
+    function commentRow(c) {
+      var a = c.author || {};
+      var p = c.postPreview || {};
+      return '<a class="hit-row" href="#/post/' + (c.post || 0) + '">' +
+        UI.avatar(a, 32) +
+        '<div class="hit-main"><div class="hit-head">' + UI.esc(a.displayName || a.username || '?') +
+        ' <span class="tiny muted">' + UI.timeAgo(c.created) + '</span></div>' +
+        '<div class="hit-body">' + UI.esc(c.body) + '</div>' +
+        (p.body ? '<div class="hit-context tiny muted">' + UI.icon('reply') + ' ' + UI.esc(p.body) + '</div>' : '') +
+        '</div></a>';
+    }
+
+    function messageRow(m) {
+      var u = m.with || {};
+      return '<a class="hit-row" href="#/im/' + (u.id || 0) + '">' + UI.avatar(u, 32) +
+        '<div class="hit-main"><div class="hit-head">' + (m.outgoing ? T('search.youWrote') + ' ' : '') +
+        UI.esc(u.displayName || u.username || '?') +
+        ' <span class="tiny muted">' + UI.timeAgo(m.created) + '</span></div>' +
+        '<div class="hit-body">' + UI.esc(m.body) + '</div></div></a>';
+    }
+
+    function groupRow(g) {
+      return '<a class="hit-row" href="#/group/' + g.id + '">' +
+        UI.avatar({ id: g.id, displayName: g.name, avatar: g.avatar }, 32, false) +
+        '<div class="hit-main"><div class="hit-head">' + UI.esc(g.name) +
+        ' <span class="tiny muted">' + g.members + ' ' + T('groups.members') + '</span></div>' +
+        (g.description ? '<div class="hit-body">' + UI.esc(g.description) + '</div>' : '') +
+        '</div></a>';
+    }
+
+    function gameRow(g) {
+      return '<a class="hit-row" href="#/game/' + g.id + '">' +
+        '<span class="hit-icon">' + UI.icon('gamepad') + '</span>' +
+        '<div class="hit-main"><div class="hit-head">' + UI.esc(g.title) +
+        ' <span class="tiny muted">' + (g.plays || 0) + '</span></div>' +
+        (g.description ? '<div class="hit-body">' + UI.esc(g.description) + '</div>' : '') +
+        '</div></a>';
+    }
+
+    function section(title, icon, rows, more, emptyText) {
+      if (!rows) return '';
+      return '<div class="card"><div class="card-h">' + UI.icon(icon) + ' ' + title +
+        (more ? '<span class="right tiny muted">' + T('search.more') + '</span>' : '') + '</div>' +
+        '<div class="card-b flush">' + (rows || '<div class="tiny muted" style="padding:10px 12px">' +
+          (emptyText || T('search.empty')) + '</div>') + '</div></div>';
+    }
+
+    function loadEverything() {
+      var url = '/api/search/all?limit=8' + (q ? '&q=' + encodeURIComponent(q) : '') +
+        (author ? '&author=' + encodeURIComponent(author) : '') +
+        (since ? '&since=' + encodeURIComponent(since) : '') +
+        (until ? '&until=' + encodeURIComponent(until) : '') +
+        '&kind=' + encodeURIComponent(kind === 'all' ? 'all' : kind);
+      Api.request('GET', url, null, function (err, data) {
+        if (err) { body.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+        var counts = data.counts || {};
+        var nodes = document.querySelectorAll('.search-tabs [data-count]');
+        for (var n = 0; n < nodes.length; n++) {
+          var key = nodes[n].getAttribute('data-count');
+          var value = counts[key] || 0;
+          nodes[n].textContent = value ? (value > 99 ? '99+' : value) : '';
+          if (value) nodes[n].className = 'count';
+        }
+
+        var html = '';
+
+        if (kind === 'all' || kind === 'people') {
+          var people = '';
+          var users = data.users || [];
+          for (var u = 0; u < users.length; u++) people += actionCard(users[u]);
+          html += section(T('search.users'), 'users', people, false);
+        }
+
+        if (kind === 'all' || kind === 'posts') {
+          var posts = data.posts || [];
+          if (kind === 'posts') {
+            html += '<div class="card"><div class="card-h">' + UI.icon('comments') + ' ' + T('search.posts') +
+              '<span class="right tiny muted">' + T('search.found', posts.length) + '</span></div>' +
+              '<div class="card-b" id="search-posts"></div></div><div id="search-more"></div>';
+          } else if (posts.length) {
+            var ph = '';
+            for (var p = 0; p < posts.length; p++) ph += App.postHtml(posts[p]);
+            html += '<div class="card"><div class="card-h">' + UI.icon('comments') + ' ' + T('search.posts') +
+              '<span class="right"><a href="' + UI.attr(filterUrl('kind=posts')) + '">' + T('search.allPosts') +
+              '</a></span></div><div class="card-b" id="search-posts"></div></div>';
+          }
+        }
+
+        if (kind === 'all' || kind === 'comments') {
+          var comments = data.comments || [];
+          var ch = '';
+          for (var c = 0; c < comments.length; c++) ch += commentRow(comments[c]);
+          html += section(T('search.comments'), 'comment-dots', ch, data.commentsMore);
+        }
+
+        if (kind === 'all' || kind === 'messages') {
+          var messages = data.messages || [];
+          var mh = '';
+          for (var m = 0; m < messages.length; m++) mh += messageRow(messages[m]);
+          html += section(T('search.messages'), 'envelope', mh, data.messagesMore, T('search.noMessages'));
+        }
+
+        if (kind === 'all' || kind === 'groups') {
+          var groups = data.groups || [];
+          var gh = '';
+          for (var g = 0; g < groups.length; g++) gh += groupRow(groups[g]);
+          html += section(T('search.groups'), 'people-group', gh, false);
+        }
+
+        if (kind === 'all' || kind === 'games') {
+          var games = data.games || [];
+          var gmh = '';
+          for (var gm = 0; gm < games.length; gm++) gmh += gameRow(games[gm]);
+          html += section(T('search.games'), 'gamepad', gmh, false);
+        }
+
+        if (!html) html = '<div class="card"><div class="card-b">' +
+          UI.empty('magnifying-glass', T('search.empty'), T('search.emptyHint')) + '</div></div>';
+        body.innerHTML = html;
+
+        if (kind === 'posts' || (kind === 'all' && (data.posts || []).length)) {
+          var list = document.getElementById('search-posts');
+          var posts2 = data.posts || [];
+          if (list) {
+            var h2 = '';
+            for (var i = 0; i < posts2.length; i++) h2 += App.postHtml(posts2[i]);
+            list.innerHTML = h2;
+            App.bindPosts(list);
+          }
+          next = posts2.length ? posts2[posts2.length - 1].id : 0;
+          var moreBox = document.getElementById('search-more');
+          if (moreBox && data.postsMore) {
+            moreBox.innerHTML = '<button type="button" class="load-more" id="search-load">' +
+              T('feed.loadMore') + '</button>';
+            var lb = document.getElementById('search-load');
+            if (lb) lb.addEventListener('click', function () { lb.disabled = true; loadPosts(true); });
+          }
+        }
+
+        App.bindFriendActions(body);
+      });
+    }
+
+    // ---------------------------------------------------------- posts mode
+
     function loadPosts(more) {
       var url = '/api/search/posts?limit=20' + (q ? '&q=' + encodeURIComponent(q) : '') +
         (media ? '&media=' + encodeURIComponent(media) : '') +
         (sort ? '&sort=' + encodeURIComponent(sort) : '') +
         (author ? '&author=' + encodeURIComponent(author) : '') +
+        (since ? '&since=' + encodeURIComponent(since) : '') +
+        (until ? '&until=' + encodeURIComponent(until) : '') +
         (more && next ? '&before=' + encodeURIComponent(next) : '');
       Api.request('GET', url, null, function (err, data) {
         if (err) {
@@ -3971,21 +4157,8 @@
       });
     }
 
-    loadPosts(false);
-
-    // people, only when there is free text to match on
-    if (q.length >= 2) {
-      Api.request('GET', '/api/search?q=' + encodeURIComponent(q), null, function (err, data) {
-        if (err || !data || !(data.users || []).length) return;
-        var users = data.users;
-        var h = '<div class="card"><div class="card-h">' + UI.icon('users') + ' ' + T('search.users') +
-          '<span class="right tiny muted">' + users.length + '</span></div><div class="card-b"><div class="user-grid">';
-        for (var i = 0; i < users.length; i++) h += actionCard(users[i]);
-        h += '</div></div></div>';
-        body.insertAdjacentHTML('afterbegin', h);
-        App.bindFriendActions(body);
-      });
-    }
+    if (kind === 'posts' && (media || sort !== 'recent')) loadPosts(false);
+    else loadEverything();
   };
 
   // start once every view is registered

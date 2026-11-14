@@ -905,6 +905,59 @@ async function main() {
   const goneStory = await bob.call('GET', '/api/story?id=' + storyId);
   ok('deleted story is gone', goneStory.status === 404, String(goneStory.status));
 
+  // ---- one search over everything
+  const word = 'zebra' + stamp;
+  const sPost = await alice.call('POST', '/api/post', { body: 'a post about ' + word });
+  const sComment = await bob.call('POST', '/api/comment', { post: sPost.data.post.id, body: 'comment with ' + word });
+  const sMessage = await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: 'secret ' + word });
+  const sGroup = await alice.call('POST', '/api/group/create', {
+    name: 'Club ' + word, description: 'about ' + word, visibility: 'public'
+  });
+  ok('search fixtures created', sPost.status === 200 && sComment.status === 200 &&
+    sMessage.status === 200 && sGroup.status === 200,
+    [sPost.status, sComment.status, sMessage.status, sGroup.status].join(','));
+
+  const all = await alice.call('GET', '/api/search/all?q=' + word);
+  ok('search finds everything at once', all.status === 200 &&
+    all.data.counts.posts >= 1 && all.data.counts.comments >= 1 &&
+    all.data.counts.messages >= 1 && all.data.counts.groups >= 1,
+    JSON.stringify(all.data.counts));
+  ok('search hit carries the comment context',
+    (all.data.comments || []).some(c => c.post === sPost.data.post.id && c.postPreview), '');
+  ok('message hit knows the other side',
+    (all.data.messages || []).some(m => m.with && m.with.id === bob.user.id && m.outgoing === false), '');
+
+  const byKind = await alice.call('GET', '/api/search/all?q=' + word + '&kind=comments');
+  ok('kind filter returns only comments', byKind.status === 200 &&
+    byKind.data.posts.length === 0 && byKind.data.comments.length >= 1, '');
+
+  const peopleOnly = await bob.call('GET', '/api/search/all?q=' + word + '&kind=people');
+  ok('kind=people skips posts', peopleOnly.data.posts.length === 0 && peopleOnly.data.users.length === 0, '');
+
+  // bob's own search must not see alice's other conversations
+  const bobMessages = await bob.call('GET', '/api/search/all?q=' + word + '&kind=messages');
+  ok('messages are only your own', bobMessages.data.messages.length === 1 &&
+    bobMessages.data.messages[0].body.indexOf(word) >= 0, JSON.stringify(bobMessages.data.messages.length));
+
+  const stranger2 = await new Client('stranger2');
+  await stranger2.register('st2_' + stamp, 'outsider-pass-1');
+  const strangerMessages = await stranger2.call('GET', '/api/search/all?q=' + word + '&kind=messages');
+  ok('a stranger cannot search somebody else\'s chat', strangerMessages.data.messages.length === 0, '');
+
+  const noQuery = await alice.call('GET', '/api/search/all');
+  ok('an empty search is refused', noQuery.status === 400, String(noQuery.status));
+
+  const miss = await alice.call('GET', '/api/search/all?q=zzz-' + word + '-nope');
+  ok('a miss returns empty sections', miss.status === 200 && miss.data.posts.length === 0 &&
+    miss.data.comments.length === 0, '');
+
+  const byDate = await alice.call('GET', '/api/search/all?q=' + word + '&since=2099-01-01');
+  ok('date filter excludes the future', byDate.data.posts.length === 0, '');
+
+  const byAuthor = await alice.call('GET', '/api/search/all?q=' + word + '&author=' + bob.user.id);
+  ok('author filter works', byAuthor.data.comments.length >= 1 && byAuthor.data.posts.length === 0,
+    JSON.stringify({ c: byAuthor.data.comments.length, p: byAuthor.data.posts.length }));
+
   // ---- file attachments
   const TXT = 'data:text/plain;base64,' + Buffer.from('attachment body').toString('base64');
   const fileMsg = await bob.call('POST', '/api/messages/send', {

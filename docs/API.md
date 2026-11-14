@@ -560,6 +560,39 @@ shelf points at it any more.
 Playlists group media ids in play order (max 200 items, 50 playlists per account).
 They are private to their owner; a deleted track simply disappears from the list.
 
+### Search
+
+One box over everything the viewer may see. Every branch reuses the same
+visibility rules as the normal endpoints, so search can never reveal something that
+could not be opened directly.
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| GET | `/api/search/all` | `q`, `kind`, `author`, `with`, `since`, `until`, `before`, `limit` | `{ q, kind, users[], posts[], comments[], messages[], groups[], games[], counts{}, postsMore, commentsMore, messagesMore }` |
+| GET | `/api/search/posts` | `q`, `author`, `tag`, `media`, `since`, `until`, `sort` | `{ posts[], hasMore, next }` |
+| GET | `/api/search` | `q` | `{ users[], posts[] }` |
+
+`kind` is `all` (default), `posts`, `comments`, `messages`, `people`, `groups` or
+`games`; `counts` always carries the number found per section, so the client can
+label its tabs. `q` needs at least two characters unless a filter is set, otherwise
+the request is refused with `400 empty-search`. `since`/`until` accept
+`YYYY-MM-DD` (until means the whole day) or a full ISO stamp.
+
+What each branch enforces:
+
+* **posts** - the same `PostFilter` and `VisibleTo` as the feed, so friends-only,
+  private and queued community posts stay hidden.
+* **comments** - a comment is visible only when its post is; the store checks the
+  parent before returning a hit, and the hit carries a `postPreview` for context.
+* **messages** - only the viewer's own conversations, and only messages they have
+  not deleted. There is no way to search somebody else's chat.
+* **people** - filtered by `CanViewProfile`, so a private profile does not leak its
+  display name.
+* **groups** - closed communities are only findable by their members.
+* **games** - only when the games shelf is on.
+
+Rate limited by `limits.searchPerMin` (60/min) shared with the older endpoints.
+
 ### Drafts and scheduling
 
 | Method | Path | Body / query | Result |

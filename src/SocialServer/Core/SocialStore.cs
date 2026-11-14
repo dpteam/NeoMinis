@@ -2036,6 +2036,101 @@ namespace Social.Core
             }
         }
 
+        // ============================================================== search
+
+        /// <summary>
+        /// Comments whose body matches, newest first. A comment is only visible when
+        /// its post is: the store checks the parent, so a private wall never leaks
+        /// through search.
+        /// </summary>
+        public List<Comment> SearchComments(string query, long viewerId, long author,
+                                            DateTime since, DateTime until, long before, int limit, out bool hasMore)
+        {
+            hasMore = false;
+            List<Comment> result = new List<Comment>();
+            if (string.IsNullOrEmpty(query) || query.Trim().Length < 2) return result;
+
+            lock (_sync)
+            {
+                for (int i = 0; i < _comments.Count; i++)
+                {
+                    Comment c = _comments[i];
+                    if (c.Deleted) continue;
+                    if (author > 0 && c.Author != author) continue;
+                    if (since != DateTime.MinValue && c.Created < since) continue;
+                    if (until != DateTime.MinValue && c.Created > until) continue;
+                    if (before > 0 && c.Id >= before) continue;
+                    if (string.IsNullOrEmpty(c.Body)) continue;
+                    if (c.Body.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                    Post parent = FindPost(c.Post);
+                    if (parent == null || !VisibleTo(viewerId, parent)) continue;
+
+                    if (result.Count >= limit) { hasMore = true; break; }
+                    result.Add(c);
+                }
+            }
+            return result;
+        }
+
+        /// <summary>Public communities whose name or description matches.</summary>
+        public List<Group> SearchGroups(string query, long viewerId, int limit)
+        {
+            List<Group> result = new List<Group>();
+            if (string.IsNullOrEmpty(query)) return result;
+            string q = query.Trim();
+
+            lock (_sync)
+            {
+                for (int i = 0; i < _groups.Count && result.Count < limit; i++)
+                {
+                    Group g = _groups[i];
+                    if (g.Deleted) continue;
+                    // a closed community is only findable by its members
+                    if (g.Visibility == "private" && g.Owner != viewerId && !g.Members.Contains(viewerId)) continue;
+                    if (g.Name.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0 &&
+                        g.Description.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    result.Add(g);
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Messages in the viewer's own conversations that match. There is no way to
+        /// search somebody else's chat: the loop only ever looks at messages the
+        /// viewer sent or received.
+        /// </summary>
+        public List<Message> SearchOwnMessages(string query, long viewer, long author, long with,
+                                               DateTime since, DateTime until, long before, int limit, out bool hasMore)
+        {
+            hasMore = false;
+            List<Message> result = new List<Message>();
+            if (string.IsNullOrEmpty(query) || query.Trim().Length < 2) return result;
+
+            lock (_sync)
+            {
+                for (int i = 0; i < _messages.Count; i++)
+                {
+                    Message m = _messages[i];
+                    if (m.From != viewer && m.To != viewer) continue;
+                    if (m.From == viewer && m.DeletedByFrom) continue;
+                    if (m.To == viewer && m.DeletedByTo) continue;
+                    if (author > 0 && m.From != author) continue;
+                    if (with > 0 && m.From != with && m.To != with) continue;
+                    if (since != DateTime.MinValue && m.Created < since) continue;
+                    if (until != DateTime.MinValue && m.Created > until) continue;
+                    if (before > 0 && m.Id >= before) continue;
+                    if (string.IsNullOrEmpty(m.Body)) continue;
+                    if (m.Body.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                    if (result.Count >= limit) { hasMore = true; break; }
+                    result.Add(m);
+                }
+            }
+            return result;
+        }
+
         // ============================================================== tags
 
         /// <summary>Public posts containing #tag, newest first.</summary>

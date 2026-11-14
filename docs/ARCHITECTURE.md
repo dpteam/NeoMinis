@@ -89,6 +89,12 @@ Stories are the only content with a built-in death date. The row lives in
 story is already invisible; the supervisor then sweeps the row and deletes the file
 from `data/media/stories/`. That is why stories never leak disk space.
 
+Search is a linear scan under the store lock, one pass per source, reusing the same
+visibility helpers as the feed (`VisibleTo`, `CanViewProfile`, `CanViewPost`). There
+is no index: with the flat tables and a few thousand rows that is faster than
+maintaining one, and it cannot drift out of sync with the data. The message branch
+only ever walks conversations the viewer is part of.
+
 ## Request pipeline
 
 1. `HttpConnection` parses the request (limits: 8 KB request line, 64 KB headers,
