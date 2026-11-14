@@ -669,6 +669,22 @@ namespace Social.Core
             }
         }
 
+        /// <summary>Toggles an emoji reaction on a post. Returns null when missing.</summary>
+        public Post ReactPost(long id, long userId, string emoji)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Post p = FindPost(id);
+                if (p == null || p.Deleted) return null;
+                string updated;
+                Reactions.Toggle(p.Reactions, userId, emoji, out updated);
+                p.Reactions = updated;
+                MarkPosts();
+                return p;
+            }
+        }
+
         /// <summary>Pins a post; only one post per wall or group stays pinned.</summary>
         public bool PinPost(long id, bool pinned)
         {
@@ -1187,6 +1203,11 @@ namespace Social.Core
 
         public Message CreateMessage(long from, long to, string body, string image, string audio, int audioSec, long replyTo)
         {
+            return CreateMessage(from, to, body, image, audio, audioSec, replyTo, 0);
+        }
+
+        public Message CreateMessage(long from, long to, string body, string image, string audio, int audioSec, long replyTo, long forwardedFrom)
+        {
             lock (_sync)
             {
                 EnsureWritable();
@@ -1199,6 +1220,7 @@ namespace Social.Core
                 m.Audio = audio ?? "";
                 m.AudioSec = audioSec;
                 m.ReplyTo = replyTo;
+                m.ForwardedFrom = forwardedFrom;
                 m.Created = DateTime.UtcNow;
                 _messages.Insert(0, m);
                 MarkMessages();
@@ -2229,6 +2251,7 @@ namespace Social.Core
                 d["deleted"] = p.Deleted; d["pinned"] = p.Pinned;
                 d["legacySource"] = p.LegacySource; d["legacyId"] = p.LegacyId;
                 d["pollQuestion"] = p.PollQuestion; d["pollOptions"] = p.PollOptions; d["pollVotes"] = p.PollVotes;
+                d["reactions"] = p.Reactions;
                 list.Add(d);
             }
             return list;
@@ -2255,6 +2278,7 @@ namespace Social.Core
             p.PollQuestion = Json.GetString(d, "pollQuestion", "");
             p.PollOptions = Json.GetString(d, "pollOptions", "");
             p.PollVotes = Json.GetString(d, "pollVotes", "");
+            p.Reactions = Json.GetString(d, "reactions", "");
             object likes = Json.Get(d, "likes");
             List<object> arr = likes as List<object>;
             if (arr != null)
@@ -2334,6 +2358,7 @@ namespace Social.Core
                 d["image"] = m.Image; d["replyTo"] = m.ReplyTo;
                 d["audio"] = m.Audio; d["audioSec"] = m.AudioSec;
                 d["reactions"] = m.Reactions;
+                d["forwardedFrom"] = m.ForwardedFrom;
                 d["created"] = m.Created; d["read"] = m.Read;
                 d["deletedByFrom"] = m.DeletedByFrom; d["deletedByTo"] = m.DeletedByTo;
                 list.Add(d);
@@ -2353,6 +2378,7 @@ namespace Social.Core
             m.AudioSec = Json.GetInt(d, "audioSec", 0);
             m.ReplyTo = Json.GetLong(d, "replyTo", 0);
             m.Reactions = Json.GetString(d, "reactions", "");
+            m.ForwardedFrom = Json.GetLong(d, "forwardedFrom", 0);
             m.Created = Json.GetDate(d, "created", DateTime.UtcNow);
             m.Read = Json.GetBool(d, "read", false);
             m.DeletedByFrom = Json.GetBool(d, "deletedByFrom", false);

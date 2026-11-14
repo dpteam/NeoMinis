@@ -193,10 +193,16 @@
     }
     var img = UI.safeUrl(m.image);
     var voice = UI.safeUrl(m.audio);
+    var fwd = '';
+    if (m.forwardedFrom) {
+      var fn = m.forwardedFrom.displayName || m.forwardedFrom.username || '?';
+      fwd = '<div class="msg-forwarded">' + UI.icon('share') + ' ' +
+        UI.esc(T('messages.forwardedFrom', fn)) + '</div>';
+    }
     var tick = mine ? '<span class="tick' + (m.read ? ' read' : '') + '" title="' + UI.attr(m.read ? T('messages.read') : T('messages.sent')) + '">' +
       UI.icon(m.read ? 'check-double' : 'check') + '</span>' : '';
     return '<div class="bubble-row' + (mine ? ' mine' : '') + '" data-id="' + m.id + '">' + UI.avatar(u, 26) +
-      '<div class="bubble">' + quote +
+      '<div class="bubble">' + fwd + quote +
       (img ? '<img class="msg-img" src="' + UI.attr(img) + '" alt="" loading="lazy">' : '') +
       (voice ? '<div class="msg-voice">' + UI.icon('microphone') +
         '<audio controls preload="metadata" src="' + UI.attr(voice) + '"></audio>' +
@@ -205,6 +211,7 @@
       reactionChips(m) +
       '<div class="msg-foot"><span class="time">' + UI.formatTime(m.created) + '</span>' + tick +
       '<button type="button" class="msg-act msg-react" data-id="' + m.id + '" title="' + UI.attr(T('messages.react')) + '">' + UI.icon('face-smile') + '</button>' +
+      '<button type="button" class="msg-act msg-forward" data-id="' + m.id + '" title="' + UI.attr(T('messages.forward')) + '">' + UI.icon('share') + '</button>' +
       '<button type="button" class="msg-act msg-reply" data-id="' + m.id + '" title="' + UI.attr(T('messages.reply')) + '">' + UI.icon('reply') + '</button>' +
       (mine ? '<button type="button" class="msg-act msg-del" data-id="' + m.id + '" title="' + UI.attr(T('common.delete')) + '">' + UI.icon('xmark') + '</button>' : '') +
       '</div></div></div>';
@@ -718,7 +725,92 @@
     bindBubbles(body);
   }
 
+  function forwardMessage(messageId) {
+    var body = '<div class="field"><label>' + T('messages.forwardTo') + '</label>' +
+      '<input class="input" id="fwd-q" type="search" placeholder="' + UI.attr(T('people.search')) + '" autocomplete="off"></div>' +
+      '<div class="fwd-list" id="fwd-list"><div class="center" style="padding:16px">' + UI.spinner() + '</div></div>';
+
+    var close = UI.modal({
+      title: T('messages.forward'),
+      icon: 'share',
+      body: body,
+      actions: [{ label: T('common.cancel'), cls: 'btn-ghost' }]
+    });
+
+    var boxes = document.querySelectorAll('.modal');
+    var box = boxes[boxes.length - 1];
+    if (!box) return;
+    var list = box.querySelector('#fwd-list');
+    var input = box.querySelector('#fwd-q');
+    var threads = [];
+
+    function render(users) {
+      if (!users.length) {
+        list.innerHTML = '<div class="tiny muted" style="padding:10px">' + T('messages.noThreads') + '</div>';
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < users.length; i++) {
+        var u = users[i];
+        html += '<button type="button" class="fwd-item" data-id="' + u.id + '">' + UI.avatar(u, 30) +
+          '<span class="name">' + UI.esc(u.displayName || u.username) + '</span></button>';
+      }
+      list.innerHTML = html;
+      var items = list.querySelectorAll('.fwd-item');
+      for (var k = 0; k < items.length; k++) {
+        items[k].addEventListener('click', function () {
+          var to = Number(this.getAttribute('data-id'));
+          items = list.querySelectorAll('.fwd-item');
+          for (var z = 0; z < items.length; z++) items[z].disabled = true;
+          Api.request('POST', '/api/messages/forward', { id: Number(messageId), to: to }, function (err) {
+            if (err) {
+              for (var y = 0; y < items.length; y++) items[y].disabled = false;
+              UI.toast(Api.errorText(err), 'err');
+              return;
+            }
+            UI.toast(T('messages.forwarded'), 'ok');
+            SoundFX.play('message');
+            if (close) close();
+            refreshThreads();
+          });
+        });
+      }
+    }
+
+    Api.request('GET', '/api/messages/threads', null, function (err, data) {
+      if (err) { list.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+      threads = ((data && data.threads) || []).map(function (t) { return t.other; });
+      render(threads);
+    });
+
+    var timer = null;
+    var seq = 0;
+    input.addEventListener('input', function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        var q = input.value.trim();
+        if (q.length < 2) { render(threads); return; }
+        var my = ++seq;
+        Api.request('GET', '/api/people?q=' + encodeURIComponent(q) + '&limit=20', null, function (e2, d2) {
+          if (my !== seq) return;
+          if (e2) { list.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(e2)) + '</div>'; return; }
+          render((d2 && d2.users) || []);
+        });
+      }, 280);
+    });
+  }
+
   function bindBubbles(scope) {
+    var forwards = (scope || document).querySelectorAll('.msg-forward');
+    for (var f = 0; f < forwards.length; f++) {
+      if (forwards[f].getAttribute('data-bound')) continue;
+      forwards[f].setAttribute('data-bound', '1');
+      forwards[f].addEventListener('click', function (e) {
+        e.preventDefault();
+        forwardMessage(this.getAttribute('data-id'));
+      });
+    }
+
     var reacts = (scope || document).querySelectorAll('.msg-react');
     for (var r = 0; r < reacts.length; r++) {
       if (reacts[r].getAttribute('data-bound')) continue;

@@ -113,6 +113,38 @@ namespace Social.Core
             }
         }
 
+        /// <summary>
+        /// Copies a stored media file to a fresh name. Forwarded messages get their
+        /// own copy so deleting one of them can never break the other.
+        /// </summary>
+        public string Duplicate(string url)
+        {
+            if (string.IsNullOrEmpty(url) || !url.StartsWith("/media/", StringComparison.Ordinal)) return url;
+            try
+            {
+                string rel = url.Substring("/media/".Length).Replace('/', Path.DirectorySeparatorChar);
+                if (rel.IndexOf("..", StringComparison.Ordinal) >= 0) return "";
+                string source = Path.GetFullPath(Path.Combine(_cfg.MediaDir, rel));
+                string root = Path.GetFullPath(_cfg.MediaDir);
+                if (!root.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+                    root += Path.DirectorySeparatorChar;
+                if (!source.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return "";
+                if (!File.Exists(source)) return "";
+
+                string dir = Path.GetDirectoryName(source);
+                string ext = Path.GetExtension(source);
+                string copy = Path.Combine(dir, Crypto.RandomHex(16) + ext);
+                File.Copy(source, copy, true);
+                string sub = dir.Substring(root.Length).Replace(Path.DirectorySeparatorChar, '/');
+                return "/media/" + sub + "/" + Path.GetFileName(copy);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("MEDIA", "cannot duplicate " + url + ": " + ex.Message);
+                return "";
+            }
+        }
+
         public void Delete(string url)
         {
             if (string.IsNullOrEmpty(url) || !url.StartsWith("/media/", StringComparison.Ordinal)) return;

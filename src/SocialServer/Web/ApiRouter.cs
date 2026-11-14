@@ -565,6 +565,7 @@ namespace Social.Web
             if (r == "post/pin") { RequireMethod(m, "POST"); HandlePostPin(ctx); return; }
             if (r == "likes") { RequireMethod(m, "GET"); HandleLikes(ctx); return; }
             if (r == "poll") { RequireMethod(m, "POST"); HandlePollVote(ctx); return; }
+            if (r == "reaction") { RequireMethod(m, "POST"); HandlePostReact(ctx); return; }
             if (r == "photos") { RequireMethod(m, "GET"); HandlePhotos(ctx); return; }
             if (r == "like") { RequireMethod(m, "POST"); HandleLike(ctx); return; }
             if (r == "bookmarks") { RequireMethod(m, "GET"); HandleBookmarks(ctx); return; }
@@ -586,6 +587,7 @@ namespace Social.Web
             if (r == "messages/wait") { RequireMethod(m, "GET"); HandleMessagesWait(ctx); return; }
             if (r == "messages/typing") { RequireMethod(m, "POST"); HandleMessageTyping(ctx); return; }
             if (r == "messages/react") { RequireMethod(m, "POST"); HandleMessageReact(ctx); return; }
+            if (r == "messages/forward") { RequireMethod(m, "POST"); HandleMessageForward(ctx); return; }
             if (r == "messages/search") { RequireMethod(m, "GET"); HandleMessageSearch(ctx); return; }
             if (r == "notifications") { RequireMethod(m, "GET"); HandleNotifications(ctx); return; }
             if (r == "notifications/read") { RequireMethod(m, "POST"); HandleNotificationsRead(ctx); return; }

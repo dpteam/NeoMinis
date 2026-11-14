@@ -25,10 +25,31 @@ namespace Social.Core
             "\uD83D\uDD25"    // fire
         };
 
+        /// <summary>
+        /// Post reactions deliberately avoid the heart: posts already have a like
+        /// button and two hearts next to each other would only confuse people.
+        /// </summary>
+        public static readonly string[] PostAllowed = new string[]
+        {
+            "\uD83D\uDC4D",   // thumbs up
+            "\uD83D\uDE02",   // laughing
+            "\uD83D\uDE2E",   // surprised
+            "\uD83D\uDE22",   // crying
+            "\uD83D\uDD25",   // fire
+            "\uD83C\uDF89"    // party
+        };
+
         public static bool IsAllowed(string emoji)
         {
             if (string.IsNullOrEmpty(emoji)) return false;
             for (int i = 0; i < Allowed.Length; i++) if (Allowed[i] == emoji) return true;
+            return false;
+        }
+
+        public static bool IsPostAllowed(string emoji)
+        {
+            if (string.IsNullOrEmpty(emoji)) return false;
+            for (int i = 0; i < PostAllowed.Length; i++) if (PostAllowed[i] == emoji) return true;
             return false;
         }
 

@@ -412,6 +412,27 @@ async function main() {
   const searchMiss = await bob.call('GET', '/api/messages/search?q=' + encodeURIComponent('zzz-nothing-here'));
   ok('search miss returns nothing', searchMiss.status === 200 && searchMiss.data.results.length === 0, '');
 
+  // ---- message forwarding
+  const fwd = await bob.call('POST', '/api/messages/forward', { id: quotedId, to: alice.user.id });
+  ok('message forwarded', fwd.status === 200 && fwd.data.message.forwardedFrom &&
+    fwd.data.message.forwardedFrom.id === bob.user.id && fwd.data.message.body === 'hi alice',
+    JSON.stringify(fwd.data && fwd.data.message.forwardedFrom));
+  const fwdAlien = await bob.call('POST', '/api/messages/forward', { id: 999999, to: alice.user.id });
+  ok('forward of unknown message rejected', fwdAlien.status === 404, String(fwdAlien.status));
+
+  // ---- post reactions
+  const postReact = await alice.call('POST', '/api/reaction', { id: postId, emoji: '🔥' });
+  ok('post reaction added', postReact.status === 200 && (postReact.data.post.reactions || []).length === 1 &&
+    postReact.data.post.reactions[0].mine === true, JSON.stringify(postReact.data && postReact.data.post.reactions));
+  const postReactSwitch = await bob.call('POST', '/api/reaction', { id: postId, emoji: '👍' });
+  const chips = (postReactSwitch.data.post.reactions || []);
+  ok('second reaction joins the post', chips.length === 2 && chips.some(r => r.emoji === '🔥' && r.count === 1) &&
+    chips.some(r => r.emoji === '👍' && r.mine === true), JSON.stringify(chips));
+  const postReactOff = await bob.call('POST', '/api/reaction', { id: postId, emoji: '👍' });
+  ok('post reaction toggles off', (postReactOff.data.post.reactions || []).length === 1, '');
+  const postReactHeart = await alice.call('POST', '/api/reaction', { id: postId, emoji: '❤️' });
+  ok('like emoji is not a post reaction', postReactHeart.status === 400, String(postReactHeart.status));
+
   await bob.call('POST', '/api/messages/typing', { to: alice.user.id });
   const typingWait = await alice.call('GET', '/api/messages/wait?with=' + bob.user.id + '&after=0&timeout=3');
   ok('typing is visible', typingWait.status === 200 && typingWait.data.typing === true, JSON.stringify(typingWait.data && typingWait.data.typing));

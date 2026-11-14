@@ -138,6 +138,20 @@ namespace Social.Web
             b.Prop("pinned", p.Pinned);
             b.Prop("bookmarked", viewer != null && _store.IsBookmarked(viewer.Id, p.Id));
             b.Prop("legacySource", p.LegacySource);
+            List<KeyValuePair<string, List<long>>> postReactions = Reactions.Parse(p.Reactions);
+            if (postReactions.Count > 0)
+            {
+                b.Name("reactions").BeginArray();
+                for (int i = 0; i < postReactions.Count; i++)
+                {
+                    b.BeginObject()
+                        .Prop("emoji", postReactions[i].Key)
+                        .Prop("count", postReactions[i].Value.Count)
+                        .Prop("mine", viewer != null && postReactions[i].Value.Contains(viewer.Id))
+                        .EndObject();
+                }
+                b.EndArray();
+            }
             if (Polls.Has(p))
             {
                 List<string> options = Polls.Options(p);
@@ -203,6 +217,15 @@ namespace Social.Web
             b.Prop("created", Util.Iso(m.Created));
             b.Prop("read", m.Read);
             b.Prop("mine", viewer != null && m.From == viewer.Id);
+            if (m.ForwardedFrom > 0)
+            {
+                User author = _store.FindUser(m.ForwardedFrom);
+                b.Name("forwardedFrom").BeginObject()
+                    .Prop("id", m.ForwardedFrom)
+                    .Prop("username", author == null ? "" : author.Username)
+                    .Prop("displayName", author == null ? "" : author.DisplayName)
+                    .EndObject();
+            }
             List<KeyValuePair<string, List<long>>> reactions = Reactions.Parse(m.Reactions);
             if (reactions.Count > 0)
             {

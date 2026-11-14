@@ -111,6 +111,7 @@ permission, `404` missing, `409` conflict, `413` too large, `429` rate limit,
 | POST | `/api/bookmark` | `id` | `{ bookmarked, total }` |
 | GET | `/api/likes` | `post`, `limit` | `{ users[], total }` |
 | POST | `/api/poll` | `post`, `option` | `{ post }` (with the fresh poll state) |
+| POST | `/api/reaction` | `id`, `emoji` | `{ post }` |
 | GET | `/api/photos` | `user`, `before`, `limit` | `{ user, photos[{ id, image, created, likes, comments }], hasMore, next }` |
 
 `visibility`: `public` (default) · `friends` · `private`.
@@ -200,6 +201,7 @@ earned (useful after an import or a rule change).
 | GET | `/api/messages/wait` | `with`, `after`, `timeout` | `{ messages[], latest, typing, read, unread, live }` |
 | POST | `/api/messages/typing` | `to` | `{ ok }` |
 | POST | `/api/messages/react` | `id`, `emoji` | `{ message }` |
+| POST | `/api/messages/forward` | `id`, `to` | `{ message }` |
 | GET | `/api/messages/search` | `q` (≥ 2 chars), `with` (optional), `limit` | `{ results[{ message, peer }], total }` |
 | POST | `/api/messages/read` | `with` | `{ unread }` |
 | POST | `/api/messages/delete` | `id` | `{ ok }` (per-side delete) |
@@ -220,6 +222,14 @@ clamped to 1). The file lands in `/media/messages/` and the message comes back w
 Reactions: one per account per message from the fixed set ❤️ 👍 👎 😂 😀 😮 😢 🔥.
 `POST /api/messages/react` sets, replaces or (same emoji) removes it; messages come
 back with `reactions[{ emoji, count, mine }]`.
+
+Post reactions are the same mechanism with a different set (👍 😂 😮 😢 🔥 🎉 — the
+heart stays reserved for the like button) through `POST /api/reaction`.
+
+`POST /api/messages/forward` copies a message you can see into another conversation.
+Pictures and voice notes are duplicated on disk, so deleting either copy never
+breaks the other. The copy carries `forwardedFrom { id, username, displayName }`
+and forwarding an already forwarded message keeps the original author.
 
 `/api/messages/search` looks only inside the caller's own conversations (deleted
 per-side messages are skipped) and is meant for the search box above the thread

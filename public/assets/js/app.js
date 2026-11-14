@@ -1052,8 +1052,10 @@ var App = (function () {
       (img ? '<div class="post-media"><img class="post-img" src="' + UI.attr(img) + '" alt="" loading="lazy"></div>' : '') +
       vid +
       poll +
+      postReactionsHtml(p) +
       '<div class="post-actions">' +
       '<button type="button" class="pa post-like' + (p.liked ? ' liked' : '') + '" data-id="' + p.id + '">' + UI.icon(p.liked ? 'heart' : 'heart') + ' <span>' + (p.liked ? T('feed.liked') : T('feed.like')) + '</span> <b class="likes-count" data-id="' + p.id + '" title="' + UI.attr(T('feed.likedBy')) + '">' + (p.likes || 0) + '</b></button>' +
+      '<button type="button" class="pa post-react" data-id="' + p.id + '" title="' + UI.attr(T('feed.react')) + '">' + UI.icon('face-smile') + ' <span>' + T('feed.react') + '</span></button>' +
       '<button type="button" class="pa post-comment-toggle" data-id="' + p.id + '">' + UI.icon('comment') + ' <span>' + T('feed.comment') + '</span> <b>' + (p.comments || 0) + '</b></button>' +
       '<button type="button" class="pa post-share" data-id="' + p.id + '">' + UI.icon('share') + ' <span>' + T('feed.share') + '</span></button>' +
       '<button type="button" class="pa post-bookmark' + (p.bookmarked ? ' active' : '') + '" data-id="' + p.id + '" title="' + UI.attr(T('feed.bookmark')) + '">' + UI.icon('bookmark') + ' <span>' + (p.bookmarked ? T('feed.bookmarked') : T('feed.bookmark')) + '</span></button>' +
@@ -1062,6 +1064,93 @@ var App = (function () {
       '<div class="comments hidden" data-comments="' + p.id + '"></div>' +
       '</article>';
     return html;
+  }
+
+  // ------------------------------------------------------- post reactions
+
+  var POST_REACTIONS = ['👍', '😂', '😮', '😢', '🔥', '🎉'];
+
+  function postReactionsHtml(p) {
+    var list = p.reactions || [];
+    if (!list.length) return '';
+    var html = '<div class="post-reactions">';
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i];
+      html += '<button type="button" class="reaction-chip' + (r.mine ? ' mine' : '') +
+        '" data-post-react="' + p.id + '" data-emoji="' + UI.attr(r.emoji) + '" title="' + UI.attr(T('feed.reactCount', r.count)) + '">' +
+        '<span class="re-emoji">' + UI.esc(r.emoji) + '</span><b>' + r.count + '</b></button>';
+    }
+    return html + '</div>';
+  }
+
+  var postReactOutside = null;
+
+  function closePostReactPicker() {
+    var pop = document.getElementById('post-react-pop');
+    if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
+    if (postReactOutside) {
+      document.removeEventListener('mousedown', postReactOutside, true);
+      postReactOutside = null;
+    }
+  }
+
+  function openPostReactPicker(anchor, postId) {
+    closePostReactPicker();
+    var pop = document.createElement('div');
+    pop.className = 'react-pop';
+    pop.id = 'post-react-pop';
+    var html = '';
+    for (var i = 0; i < POST_REACTIONS.length; i++) {
+      html += '<button type="button" class="react-item" data-emoji="' + UI.attr(POST_REACTIONS[i]) + '">' +
+        UI.esc(POST_REACTIONS[i]) + '</button>';
+    }
+    pop.innerHTML = html;
+    document.body.appendChild(pop);
+
+    var rect = anchor.getBoundingClientRect();
+    var width = pop.offsetWidth || 240;
+    var left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.left - width / 2 + 20));
+    var top = rect.top - (pop.offsetHeight || 40) - 6;
+    if (top < 8) top = rect.bottom + 6;
+    pop.style.left = Math.round(left) + 'px';
+    pop.style.top = Math.round(top) + 'px';
+
+    var items = pop.querySelectorAll('.react-item');
+    for (var k = 0; k < items.length; k++) {
+      items[k].addEventListener('click', function () {
+        var emoji = this.getAttribute('data-emoji');
+        closePostReactPicker();
+        sendPostReaction(postId, emoji);
+      });
+    }
+
+    postReactOutside = function (e) {
+      if (pop.parentNode && !pop.contains(e.target)) closePostReactPicker();
+    };
+    setTimeout(function () {
+      if (postReactOutside) document.addEventListener('mousedown', postReactOutside, true);
+    }, 0);
+  }
+
+  function sendPostReaction(postId, emoji) {
+    Api.request('POST', '/api/reaction', { id: Number(postId), emoji: emoji }, function (err, data) {
+      if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+      var article = document.querySelector('[data-post="' + postId + '"]');
+      if (!article || !data.post) return;
+      var old = article.querySelector('.post-reactions');
+      var fresh = document.createElement('div');
+      fresh.innerHTML = postReactionsHtml(data.post);
+      var html = fresh.innerHTML;
+      if (old) {
+        if (html) old.outerHTML = html;
+        else if (old.parentNode) old.parentNode.removeChild(old);
+      } else if (html) {
+        var actions = article.querySelector('.post-actions');
+        if (actions && actions.parentNode) actions.insertAdjacentHTML('beforebegin', html);
+      }
+      bindPosts(article);
+      SoundFX.play('click');
+    });
   }
 
   // ---------------------------------------------------------- post video
@@ -1333,6 +1422,22 @@ var App = (function () {
       if (edits[ed].getAttribute('data-bound')) continue;
       edits[ed].setAttribute('data-bound', '1');
       edits[ed].addEventListener('click', function () { editPost(this.getAttribute('data-id')); });
+    }
+    var reactBtns = (scope || document).querySelectorAll('.post-react');
+    for (var rb = 0; rb < reactBtns.length; rb++) {
+      if (reactBtns[rb].getAttribute('data-bound')) continue;
+      reactBtns[rb].setAttribute('data-bound', '1');
+      reactBtns[rb].addEventListener('click', function () {
+        openPostReactPicker(this, this.getAttribute('data-id'));
+      });
+    }
+    var reactChips = (scope || document).querySelectorAll('[data-post-react]');
+    for (var rc = 0; rc < reactChips.length; rc++) {
+      if (reactChips[rc].getAttribute('data-bound')) continue;
+      reactChips[rc].setAttribute('data-bound', '1');
+      reactChips[rc].addEventListener('click', function () {
+        sendPostReaction(this.getAttribute('data-post-react'), this.getAttribute('data-emoji'));
+      });
     }
     bindPolls(scope);
     var dels = (scope || document).querySelectorAll('.post-delete');

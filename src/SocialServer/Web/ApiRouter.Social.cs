@@ -395,6 +395,23 @@ namespace Social.Web
             SendOk(ctx, b);
         }
 
+        private void HandlePostReact(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            string emoji = BodyStr(ctx, "emoji", "").Trim();
+            if (!Reactions.IsPostAllowed(emoji))
+                throw new ApiException(400, "bad-emoji", "That reaction is not supported");
+            Post p = RequirePost(id);
+            if (!CanViewPost(ctx.User, p)) throw new ApiException(403, "private", "This post is not available");
+            Post updated = _store.ReactPost(p.Id, ctx.User.Id, emoji);
+            if (updated == null) throw new ApiException(404, "no-post", "Post not found");
+
+            JsonBuilder b = new JsonBuilder(1024);
+            b.BeginObject();
+            b.Name("post").Raw(PostView(updated, ctx.User));
+            SendOk(ctx, b);
+        }
+
         private void HandlePollVote(ApiCtx ctx)
         {
             long id = BodyLong(ctx, "post", 0);
@@ -1091,6 +1108,47 @@ namespace Social.Web
             b.Prop("read", _store.LastMineRead(ctx.User.Id, other.Id));
             b.Prop("unread", _store.UnreadMessages(ctx.User.Id));
             b.Prop("live", _cfg.LiveNotifications);
+            SendOk(ctx, b);
+        }
+
+        private void HandleMessageForward(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            long to = BodyLong(ctx, "to", 0);
+            Message original = _store.FindMessage(id);
+            if (original == null) throw new ApiException(404, "no-message", "Message not found");
+            // only someone who can see the message may forward it
+            if (original.From != ctx.User.Id && original.To != ctx.User.Id)
+                throw new ApiException(403, "forbidden", "You cannot forward this message");
+            if (original.From == ctx.User.Id && original.DeletedByFrom)
+                throw new ApiException(404, "no-message", "Message not found");
+            if (original.To == ctx.User.Id && original.DeletedByTo)
+                throw new ApiException(404, "no-message", "Message not found");
+
+            User target = RequireUser(to);
+            if (target.Id == ctx.User.Id) throw new ApiException(400, "self", "You cannot forward to yourself");
+            if (!CanMessageUser(ctx.User, target))
+                throw new ApiException(403, "cannot-message", "You cannot message this user");
+            if (!Allow(ctx.User.Id, "message", _cfg.MessagesPerMin, 60))
+                throw new ApiException(429, "slow-down", "You are sending messages too fast");
+
+            // media is copied so the two messages never share a file on disk
+            string image = string.IsNullOrEmpty(original.Image) ? "" : _media.Duplicate(original.Image);
+            string audio = string.IsNullOrEmpty(original.Audio) ? "" : _media.Duplicate(original.Audio);
+            long author = original.ForwardedFrom > 0 ? original.ForwardedFrom : original.From;
+
+            Message m = _store.CreateMessage(ctx.User.Id, target.Id, original.Body, image, audio,
+                original.AudioSec, 0, author);
+            ctx.User.LastMessageAt = DateTime.UtcNow;
+            _store.MarkUserDirty(ctx.User);
+            _stats.OnMessage();
+            NotifyMessageOnce(target.Id, ctx.User.Id, m.Id);
+            GrantBadges(ctx.User);
+            Log.Debug("DATA", "message #" + id + " forwarded to #" + target.Id + " by @" + ctx.User.Username);
+
+            JsonBuilder b = new JsonBuilder(512);
+            b.BeginObject();
+            b.Name("message").Raw(MessageView(m, ctx.User));
             SendOk(ctx, b);
         }
 

@@ -82,6 +82,9 @@ namespace Social.Core
         public string PollQuestion = "";
         public string PollOptions = "";   // one option per line
         public string PollVotes = "";     // one line per option, voter ids comma separated
+
+        // emoji reactions (see Core/Reactions.cs)
+        public string Reactions = "";
     }
 
     public sealed class Bookmark
@@ -121,6 +124,7 @@ namespace Social.Core
         public int AudioSec;           // duration of the voice message in seconds
         public long ReplyTo;           // id of the quoted message, 0 = none
         public string Reactions = "";  // see Core/Reactions.cs: "emoji|id,id" per line
+        public long ForwardedFrom;     // original author when the message was forwarded, 0 = not forwarded
         public DateTime Created = DateTime.UtcNow;
         public bool Read;
         public bool DeletedByFrom;
