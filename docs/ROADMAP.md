@@ -73,7 +73,6 @@ poll) but they are the minimum.
 | **Noise suppression / echo cancel** | `getUserMedia({ audio: { echoCancellation, noiseSuppression, autoGainControl } })` as toggles. The speaking ring is in, so the level meter is already there to build on. |
 | **Ringing when the tab is closed** | Web Push with a `call` payload, a ringtone, and an "answer" action in the notification. |
 | **Group layout** | Grid that switches to speaker view, mute-all, "raise hand", per-member volume. |
-| **Noise suppression / echo cancel** | `getUserMedia({ audio: { echoCancellation, noiseSuppression, autoGainControl } })` as toggles. |
 | **Call link** | `#/call/<room>` with a copy button, so a room can be pasted into a chat. |
 | **Recording** | `MediaRecorder` over a mixed stream into the media library, with a visible "recording" badge and consent from every participant. |
 
