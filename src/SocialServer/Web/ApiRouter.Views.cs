@@ -50,7 +50,8 @@ namespace Social.Web
             b.Prop("blocked", link != null && link.Status == "blocked");
             b.Prop("privacy", u.Privacy);
             b.Prop("friends", _store.CountFriends(u.Id));
-            b.Prop("posts", _store.CountPosts(u.Id));
+            int postCount = _store.CountPosts(u.Id);
+            b.Prop("posts", postCount);
             b.Prop("canMessage", CanMessageUser(viewer, u));
             b.Prop("canCall", !self && viewer != null && _cfg.MaxCallMembers >= 2 && CanCallUser(viewer, u));
             b.Prop("mood", u.Mood);
@@ -93,6 +94,21 @@ namespace Social.Web
                 b.Prop("favBooks", showPrivate ? u.FavBooks : "");
                 b.Prop("persona", showPrivate ? u.Persona : "");
                 b.Prop("created", Util.Iso(u.Created));
+                // The old-VK joke: how filled-in the profile is, plus a separate
+                // achievement counter. Derived, never stored, so it cannot drift.
+                List<ProfileScore.Item> score = ProfileScore.Checklist(u, postCount);
+                b.Name("rating").BeginObject()
+                    .Prop("percent", ProfileScore.Percent(score))
+                    .Prop("badges", ProfileScore.BadgeCount(u.Badges));
+                // what to fill in next is only the owner's business
+                if (self || staff)
+                {
+                    List<string> missing = ProfileScore.Missing(score);
+                    b.Name("missing").BeginArray();
+                    for (int i = 0; i < missing.Count; i++) b.Str(missing[i]);
+                    b.EndArray();
+                }
+                b.EndObject();
                 b.Prop("karma", u.Karma);
                 b.Prop("likes", _store.CountLikesGiven(u.Id));
                 b.Prop("theme", u.Theme);

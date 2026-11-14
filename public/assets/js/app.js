@@ -2254,6 +2254,9 @@ var App = (function () {
         badgeIcons(u.badges) + '</div>' +
         '<div class="profile-actions">' + actions + '</div></div>';
 
+      // profile rating: how filled-in the page is, plus the achievement counter
+      html += ratingStrip(u, u.rating, isSelf);
+
       html += '<div class="profile-grid">';
       html += '<div><div class="card"><div class="card-h">' + UI.icon('circle-info') + ' ' + T('profile.about') + '</div><div class="card-b">' +
         '<div class="stat-grid" style="margin-bottom:10px">' +
@@ -2369,6 +2372,39 @@ var App = (function () {
 
   function row(label, value) {
     return '<tr><td>' + UI.esc(label) + '</td><td>' + value + '</td></tr>';
+  }
+
+  /// The old-VK vanity number: a thin meter, the percent, the achievement count,
+  /// and — for the owner only — the short list of what would raise it.
+  var RATING_LABELS = {
+    avatar: 'rating.avatar', cover: 'rating.cover', bio: 'settings.bio',
+    status: 'settings.status', birthday: 'profile.birthday', city: 'profile.city',
+    country: 'profile.country', gender: 'profile.gender', website: 'profile.website',
+    favGames: 'profile.favGames', favMovies: 'profile.favMovies',
+    favMusic: 'profile.favMusic', favBooks: 'profile.favBooks', post: 'rating.post'
+  };
+
+  function ratingStrip(u, rating, isSelf) {
+    if (!rating || typeof rating.percent !== 'number') return '';
+    var percent = Math.max(0, Math.min(100, rating.percent));
+    var full = percent >= 100;
+    var html = '<div class="rating-strip' + (full ? ' full' : '') + '">' +
+      '<div class="rating-bar"><i style="width:' + percent + '%"></i></div>' +
+      '<div class="rating-text">' + UI.icon(full ? 'circle-check' : 'chart-simple') + ' ' +
+      T('profile.rating', String(percent)) +
+      (rating.badges ? ' <span class="tiny muted">· ' + T('profile.ratingBadges', String(rating.badges)) + '</span>' : '') +
+      '</div>';
+    var missing = rating.missing || [];
+    if (isSelf && missing.length) {
+      var names = [];
+      for (var i = 0; i < missing.length; i++) {
+        var key = RATING_LABELS[missing[i]] || missing[i];
+        names.push(T(key));
+      }
+      html += '<div class="rating-hint tiny muted">' + T('profile.ratingMissing') + ' ' +
+        UI.esc(names.join(', ')) + '</div>';
+    }
+    return html + '</div>';
   }
 
   function userCard(u) {

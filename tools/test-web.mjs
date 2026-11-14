@@ -1436,6 +1436,42 @@ async function main() {
     JSON.stringify(prof.data && prof.data.user.badges));
   ok('site exposes badge catalogue', Array.isArray(hs.site && hs.site.badges) && hs.site.badges.length > 0, '');
 
+  // ---- profile rating: derived, never stored
+  const rating = prof.data && prof.data.user.rating;
+  ok('profile carries a rating', !!rating && typeof rating.percent === 'number' &&
+    rating.percent >= 0 && rating.percent <= 100, JSON.stringify(rating));
+  ok('rating counts achievements separately', !!rating && rating.badges ===
+    badgeIds.filter(b => b.length > 0).length, JSON.stringify(rating));
+  ok('the owner sees what to fill in', Array.isArray(rating && rating.missing),
+    JSON.stringify(rating && rating.missing));
+
+  // a bare profile scores low, and filling fields raises the number
+  const bare = new Client('bare');
+  await bare.register('bare_' + stamp, 'bare-password-1', 'Bare Profile');
+  const bareProf = await bare.call('GET', '/api/profile?user=' + bare.user.id);
+  const bareRating = bareProf.data && bareProf.data.user.rating;
+  ok('a fresh profile scores low', bareRating && bareRating.percent <= 20,
+    String(bareRating && bareRating.percent));
+  ok('a fresh profile has no achievements yet', bareRating && bareRating.badges === 0,
+    String(bareRating && bareRating.badges));
+  await bare.call('POST', '/api/profile', {
+    bio: 'a bio', city: 'Vilnius', country: 'Lithuania', birthday: '1990-01-01',
+    gender: 'other', website: 'https://example.com'
+  });
+  const filledProf = await bare.call('GET', '/api/profile?user=' + bare.user.id);
+  const filledRating = filledProf.data && filledProf.data.user.rating;
+  ok('filling the profile raises the rating', filledRating && filledRating.percent > bareRating.percent,
+    (bareRating && bareRating.percent) + ' -> ' + (filledRating && filledRating.percent));
+  ok('a filled field leaves the missing list', filledRating &&
+    Array.isArray(filledRating.missing) && filledRating.missing.indexOf('bio') < 0 &&
+    filledRating.missing.indexOf('city') < 0, JSON.stringify(filledRating && filledRating.missing));
+
+  // somebody else's rating is a number, but never a to-do list
+  const seenByOther = await bob.call('GET', '/api/profile?user=' + bare.user.id);
+  const otherRating = seenByOther.data && seenByOther.data.user.rating;
+  ok('a stranger sees the percent only', !!otherRating && typeof otherRating.percent === 'number' &&
+    otherRating.missing === undefined, JSON.stringify(otherRating));
+
   // ---- admin
   const adminOnPublic = await alice.call('GET', '/api/admin/overview');
   ok('admin API hidden on the public board', adminOnPublic.status === 404, String(adminOnPublic.status));

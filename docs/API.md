@@ -211,6 +211,20 @@ the card says so instead of breaking. The author gets a `repost` notification.
 (≤ 200 chars) and, like the rest of the private block, are only returned when the
 viewer is the owner, staff, a friend, or the profile is public.
 
+`user.rating` is the old-VK vanity number, computed on the fly by
+`Core/ProfileScore.cs` and never stored:
+
+```json
+{ "percent": 40, "badges": 7, "missing": ["avatar", "bio", "status"] }
+```
+
+`percent` is the weighted fill of fourteen fields (avatar 15, cover 5, bio 10,
+status 10, birthday 10, city 5, country 5, gender 5, website 5, each of the four
+`fav*` 5, a first post 10 — they add up to exactly 100). `badges` is a separate
+achievement counter, because the two numbers answer different questions. `missing`
+is the to-do list and is returned to the owner and staff only; everybody else sees
+just the percent.
+
 `/api/search/posts` is the filtered post search: `q` matches the body, `author` is
 an id or a username, `tag` a hashtag without the `#`, `media` is
 `image` / `video` / `poll` / `text`, `since` / `until` are dates and `sort` is
