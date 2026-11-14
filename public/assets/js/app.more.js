@@ -2338,6 +2338,7 @@
       adminTab('users', 'users', T('admin.users'), sub) +
       adminTab('ai', 'robot', T('admin.ai'), sub) +
       adminTab('reports', 'flag', T('admin.reports'), sub) +
+      adminTab('feedback', 'comment-dots', T('admin.feedback'), sub) +
       adminTab('settings', 'sliders', T('admin.settings'), sub) +
       adminTab('logs', 'terminal', T('admin.logs'), sub) +
       '</div>';
@@ -2347,6 +2348,7 @@
     else if (sub === 'ai') adminAi(body);
     else if (sub === 'settings') adminSettings(body);
     else if (sub === 'reports') adminReports(body);
+    else if (sub === 'feedback') adminFeedback(body);
     else if (sub === 'logs') adminLogs(body);
     else adminOverview(body);
   };
@@ -3025,6 +3027,7 @@
         field('cfg-videofiles', T('admin.maxVideoFiles'), lim.maxVideoFiles, 'number', ' min="1"') +
         '</div>' +
         field('cfg-editwin', T('admin.editWindow'), lim.editWindowMin, 'number', ' min="0"') +
+        field('cfg-fbph', T('admin.feedbackPerHour'), lim.feedbackPerHour, 'number', ' min="1"') +
         '</div>';
 
       // ui + logging + storage
@@ -3123,7 +3126,8 @@
             maxVideoFiles: Number(App.val('cfg-videofiles')),
             maxAvatarKB: Number(App.val('cfg-avatarkb')),
             maxPostImageKB: Number(App.val('cfg-imagekb')),
-            editWindowMin: Number(App.val('cfg-editwin'))
+            editWindowMin: Number(App.val('cfg-editwin')),
+            feedbackPerHour: Number(App.val('cfg-fbph'))
           },
           ui: {
             refreshMs: Number(App.val('cfg-refresh')),
@@ -3194,6 +3198,96 @@
           UI.toast(T('admin.notifyTestSent'), 'ok');
         });
       });
+    });
+  }
+
+  function adminFeedback(body) {
+    body.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('comment-dots') + ' ' + T('admin.feedback') +
+      '<span class="right"><select class="select" id="fb-filter" style="width:auto;padding:3px 22px 3px 7px;font-size:11.5px">' +
+      '<option value="">' + T('admin.fbAll') + '</option>' +
+      '<option value="new" selected>' + T('admin.fbNew') + '</option>' +
+      '<option value="read">' + T('admin.fbRead') + '</option>' +
+      '<option value="closed">' + T('admin.fbClosed') + '</option>' +
+      '</select></span></div><div class="card-b flush" id="adm-feedback">' + UI.spinner() + '</div></div>';
+
+    var filter = document.getElementById('fb-filter');
+    filter.addEventListener('change', function () { loadFeedback(filter.value); });
+    loadFeedback('new');
+  }
+
+  function loadFeedback(status) {
+    var box = document.getElementById('adm-feedback');
+    if (!box) return;
+    box.innerHTML = '<div class="center" style="padding:18px">' + UI.spinner() + '</div>';
+    Api.request('GET', '/api/admin/feedback' + (status ? '?status=' + encodeURIComponent(status) : ''), null, function (err, data) {
+      if (err) { box.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+      var list = (data && data.items) || [];
+      if (!list.length) {
+        box.innerHTML = UI.empty('comment-dots', T('admin.fbEmpty'), T('admin.fbEmptyHint'));
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < list.length; i++) {
+        var f = list[i];
+        var kindIcon = f.kind === 'bug' ? 'bug' : f.kind === 'idea' ? 'lightbulb' : 'comment';
+        var badge = f.status === 'new' ? 'err' : f.status === 'read' ? 'warn' : 'ok';
+        html += '<div class="fb-row" data-id="' + f.id + '">' +
+          '<div class="fb-head"><span class="badge ' + badge + '">' + UI.icon(kindIcon) + ' ' +
+          UI.esc(T('feedback.kind_' + f.kind)) + '</span>' +
+          '<span class="tiny muted">#' + f.id + ' · ' + UI.formatDate(f.created, true) + '</span>' +
+          (f.page ? '<span class="tiny muted">· ' + UI.esc(f.page) + '</span>' : '') +
+          '<span class="right"><button class="btn btn-xs fb-read" data-id="' + f.id + '">' + T('admin.fbMarkRead') + '</button>' +
+          '<button class="btn btn-xs btn-ok fb-close" data-id="' + f.id + '">' + T('admin.fbClose') + '</button>' +
+          '<button class="btn btn-xs btn-danger fb-del" data-id="' + f.id + '">' + T('common.delete') + '</button></span></div>' +
+          '<div class="fb-text">' + UI.nl2br(UI.esc(f.message)) + '</div>' +
+          (f.contact ? '<div class="tiny muted">' + UI.icon('at') + ' ' + UI.esc(f.contact) + '</div>' : '') +
+          (f.app ? '<div class="tiny muted fb-ua">' + UI.esc(f.app) + '</div>' : '') +
+          (f.note ? '<div class="fb-note">' + UI.icon('note-sticky') + ' ' + UI.esc(f.note) + '</div>' : '') +
+          '<div class="fb-note-box"><input class="input" id="fb-note-' + f.id + '" maxlength="1000" placeholder="' +
+          UI.attr(T('admin.fbNoteHint')) + '">' +
+          '<button class="btn btn-xs fb-note-save" data-id="' + f.id + '">' + T('common.save') + '</button></div>' +
+          '</div>';
+      }
+      box.innerHTML = html;
+
+      function send(id, payload, done) {
+        payload.id = Number(id);
+        Api.request('POST', '/api/admin/feedback/update', payload, function (e2) {
+          if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+          if (done) done();
+          loadFeedback(document.getElementById('fb-filter') ? document.getElementById('fb-filter').value : 'new');
+        });
+      }
+
+      var reads = box.querySelectorAll('.fb-read');
+      for (var r = 0; r < reads.length; r++)
+        reads[r].addEventListener('click', function () { send(this.getAttribute('data-id'), { action: 'status', status: 'read' }); });
+
+      var closes = box.querySelectorAll('.fb-close');
+      for (var c = 0; c < closes.length; c++)
+        closes[c].addEventListener('click', function () {
+          var id = this.getAttribute('data-id');
+          var note = document.getElementById('fb-note-' + id);
+          send(id, { action: 'status', status: 'closed', note: note ? note.value : '' });
+        });
+
+      var saves = box.querySelectorAll('.fb-note-save');
+      for (var s = 0; s < saves.length; s++)
+        saves[s].addEventListener('click', function () {
+          var id = this.getAttribute('data-id');
+          var note = document.getElementById('fb-note-' + id);
+          send(id, { action: 'status', status: '', note: note ? note.value : '' });
+          UI.toast(T('settings.saved'), 'ok');
+        });
+
+      var dels = box.querySelectorAll('.fb-del');
+      for (var d = 0; d < dels.length; d++)
+        dels[d].addEventListener('click', function () {
+          var id = this.getAttribute('data-id');
+          UI.confirm(T('common.delete'), T('admin.fbDeleteConfirm'), T('common.delete'), function () {
+            send(id, { action: 'delete' });
+          }, true);
+        });
     });
   }
 

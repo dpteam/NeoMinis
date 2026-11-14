@@ -21,6 +21,7 @@ limits from `config.ini` and ship your own network.
 | **Notifications** | likes, comments, reactions, reposts, friend requests, messages, mentions, badges, admin broadcasts, reports — delivered **live** over a long poll (instant toast, sound, tab title counter, optional desktop notification), with per-type switches in Settings and All / Unread / Mentions filters |
 | **Search** | people and posts, plus a top-bar quick search; the post search has filters (type: picture / video / poll / text, author, tag, dates) and sorting (newest / oldest / popular) |
 | **Media library** | personal music and video shelves with upload, inline players, "save to my library" from somebody else's shelf, playlists, and size/count limits from `config.ini` / Admin → Settings |
+| **Feedback** | anonymous "message the developers" form, reachable from the login screen and the sidebar; lands in an admin tab with kinds (bug / idea / other), statuses, internal notes, honeypot and per-IP rate limit |
 | **Roadmap** | planned features (Flash games through Ruffle, playlists, gifts, stories…) live in [docs/ROADMAP.md](docs/ROADMAP.md) |
 | **Tags** | `#hashtags` become tag pages, trending tags in the right column |
 | **Mentions** | `@username` with autocomplete in the composer, links in posts and a notification for every mentioned person |

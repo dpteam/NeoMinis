@@ -228,6 +228,60 @@ var App = (function () {
     n.token = (n.token || 0) + 1;
   }
 
+  // ------------------------------------------------------------- feedback
+
+  /// Anonymous note to the operators. Works from the login screen too, so it
+  /// deliberately avoids the sealed API and posts plain JSON.
+  function openFeedbackModal() {
+    var body = '<div class="hint" style="margin-bottom:10px">' + T('feedback.hint') + '</div>' +
+      '<div class="field"><label>' + T('feedback.kind') + '</label><select class="select" id="fb-kind">' +
+      '<option value="bug">' + T('feedback.kindBug') + '</option>' +
+      '<option value="idea">' + T('feedback.kindIdea') + '</option>' +
+      '<option value="other">' + T('feedback.kindOther') + '</option>' +
+      '</select></div>' +
+      '<div class="field"><label>' + T('feedback.message') + '</label>' +
+      '<textarea class="textarea" id="fb-message" rows="6" maxlength="2000" placeholder="' +
+      UI.attr(T('feedback.placeholder')) + '"></textarea></div>' +
+      '<div class="field"><label>' + T('feedback.contact') + '</label>' +
+      '<input class="input" id="fb-contact" maxlength="120" placeholder="' + UI.attr(T('feedback.contactHint')) + '"></div>' +
+      // honeypot: hidden from humans, irresistible to bots
+      '<div style="position:absolute;left:-9999px;top:-9999px" aria-hidden="true">' +
+      '<label>Website<input type="text" id="fb-website" tabindex="-1" autocomplete="off"></label></div>' +
+      '<div class="tiny muted">' + T('feedback.anon') + '</div>';
+
+    UI.modal({
+      title: T('feedback.title'),
+      icon: 'comment-dots',
+      body: body,
+      actions: [
+        { label: T('common.cancel'), cls: 'btn-ghost' },
+        {
+          label: T('common.send'), cls: 'btn-primary', icon: 'paper-plane',
+          onClick: function (box, close) {
+            var text = box.querySelector('#fb-message').value.trim();
+            if (text.length < 3) { UI.toast(T('feedback.needText'), 'err'); return false; }
+            var btn = box.querySelectorAll('.modal-f .btn');
+            for (var i = 0; i < btn.length; i++) btn[i].disabled = true;
+            Api.sendPlain('/api/feedback', {
+              kind: box.querySelector('#fb-kind').value,
+              message: text,
+              contact: box.querySelector('#fb-contact').value,
+              page: location.hash || '',
+              website: box.querySelector('#fb-website').value
+            }, function (err) {
+              for (var k = 0; k < btn.length; k++) btn[k].disabled = false;
+              if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+              UI.toast(T('feedback.sent'), 'ok');
+              SoundFX.play('success');
+              if (close) close();
+            });
+            return false;   // stay open until the request settles
+          }
+        }
+      ]
+    });
+  }
+
   // ------------------------------------------------------------------ shell
 
   function renderShell() {
@@ -289,6 +343,7 @@ var App = (function () {
     html += side('#/settings', 'gear', T('nav.settings'), 'settings');
     if (isMod) html += side('#/admin', 'shield-halved', T('nav.admin'), 'admin');
     html += '<div class="side-sep"></div>';
+    html += '<button type="button" class="side-link" id="feedback-btn" style="width:100%;border:0;background:transparent;text-align:left">' + UI.icon('comment-dots') + ' ' + T('feedback.nav') + '</button>';
     html += '<button type="button" class="side-link" id="logout-btn" style="width:100%;border:0;background:transparent;text-align:left">' + UI.icon('right-from-bracket') + ' ' + T('nav.logout') + '</button>';
     html += '</div>';
     html += '<div class="card online-card"><div class="card-h">' + UI.icon('signal') + ' ' + T('online.title') + '</div><div class="online-list" id="online-mini">' + UI.spinner() + '</div></div>';
@@ -365,6 +420,8 @@ var App = (function () {
     });
     var lo = document.getElementById('logout-btn');
     if (lo) lo.addEventListener('click', doLogout);
+    var fb = document.getElementById('feedback-btn');
+    if (fb) fb.addEventListener('click', openFeedbackModal);
     var sf = document.getElementById('top-search');
     if (sf) sf.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -513,6 +570,8 @@ var App = (function () {
     else html += loginForm();
     html += '</div>';
     html += '<div class="auth-foot">' + (site.firstUserAdmin && (Api.hs ? Api.hs.userCount === 0 : false) ? T('auth.firstAdmin') : UI.esc(site.footer || T('footer.powered'))) + '</div>';
+    html += '<div class="center" style="margin-top:6px"><button type="button" class="btn btn-ghost btn-xs" id="feedback-btn-auth">' +
+      UI.icon('comment-dots') + ' ' + T('feedback.nav') + '</button></div>';
     html += '</div>';
     html += '<div class="landing-side-note"><button type="button" class="btn btn-ghost btn-sm" id="theme-toggle-auth">' + UI.icon('circle-half-stroke') + ' ' + T('theme.' + UI.getTheme()) + '</button></div>';
     html += '</div></div>';
@@ -523,6 +582,8 @@ var App = (function () {
       var next = UI.cycleTheme();
       tt.innerHTML = UI.icon('circle-half-stroke') + ' ' + T('theme.' + next);
     });
+    var fba = document.getElementById('feedback-btn-auth');
+    if (fba) fba.addEventListener('click', openFeedbackModal);
     var tabs = document.querySelectorAll('[data-auth]');
     for (var i = 0; i < tabs.length; i++) {
       tabs[i].addEventListener('click', function () { renderAuth(this.getAttribute('data-auth')); });

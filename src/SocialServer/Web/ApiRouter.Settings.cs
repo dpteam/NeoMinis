@@ -64,6 +64,7 @@ namespace Social.Web
                 .Prop("maxVideoKB", _cfg.MaxVideoKB)
                 .Prop("maxAudioFiles", _cfg.MaxAudioFiles)
                 .Prop("maxVideoFiles", _cfg.MaxVideoFiles)
+                .Prop("feedbackPerHour", _cfg.FeedbackPerHour)
                 .Prop("maxAvatarKB", _cfg.MaxAvatarKB)
                 .Prop("maxPostImageKB", _cfg.MaxPostImageKB)
                 .Prop("editWindowMin", _cfg.EditWindowMin)
@@ -296,6 +297,7 @@ namespace Social.Web
                 ApplyLimit(limits, "maxVideoKB", _cfg.MaxVideoKB, 256, delegate(int v) { _cfg.MaxVideoKB = v; });
                 ApplyLimit(limits, "maxAudioFiles", _cfg.MaxAudioFiles, 1, delegate(int v) { _cfg.MaxAudioFiles = v; });
                 ApplyLimit(limits, "maxVideoFiles", _cfg.MaxVideoFiles, 1, delegate(int v) { _cfg.MaxVideoFiles = v; });
+                ApplyLimit(limits, "feedbackPerHour", _cfg.FeedbackPerHour, 1, delegate(int v) { _cfg.FeedbackPerHour = v; });
                 ApplyLimit(limits, "maxAvatarKB", _cfg.MaxAvatarKB, 16, delegate(int v) { _cfg.MaxAvatarKB = v; });
                 ApplyLimit(limits, "maxPostImageKB", _cfg.MaxPostImageKB, 64, delegate(int v) { _cfg.MaxPostImageKB = v; });
                 ApplyLimit(limits, "editWindowMin", _cfg.EditWindowMin, 0, delegate(int v) { _cfg.EditWindowMin = v; });

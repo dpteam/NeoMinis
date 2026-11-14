@@ -221,8 +221,7 @@ namespace Social.Core
     }
 
     public sealed class Report
-    {
-        public long Id;
+    {        public long Id;
         public string Type = "post";
         public long Target;
         public long Reporter;
@@ -234,10 +233,30 @@ namespace Social.Core
         public DateTime HandledAt = DateTime.MinValue;
     }
 
+    /// <summary>
+    /// Anonymous note to the operators: a bug report, an idea or a plain message.
+    /// Nothing links it to an account — only an optional contact string the sender
+    /// typed themselves, plus a hashed IP for abuse handling.
+    /// </summary>
+    public sealed class Feedback
+    {
+        public long Id;
+        public string Kind = "bug";      // bug | idea | other
+        public string Message = "";
+        public string Contact = "";      // optional, free text
+        public string Page = "";         // route the sender was on, e.g. "#/im/2"
+        public string App = "";          // user agent, truncated
+        public string IpHash = "";
+        public DateTime Created = DateTime.UtcNow;
+        public string Status = "new";    // new | read | closed
+        public string Note = "";
+        public long HandledBy;
+        public DateTime HandledAt = DateTime.MinValue;
+    }
+
     public sealed class Meta
     {
-        public int Version = 1;
-        public DateTime Created = DateTime.UtcNow;
+        public int Version = 1;        public DateTime Created = DateTime.UtcNow;
         public long NextUserId = 1;
         public long NextPostId = 1;
         public long NextCommentId = 1;
@@ -248,6 +267,7 @@ namespace Social.Core
         public long NextDraftId = 1;
         public long NextMediaId = 1;
         public long NextPlaylistId = 1;
+        public long NextFeedbackId = 1;
         public long TotalRegistrations;
         public DateTime LastBackup = DateTime.MinValue;
         public string InstallId = "";

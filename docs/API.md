@@ -280,6 +280,28 @@ message changes. `read` is the read receipt for our newest message; `typing`
 comes from an in-memory registry (a few seconds, never persisted). When
 `ui.liveNotifications=false` it answers immediately and the SPA polls instead.
 
+### Feedback
+
+| Method | Path | Body | Result |
+| --- | --- | --- | --- |
+| POST | `/api/feedback` | `kind`, `message`, `contact`, `page`, `website` | `{ ok, id }` |
+
+Anonymous note to the operators — **no session required**, so the login screen can
+use it too. The body is plain JSON (there is no secret in a bug report). `kind` is
+`bug` / `idea` / `other`, `message` is capped at 2000 characters, `contact` and
+`page` are optional and free text. `website` is a honeypot: a bot filling it gets
+a normal-looking `{ ok: true }` and nothing is stored. A per-IP limit
+(`limits.feedbackPerHour`, default 5) stops floods. Nothing links the note to an
+account; only a hashed IP is kept for abuse handling.
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| GET | `/api/admin/feedback` | `status` (`new|read|closed`) | `{ items[], newCount }` |
+| POST | `/api/admin/feedback/update` | `id`, `action` (`status|delete`), `status`, `note` | `{ ok }` |
+
+Moderators can read feedback; the message, contact, page, user agent, an internal
+note and who handled it are all shown in the admin board.
+
 ### Notifications
 
 | Method | Path | Body / query | Result |

@@ -310,6 +310,24 @@ var Api = (function () {
     return I18N.t('errors.generic');
   }
 
+  /// Plain, unauthenticated POST for the anonymous feedback form. The payload is
+  /// not secret (no account, no password) so it travels as plain JSON, which also
+  /// works from the login screen where no session key exists yet.
+  function sendPlain(path, bodyObj, cb) {
+    var wire = JSON.stringify(bodyObj || {});
+    xhr('POST', path, wire, { 'Content-Type': 'text/plain; charset=utf-8', 'Accept': 'application/json' },
+      function (err, req) {
+        if (err) { cb(err); return; }
+        var data = parseJson(req.responseText || '');
+        if (!data) {
+          cb({ status: req.status, code: 'bad-response', message: I18N.t('errors.generic') });
+          return;
+        }
+        if (req.status >= 200 && req.status < 300) { cb(null, data); return; }
+        cb(apiError(req.status, data));
+      });
+  }
+
   api.request = request;
   api.authRequest = authRequest;
   api.handshake = loadHandshake;
@@ -322,6 +340,7 @@ var Api = (function () {
   api.errorText = errorText;
   api.decodeResponse = decodeResponse;
   api.parseJson = parseJson;
+  api.sendPlain = sendPlain;
 
   return api;
 })();

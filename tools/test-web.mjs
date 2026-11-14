@@ -356,6 +356,35 @@ async function main() {
   ok('past schedule rejected', pastSchedule.status === 400, String(pastSchedule.status));
   await alice.call('POST', '/api/post/delete', { id: scheduledId });
 
+  const feedbackAnon = await fetch(BASE + '/api/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    body: JSON.stringify({ kind: 'bug', message: 'test bug report from the suite', contact: 'qa@example.com', page: '#/feed' })
+  });
+  const feedbackBody = await feedbackAnon.json();
+  ok('anonymous feedback accepted', feedbackAnon.status === 200 && feedbackBody.ok === true && feedbackBody.id > 0,
+    String(feedbackAnon.status));
+
+  const feedbackShort = await fetch(BASE + '/api/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    body: JSON.stringify({ kind: 'bug', message: 'x' })
+  });
+  ok('short feedback rejected', feedbackShort.status === 400, String(feedbackShort.status));
+
+  const feedbackTrap = await fetch(BASE + '/api/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    body: JSON.stringify({ kind: 'bug', message: 'buy cheap pills', website: 'http://spam.example' })
+  });
+  const feedbackTrapBody = await feedbackTrap.json();
+  ok('honeypot looks successful', feedbackTrap.status === 200 && feedbackTrapBody.id === undefined,
+    JSON.stringify(feedbackTrapBody));
+
+  const feedbackGet = await fetch(BASE + '/api/feedback');
+  ok('feedback is not readable anonymously', feedbackGet.status === 401 || feedbackGet.status === 405,
+    String(feedbackGet.status));
+
   // ---- live notifications and per-type mutes
   const baseNotif = await alice.call('GET', '/api/notifications?limit=1');
   const lastId = baseNotif.data.notifications.length ? baseNotif.data.notifications[0].id : 0;
@@ -826,6 +855,21 @@ async function main() {
     ok('broadcast', broadcast.status === 200 && broadcast.data.delivered >= 1, '');
     const backup = await admin.call('POST', '/api/admin/backup', {});
     ok('backup created', backup.status === 200 && typeof backup.data.path === 'string', '');
+
+    const fbList = await admin.call('GET', '/api/admin/feedback');
+    ok('admin sees feedback', fbList.status === 200 && Array.isArray(fbList.data.items), String(fbList.status));
+    const firstFb = (fbList.data.items || [])[0];
+    if (firstFb) {
+      const fbUpdate = await admin.call('POST', '/api/admin/feedback/update',
+        { id: firstFb.id, action: 'status', status: 'closed', note: 'handled by the suite' });
+      ok('feedback can be closed', fbUpdate.status === 200, String(fbUpdate.status));
+      const fbClosed = await admin.call('GET', '/api/admin/feedback?status=closed');
+      ok('closed feedback listed', fbClosed.data.items.some(f => f.id === firstFb.id && f.note === 'handled by the suite'), '');
+      const fbDel = await admin.call('POST', '/api/admin/feedback/update', { id: firstFb.id, action: 'delete' });
+      ok('feedback can be deleted', fbDel.status === 200, String(fbDel.status));
+    }
+    const fbBad = await admin.call('POST', '/api/admin/feedback/update', { id: 999999, action: 'status', status: 'read' });
+    ok('unknown feedback rejected', fbBad.status === 404, String(fbBad.status));
   }
 
   // ---- login / recovery / logout

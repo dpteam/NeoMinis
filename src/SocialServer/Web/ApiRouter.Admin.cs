@@ -39,6 +39,8 @@ namespace Social.Web
             if (sub == "import") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminImport(ctx); return; }
             if (sub == "settings") { HandleAdminSettings(ctx); return; }
             if (sub == "settings/save") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminSettingsSave(ctx); return; }
+            if (sub == "feedback") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminFeedback(ctx); return; }
+            if (sub == "feedback/update") { RequireMethod(ctx.Req.Method, "POST"); RequireModerator(ctx.User); HandleAdminFeedbackUpdate(ctx); return; }
             throw new ApiException(404, "unknown-endpoint", "Unknown admin endpoint");
         }
 
@@ -65,6 +67,7 @@ namespace Social.Web
                 .Prop("groups", _store.CountGroups())
                 .Prop("sessions", _sessions.Count)
                 .Prop("openReports", openReports.Count)
+                .Prop("newFeedback", _store.CountNewFeedback())
                 .EndObject();
             b.Prop("storageBytes", _store.TotalStorageBytes());
             b.Prop("storageReadOnly", _store.IsReadOnly);
@@ -470,6 +473,68 @@ namespace Social.Web
             long id = BodyLong(ctx, "id", 0);
             string note = Util.SingleLine(BodyStr(ctx, "note", ""), 500);
             if (!_store.CloseReport(id, ctx.User.Id, note)) throw new ApiException(404, "no-report", "Report not found");
+            JsonBuilder b = new JsonBuilder(64);
+            b.BeginObject();
+            SendOk(ctx, b);
+        }
+
+        // ========================================================== feedback
+
+        private void HandleAdminFeedback(ApiCtx ctx)
+        {
+            string status = GetQuery(ctx.Query, "status");
+            if (status == null) status = "";
+            List<Feedback> list = _store.FeedbackList(status, 200);
+
+            JsonBuilder b = new JsonBuilder(16384);
+            b.BeginObject();
+            b.Name("items").BeginArray();
+            for (int i = 0; i < list.Count; i++)
+            {
+                Feedback f = list[i];
+                b.BeginObject()
+                    .Prop("id", f.Id)
+                    .Prop("kind", f.Kind)
+                    .Prop("message", f.Message)
+                    .Prop("contact", f.Contact)
+                    .Prop("page", f.Page)
+                    .Prop("app", f.App)
+                    .Prop("created", Util.Iso(f.Created))
+                    .Prop("status", f.Status)
+                    .Prop("note", f.Note)
+                    .Prop("handledBy", f.HandledBy)
+                    .Prop("handledAt", f.HandledAt == DateTime.MinValue ? "" : Util.Iso(f.HandledAt))
+                    .EndObject();
+            }
+            b.EndArray();
+            b.Prop("newCount", _store.CountNewFeedback());
+            SendOk(ctx, b);
+        }
+
+        private void HandleAdminFeedbackUpdate(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            string action = BodyStr(ctx, "action", "status").Trim().ToLowerInvariant();
+
+            if (action == "delete")
+            {
+                if (!_store.DeleteFeedback(id)) throw new ApiException(404, "no-feedback", "Not found");
+                Log.Warn("ADMIN", "@" + ctx.User.Username + " deleted feedback #" + id);
+                JsonBuilder ok = new JsonBuilder(64);
+                ok.BeginObject();
+                SendOk(ctx, ok);
+                return;
+            }
+
+            string status = BodyStr(ctx, "status", "").Trim().ToLowerInvariant();
+            if (status != "" && status != "new" && status != "read" && status != "closed")
+                throw new ApiException(400, "bad-status", "Unknown status");
+            string note = BodyStr(ctx, "note", null);
+            if (note != null) note = Util.CleanText(note, 1000);
+
+            if (!_store.UpdateFeedback(id, status, note, ctx.User.Id))
+                throw new ApiException(404, "no-feedback", "Not found");
+
             JsonBuilder b = new JsonBuilder(64);
             b.BeginObject();
             SendOk(ctx, b);

@@ -150,6 +150,9 @@ namespace Social.Core
         // generic file attachments in private messages
         public int MaxFileKB = 4096;
 
+        // anonymous feedback to the operators
+        public int FeedbackPerHour = 5;
+
         // personal media library (music / clips)
         public int MaxAudioKB = 4096;
         public int MaxVideoKB = 5120;
@@ -436,6 +439,7 @@ namespace Social.Core
                     else if (key == "maxvoicekb") MaxVoiceKB = Int(val, MaxVoiceKB);
                     else if (key == "maxvoicesec") MaxVoiceSec = Int(val, MaxVoiceSec);
                     else if (key == "maxfilekb") MaxFileKB = Int(val, MaxFileKB);
+                    else if (key == "feedbackperhour") FeedbackPerHour = Int(val, FeedbackPerHour);
                     else if (key == "maxaudiokb") MaxAudioKB = Int(val, MaxAudioKB);
                     else if (key == "maxvideokb") MaxVideoKB = Int(val, MaxVideoKB);
                     else if (key == "maxaudiofiles") MaxAudioFiles = Int(val, MaxAudioFiles);

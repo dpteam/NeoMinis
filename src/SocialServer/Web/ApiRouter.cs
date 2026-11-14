@@ -47,6 +47,7 @@ namespace Social.Web
         private readonly NonceCache _preAuthNonces = new NonceCache(TimeSpan.FromMinutes(10), 20000);
         private readonly Dictionary<string, ActionWindow> _actions = new Dictionary<string, ActionWindow>(StringComparer.Ordinal);
         private readonly Dictionary<string, ActionWindow> _registerRate = new Dictionary<string, ActionWindow>(StringComparer.Ordinal);
+        private readonly Dictionary<string, ActionWindow> _feedbackRate = new Dictionary<string, ActionWindow>(StringComparer.Ordinal);
         private readonly object _actionLock = new object();
         private static readonly DateTime StartedUtc = DateTime.UtcNow;
 
@@ -109,6 +110,7 @@ namespace Social.Web
                 if (route == "register") { HandleRegister(req, resp, ip); return true; }
                 if (route == "login") { HandleLogin(req, resp, ip); return true; }
                 if (route == "recover") { HandleRecover(req, resp, ip); return true; }
+                if (route == "feedback") { HandleFeedback(req, resp, ip); return true; }
 
                 return HandleAuthenticated(req, resp, ip, route);
             }
@@ -202,7 +204,8 @@ namespace Social.Web
                 .Prop("maxAudioKB", _cfg.MaxAudioKB)
                 .Prop("maxVideoKB", _cfg.MaxVideoKB)
                 .Prop("maxAudioFiles", _cfg.MaxAudioFiles)
-                .Prop("maxVideoFiles", _cfg.MaxVideoFiles);
+                .Prop("maxVideoFiles", _cfg.MaxVideoFiles)
+                .Prop("feedbackPerHour", _cfg.FeedbackPerHour);
             b.Prop("maxStatusLength", _cfg.MaxStatusLength);
             b.Prop("maxBioLength", _cfg.MaxBioLength);
             b.Prop("maxNameLength", _cfg.MaxNameLength);
@@ -248,8 +251,52 @@ namespace Social.Web
             _web.SendJson(req, resp, 200, b.ToString());
         }
 
-        // ========================================================== register
+        // =========================================================== feedback
 
+        /// <summary>
+        /// Anonymous note to the operators. Deliberately public and plain-text: the
+        /// login screen has no session key yet, and a bug report should never require
+        /// an account. A honeypot field, a per-IP rate limit and a length cap keep it
+        /// from being an open relay.
+        /// </summary>
+        private void HandleFeedback(HttpRequest req, HttpResponse resp, string ip)
+        {
+            if (!IsMethod(req, "POST")) throw new ApiException(405, "method", "POST only");
+            if (!AllowFeedback(ip)) throw new ApiException(429, "slow-down", "Too many messages from this address");
+
+            Dictionary<string, object> body = ReadBody(req, null, false);
+
+            // bots fill every field they see; humans leave this one alone
+            string trap = Json.GetString(body, "website", "");
+            string message = Util.CleanText(Json.GetString(body, "message", ""), 2000);
+            if (trap.Length > 0)
+            {
+                JsonBuilder ok = new JsonBuilder(32);
+                ok.BeginObject().Prop("ok", true).EndObject();
+                _web.SendJson(req, resp, 200, ok.ToString());
+                return;
+            }
+            if (message.Length < 3) throw new ApiException(400, "empty", "Please describe the problem");
+
+            string kind = Json.GetString(body, "kind", "other").Trim().ToLowerInvariant();
+            if (kind != "bug" && kind != "idea" && kind != "other") kind = "other";
+            string contact = Util.SingleLine(Json.GetString(body, "contact", ""), 120);
+            string page = Util.SingleLine(Json.GetString(body, "page", ""), 120);
+            string app = Util.SingleLine(req.Header("User-Agent") ?? "", 160);
+
+            Feedback f = _store.AddFeedback(kind, message, contact, page, app,
+                Crypto.HashIp(ip, _cfg.ServerSecret));
+            Log.Info("FEEDBACK", "#" + f.Id + " (" + kind + ") from " + ip);
+
+            JsonBuilder b = new JsonBuilder(64);
+            b.BeginObject();
+            b.Prop("ok", true);
+            b.Prop("id", f.Id);
+            b.EndObject();
+            _web.SendJson(req, resp, 200, b.ToString());
+        }
+
+        // ========================================================== register
         private void HandleRegister(HttpRequest req, HttpResponse resp, string ip)
         {
             if (!IsMethod(req, "POST")) throw new ApiException(405, "method", "POST only");
@@ -809,6 +856,26 @@ namespace Social.Web
                     w.StartUtc = now;
                     w.Count = 0;
                     _registerRate[ip] = w;
+                }
+                w.Count++;
+                return w.Count <= limit;
+            }
+        }
+
+        private bool AllowFeedback(string ip)
+        {
+            int limit = _cfg.FeedbackPerHour;
+            if (limit <= 0) return true;
+            DateTime now = DateTime.UtcNow;
+            lock (_actionLock)
+            {
+                ActionWindow w;
+                if (!_feedbackRate.TryGetValue(ip, out w) || (now - w.StartUtc).TotalHours >= 1)
+                {
+                    w = new ActionWindow();
+                    w.StartUtc = now;
+                    w.Count = 0;
+                    _feedbackRate[ip] = w;
                 }
                 w.Count++;
                 return w.Count <= limit;

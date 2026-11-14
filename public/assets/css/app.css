@@ -1621,3 +1621,18 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 }
 .playlist-open:hover { background: var(--hover); }
 .playlist-open i { color: var(--accent); }
+
+/* -------------------------------------------------------------- feedback */
+
+.fb-row { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.fb-row:last-child { border-bottom: 0; }
+.fb-head { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 5px; }
+.fb-head .right { display: flex; gap: 4px; }
+.fb-text { font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; margin-bottom: 4px; }
+.fb-ua { opacity: .7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-note {
+  margin-top: 5px; padding: 4px 8px; border-radius: var(--radius-xs);
+  background: var(--accent-soft); font-size: 11.5px;
+}
+.fb-note-box { display: flex; gap: 5px; margin-top: 6px; }
+.fb-note-box .input { flex: 1; font-size: 11.5px; padding: 3px 7px; }

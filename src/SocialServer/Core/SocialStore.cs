@@ -33,13 +33,14 @@ namespace Social.Core
         private readonly List<Draft> _drafts = new List<Draft>();
         private readonly List<MediaItem> _media = new List<MediaItem>();
         private readonly List<Playlist> _playlists = new List<Playlist>();
+        private readonly List<Feedback> _feedback = new List<Feedback>();
         private Meta _meta = new Meta();
 
         private readonly Dictionary<long, User> _userById = new Dictionary<long, User>();
         private readonly Dictionary<string, User> _userByName = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
 
         private bool _dirtyUsers, _dirtyPosts, _dirtyComments, _dirtyFriends, _dirtyMessages;
-        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists;
+        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback;
         private bool _readOnly;
         private string _saveError = "";
         private DateTime _lastSave = DateTime.MinValue;
@@ -66,7 +67,7 @@ namespace Social.Core
                 {
                     return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
                            _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
-                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists;
+                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback;
                 }
             }
         }
@@ -117,6 +118,8 @@ namespace Social.Core
                 _media.AddRange(LoadTable("media.json", MediaFromDict));
                 _playlists.Clear();
                 _playlists.AddRange(LoadTable("playlists.json", PlaylistFromDict));
+                _feedback.Clear();
+                _feedback.AddRange(LoadTable("feedback.json", FeedbackFromDict));
 
                 // sort newest first, keeping the hot queries cheap
                 _posts.Sort(delegate(Post a, Post b) { return b.Id.CompareTo(a.Id); });
@@ -127,7 +130,7 @@ namespace Social.Core
                 EnsureCounters();
                 _loaded = true;
                 _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = false;
+                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = false;
 
                 Log.Info("DATA", "loaded users=" + _users.Count + " posts=" + _posts.Count +
                                   " comments=" + _comments.Count + " friends=" + _friends.Count +
@@ -157,6 +160,7 @@ namespace Social.Core
                 m.NextDraftId = Json.GetLong(d, "nextDraftId", 1);
                 m.NextMediaId = Json.GetLong(d, "nextMediaId", 1);
                 m.NextPlaylistId = Json.GetLong(d, "nextPlaylistId", 1);
+                m.NextFeedbackId = Json.GetLong(d, "nextFeedbackId", 1);
                 m.TotalRegistrations = Json.GetLong(d, "totalRegistrations", 0);
                 m.LastBackup = Json.GetDate(d, "lastBackup", DateTime.MinValue);
                 m.InstallId = Json.GetString(d, "installId", "");
@@ -172,7 +176,7 @@ namespace Social.Core
 
         private void EnsureCounters()
         {
-            long maxUser = 0, maxPost = 0, maxComment = 0, maxMessage = 0, maxNotif = 0, maxGroup = 0, maxReport = 0, maxDraft = 0, maxMedia = 0, maxPlaylist = 0;
+            long maxUser = 0, maxPost = 0, maxComment = 0, maxMessage = 0, maxNotif = 0, maxGroup = 0, maxReport = 0, maxDraft = 0, maxMedia = 0, maxPlaylist = 0, maxFeedback = 0;
             for (int i = 0; i < _users.Count; i++) if (_users[i].Id > maxUser) maxUser = _users[i].Id;
             for (int i = 0; i < _posts.Count; i++) if (_posts[i].Id > maxPost) maxPost = _posts[i].Id;
             for (int i = 0; i < _comments.Count; i++) if (_comments[i].Id > maxComment) maxComment = _comments[i].Id;
@@ -183,6 +187,7 @@ namespace Social.Core
             for (int i = 0; i < _drafts.Count; i++) if (_drafts[i].Id > maxDraft) maxDraft = _drafts[i].Id;
             for (int i = 0; i < _media.Count; i++) if (_media[i].Id > maxMedia) maxMedia = _media[i].Id;
             for (int i = 0; i < _playlists.Count; i++) if (_playlists[i].Id > maxPlaylist) maxPlaylist = _playlists[i].Id;
+            for (int i = 0; i < _feedback.Count; i++) if (_feedback[i].Id > maxFeedback) maxFeedback = _feedback[i].Id;
             if (_meta.NextUserId <= maxUser) _meta.NextUserId = maxUser + 1;
             if (_meta.NextPostId <= maxPost) _meta.NextPostId = maxPost + 1;
             if (_meta.NextCommentId <= maxComment) _meta.NextCommentId = maxComment + 1;
@@ -193,6 +198,7 @@ namespace Social.Core
             if (_meta.NextDraftId <= maxDraft) _meta.NextDraftId = maxDraft + 1;
             if (_meta.NextMediaId <= maxMedia) _meta.NextMediaId = maxMedia + 1;
             if (_meta.NextPlaylistId <= maxPlaylist) _meta.NextPlaylistId = maxPlaylist + 1;
+            if (_meta.NextFeedbackId <= maxFeedback) _meta.NextFeedbackId = maxFeedback + 1;
         }
 
         private string ReadJson(string path)
@@ -298,9 +304,10 @@ namespace Social.Core
                     if (force || _dirtyDrafts) WriteTable("drafts.json", DraftsToArray());
                     if (force || _dirtyMedia) WriteTable("media.json", MediaToArray());
                     if (force || _dirtyPlaylists) WriteTable("playlists.json", PlaylistsToArray());
+                    if (force || _dirtyFeedback) WriteTable("feedback.json", FeedbackToArray());
 
                     _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = false;
+                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = false;
                     _lastSave = DateTime.UtcNow;
                     _saveError = "";
                     if (_readOnly)
@@ -325,7 +332,8 @@ namespace Social.Core
         private bool HasDirtyLocked()
         {
             return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
-                   _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta;
+                   _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
+                   _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback;
         }
 
         private void WriteTable(string file, object value)
@@ -375,6 +383,7 @@ namespace Social.Core
         private void MarkDrafts() { _dirtyDrafts = true; }
         private void MarkMedia() { _dirtyMedia = true; }
         private void MarkPlaylists() { _dirtyPlaylists = true; }
+        private void MarkFeedback() { _dirtyFeedback = true; }
 
         // ============================================================== users
 
@@ -2328,6 +2337,125 @@ namespace Social.Core
             }
         }
 
+        // ============================================================= feedback
+
+        public Feedback AddFeedback(string kind, string message, string contact, string page,
+                                    string app, string ipHash)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Feedback f = new Feedback();
+                f.Id = _meta.NextFeedbackId++;
+                f.Kind = kind;
+                f.Message = message ?? "";
+                f.Contact = contact ?? "";
+                f.Page = page ?? "";
+                f.App = app ?? "";
+                f.IpHash = ipHash ?? "";
+                f.Created = DateTime.UtcNow;
+                f.Status = "new";
+                _feedback.Insert(0, f);
+                MarkFeedback();
+                _dirtyMeta = true;
+                return f;
+            }
+        }
+
+        public List<Feedback> FeedbackList(string status, int limit)
+        {
+            List<Feedback> list = new List<Feedback>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _feedback.Count && list.Count < limit; i++)
+                {
+                    if (!string.IsNullOrEmpty(status) && _feedback[i].Status != status) continue;
+                    list.Add(_feedback[i]);
+                }
+            }
+            return list;
+        }
+
+        public int CountNewFeedback()
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _feedback.Count; i++) if (_feedback[i].Status == "new") n++;
+                return n;
+            }
+        }
+
+        public bool UpdateFeedback(long id, string status, string note, long adminId)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _feedback.Count; i++)
+                {
+                    if (_feedback[i].Id != id) continue;
+                    if (!string.IsNullOrEmpty(status)) _feedback[i].Status = status;
+                    if (note != null) _feedback[i].Note = note;
+                    _feedback[i].HandledBy = adminId;
+                    _feedback[i].HandledAt = DateTime.UtcNow;
+                    MarkFeedback();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        public bool DeleteFeedback(long id)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _feedback.Count; i++)
+                {
+                    if (_feedback[i].Id != id) continue;
+                    _feedback.RemoveAt(i);
+                    MarkFeedback();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        private List<object> FeedbackToArray()
+        {
+            List<object> list = new List<object>(_feedback.Count);
+            for (int i = 0; i < _feedback.Count; i++)
+            {
+                Feedback f = _feedback[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = f.Id; d["kind"] = f.Kind; d["message"] = f.Message;
+                d["contact"] = f.Contact; d["page"] = f.Page; d["app"] = f.App;
+                d["ipHash"] = f.IpHash; d["created"] = f.Created; d["status"] = f.Status;
+                d["note"] = f.Note; d["handledBy"] = f.HandledBy; d["handledAt"] = f.HandledAt;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static Feedback FeedbackFromDict(Dictionary<string, object> d)
+        {
+            Feedback f = new Feedback();
+            f.Id = Json.GetLong(d, "id", 0);
+            f.Kind = Json.GetString(d, "kind", "other");
+            f.Message = Json.GetString(d, "message", "");
+            f.Contact = Json.GetString(d, "contact", "");
+            f.Page = Json.GetString(d, "page", "");
+            f.App = Json.GetString(d, "app", "");
+            f.IpHash = Json.GetString(d, "ipHash", "");
+            f.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            f.Status = Json.GetString(d, "status", "new");
+            f.Note = Json.GetString(d, "note", "");
+            f.HandledBy = Json.GetLong(d, "handledBy", 0);
+            f.HandledAt = Json.GetDate(d, "handledAt", DateTime.MinValue);
+            if (f.Id <= 0) return null;
+            return f;
+        }
+
         // ============================================================= admin
 
         public bool SetRole(long userId, string role)
@@ -2706,6 +2834,7 @@ namespace Social.Core
             d["nextDraftId"] = m.NextDraftId;
             d["nextMediaId"] = m.NextMediaId;
             d["nextPlaylistId"] = m.NextPlaylistId;
+            d["nextFeedbackId"] = m.NextFeedbackId;
             d["totalRegistrations"] = m.TotalRegistrations;
             d["lastBackup"] = m.LastBackup;
             d["installId"] = m.InstallId;
