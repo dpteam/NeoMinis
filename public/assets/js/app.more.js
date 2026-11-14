@@ -1726,7 +1726,13 @@
   views.photos = function (main, r) {
     var id = r.parts[1] || (state.user && state.user.id) || 0;
     var next = 0;
-    main.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('images') + ' <span id="ph-title">' + T('photos.title') + '</span>' +
+    var isSelf = Number(id) === Number((state.user || {}).id);
+    main.innerHTML =
+      '<div class="card" id="album-card"><div class="card-h">' + UI.icon('folder-open') + ' ' + T('albums.title') +
+      '<span class="right">' + (isSelf ? '<button class="btn btn-xs btn-primary" id="album-new">' +
+        UI.icon('plus') + ' ' + T('albums.new') + '</button>' : '') + '</span></div>' +
+      '<div class="card-b" id="album-list"><div class="center" style="padding:14px">' + UI.spinner() + '</div></div></div>' +
+      '<div class="card"><div class="card-h">' + UI.icon('images') + ' <span id="ph-title">' + T('photos.title') + '</span>' +
       '<span class="right tiny muted" id="ph-total"></span></div>' +
       '<div class="card-b"><div class="photo-grid wide" id="ph-grid"><div class="center" style="padding:22px;grid-column:1/-1">' + UI.spinner() + '</div></div></div></div>' +
       '<div id="ph-more"></div>';
@@ -1738,7 +1744,9 @@
       for (var i = 0; i < cells.length; i++) {
         if (cells[i].getAttribute('data-bound')) continue;
         cells[i].setAttribute('data-bound', '1');
-        cells[i].addEventListener('click', function () { UI.imageModal(this.getAttribute('data-full')); });
+        cells[i].addEventListener('click', function () {
+          UI.imageModal(this.getAttribute('data-full'));
+        });
       }
     }
 
@@ -1780,8 +1788,252 @@
       });
     }
 
+    loadAlbums();
     load(false);
+
+    function loadAlbums() {
+      Api.request('GET', '/api/albums?user=' + encodeURIComponent(id), null, function (err, data) {
+        var box = document.getElementById('album-list');
+        if (!box) return;
+        if (err) { box.innerHTML = '<div class="tiny muted">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+        var list = (data && data.albums) || [];
+        var html = '';
+        if (list.length) {
+          html += '<div class="album-grid">';
+          for (var i = 0; i < list.length; i++) {
+            var a = list[i];
+            var cover = UI.safeUrl(a.cover);
+            html += '<a class="album-card" href="#/album/' + a.id + '">' +
+              '<div class="album-cover">' + (cover
+                ? '<img src="' + UI.attr(cover) + '" alt="" loading="lazy">'
+                : UI.icon('folder-open')) +
+              '<span class="album-count">' + a.photos + '</span></div>' +
+              '<div class="album-name">' + UI.esc(a.name) + '</div></a>';
+          }
+          html += '</div>';
+        } else {
+          html += '<div class="tiny muted">' + (isSelf ? T('albums.noneOwn') : T('albums.none')) + '</div>';
+        }
+        box.innerHTML = html;
+      });
+    }
+
+    var addBtn = document.getElementById('album-new');
+    if (addBtn) addBtn.addEventListener('click', function () {
+      albumModal(null, function () { App.views.photos(main, r); });
+    });
   };
+
+  // ------------------------------------------------------------- albums
+
+  function albumModal(album, done) {
+    var editing = !!album;
+    UI.modal({
+      title: editing ? T('albums.edit') : T('albums.new'),
+      icon: 'folder-open',
+      body: '<div class="field"><label>' + T('albums.name') + '</label>' +
+        '<input class="input" id="al-name" maxlength="60" value="' + UI.attr(editing ? album.name : '') + '"></div>' +
+        '<div class="field"><label>' + T('albums.description') + '</label>' +
+        '<textarea class="textarea" id="al-desc" rows="3" maxlength="500">' +
+        UI.esc(editing ? (album.description || '') : '') + '</textarea></div>',
+      actions: [
+        { label: T('common.cancel'), cls: 'btn-ghost' },
+        {
+          label: T('common.save'), cls: 'btn-primary', keepOpen: true,
+          onClick: function (box, close) {
+            var name = (document.getElementById('al-name') || {}).value || '';
+            if (!name.replace(/\s/g, '')) { UI.toast(T('albums.needName'), 'err'); return false; }
+            Api.request('POST', '/api/album/save', {
+              id: editing ? album.id : 0,
+              name: name,
+              description: (document.getElementById('al-desc') || {}).value || ''
+            }, function (err, data) {
+              if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+              if (close) close();
+              UI.toast(editing ? T('common.saved') : T('albums.created'), 'ok');
+              SoundFX.play('success');
+              if (done) done(data.album);
+            });
+            return false;
+          }
+        }
+      ]
+    });
+  }
+
+  views.album = function (main, r) {
+    var id = Number(r.parts[1] || 0);
+    var next = 0;
+    main.innerHTML = '<div class="center" style="padding:20px">' + UI.spinner() + '</div>';
+    if (!id) { main.innerHTML = '<div class="alert err">' + T('albums.notFound') + '</div>'; return; }
+
+    function render() {
+      Api.request('GET', '/api/album?id=' + id, null, function (err, data) {
+        if (err) {
+          main.innerHTML = '<div class="card"><div class="card-b"><div class="alert err">' +
+            UI.esc(Api.errorText(err)) + '</div></div></div>';
+          return;
+        }
+        var a = data.album;
+        var owner = a.owner || {};
+        var html = '<div class="card"><div class="card-h">' + UI.icon('folder-open') + ' ' + UI.esc(a.name) +
+          '<span class="right"><a href="#/photos/' + owner.id + '">' + T('albums.back') + '</a></span></div>' +
+          '<div class="card-b">' +
+          '<div class="tiny muted">' + (owner.id ? '<a href="#/profile/' + owner.id + '">' +
+            UI.esc(owner.displayName || owner.username) + '</a>' : '?') + ' · ' +
+          T('albums.count', String(a.photos)) + ' · ' + UI.formatDate(a.created) + '</div>' +
+          (a.description ? '<div class="album-desc">' + UI.nl2br(UI.esc(a.description)) + '</div>' : '') +
+          (a.mine ? '<div class="album-actions">' +
+            '<button class="btn btn-sm" id="al-edit">' + UI.icon('pen') + ' ' + T('common.edit') + '</button>' +
+            '<button class="btn btn-sm btn-primary" id="al-add">' + UI.icon('plus') + ' ' + T('albums.addPhotos') + '</button>' +
+            '<button class="btn btn-sm btn-danger" id="al-del">' + UI.icon('trash') + ' ' + T('common.delete') + '</button>' +
+            '</div>' : '') +
+          '</div>' +
+          '<div class="card-b flush"><div class="photo-grid wide" id="al-grid"></div></div></div>' +
+          '<div id="al-more"></div>';
+        main.innerHTML = html;
+
+        var grid = document.getElementById('al-grid');
+        var more = document.getElementById('al-more');
+
+        function cells() {
+          var list = grid.querySelectorAll('.photo-cell');
+          for (var i = 0; i < list.length; i++) {
+            if (list[i].getAttribute('data-bound')) continue;
+            list[i].setAttribute('data-bound', '1');
+            list[i].addEventListener('click', function () { UI.imageModal(this.getAttribute('data-full')); });
+            if (a.mine) {
+              var cell = list[i];
+              var btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'photo-remove';
+              btn.title = T('albums.removeFrom');
+              btn.innerHTML = UI.icon('xmark');
+              btn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                var postId = Number(this.parentNode.getAttribute('data-post'));
+                Api.request('POST', '/api/album/assign', { post: postId, album: 0 }, function (e2) {
+                  if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+                  UI.toast(T('albums.removed'), 'ok');
+                  render();
+                });
+              });
+              cell.appendChild(btn);
+            }
+          }
+        }
+
+        function paint(photos, append) {
+          if (!append) grid.innerHTML = '';
+          if (!photos.length && !append) {
+            grid.innerHTML = '<div style="grid-column:1/-1">' +
+              UI.empty('images', T('albums.empty'), a.mine ? T('albums.emptyHint') : '') + '</div>';
+            return;
+          }
+          var h = '';
+          for (var i = 0; i < photos.length; i++) {
+            var src = UI.safeUrl(photos[i].image);
+            if (!src) continue;
+            h += '<button type="button" class="photo-cell" data-post="' + photos[i].id + '" data-full="' +
+              UI.attr(src) + '" title="' + UI.attr(UI.timeAgo(photos[i].created)) + '">' +
+              '<img src="' + UI.attr(src) + '" alt="" loading="lazy"></button>';
+          }
+          grid.insertAdjacentHTML('beforeend', h);
+          cells();
+          next = data.next || 0;
+          more.innerHTML = data.hasMore
+            ? '<button type="button" class="load-more" id="al-load">' + T('feed.loadMore') + '</button>' : '';
+          var b = document.getElementById('al-load');
+          if (b) b.addEventListener('click', function () {
+            Api.request('GET', '/api/album?id=' + id + '&before=' + next, null, function (e2, d2) {
+              if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+              paint(d2.photos || [], true);
+              if (!d2.hasMore) b.parentNode.removeChild(b);
+            });
+          });
+        }
+
+        paint(data.photos || [], false);
+
+        var editBtn = document.getElementById('al-edit');
+        if (editBtn) editBtn.addEventListener('click', function () { albumModal(a, render); });
+
+        var delBtn = document.getElementById('al-del');
+        if (delBtn) delBtn.addEventListener('click', function () {
+          UI.confirm(T('albums.deleteTitle'), T('albums.deleteConfirm'), T('common.delete'), function () {
+            Api.request('POST', '/api/album/delete', { id: a.id }, function (e2) {
+              if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+              UI.toast(T('albums.deleted'), 'ok');
+              location.hash = '#/photos/' + owner.id;
+            });
+          }, true);
+        });
+
+        var addBtn = document.getElementById('al-add');
+        if (addBtn) addBtn.addEventListener('click', function () { pickPhotos(a, render); });
+      });
+    }
+
+    render();
+  };
+
+  /// <summary>Picks unfiled photos and drops them into the album.</summary>
+  function pickPhotos(album, done) {
+    Api.request('GET', '/api/album/unfiled?limit=48', null, function (err, data) {
+      if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+      var photos = (data && data.photos) || [];
+      if (!photos.length) { UI.toast(T('albums.noUnfiled'), 'info'); return; }
+
+      var body = '<div class="tiny muted" style="margin-bottom:8px">' + T('albums.pickHint') + '</div>' +
+        '<div class="photo-grid pick-grid" id="pick-grid">';
+      for (var i = 0; i < photos.length; i++) {
+        var src = UI.safeUrl(photos[i].image);
+        if (!src) continue;
+        body += '<button type="button" class="photo-cell pick-cell" data-post="' + photos[i].id + '">' +
+          '<img src="' + UI.attr(src) + '" alt="" loading="lazy"></button>';
+      }
+      body += '</div>';
+
+      UI.modal({
+        title: T('albums.addPhotos'),
+        icon: 'images',
+        wide: true,
+        body: body,
+        actions: [
+          { label: T('common.cancel'), cls: 'btn-ghost' },
+          {
+            label: T('albums.addSelected'), cls: 'btn-primary', keepOpen: true,
+            onClick: function (box, close) {
+              var picked = document.querySelectorAll('.pick-cell.selected');
+              if (!picked.length) { UI.toast(T('albums.pickSome'), 'err'); return false; }
+              var left = picked.length;
+              for (var p = 0; p < picked.length; p++) {
+                Api.request('POST', '/api/album/assign', {
+                  post: Number(picked[p].getAttribute('data-post')), album: album.id
+                }, function (e2) {
+                  if (--left === 0) {
+                    if (close) close();
+                    UI.toast(T('albums.added'), 'ok');
+                    SoundFX.play('success');
+                    if (done) done();
+                  }
+                });
+              }
+              return false;
+            }
+          }
+        ]
+      });
+
+      var cells = document.querySelectorAll('.pick-cell');
+      for (var c = 0; c < cells.length; c++) {
+        cells[c].addEventListener('click', function () {
+          if (this.className.indexOf('selected') >= 0) this.className = 'photo-cell pick-cell';
+          else this.className = 'photo-cell pick-cell selected';
+        });
+      }
+    });
+  }
 
   // ------------------------------------------------------------------- tags
 

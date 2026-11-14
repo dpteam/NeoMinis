@@ -36,13 +36,14 @@ namespace Social.Core
         private readonly List<Feedback> _feedback = new List<Feedback>();
         private readonly List<CallRecord> _calls = new List<CallRecord>();
         private readonly List<Gift> _gifts = new List<Gift>();
+        private readonly List<Album> _albums = new List<Album>();
         private Meta _meta = new Meta();
 
         private readonly Dictionary<long, User> _userById = new Dictionary<long, User>();
         private readonly Dictionary<string, User> _userByName = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
 
         private bool _dirtyUsers, _dirtyPosts, _dirtyComments, _dirtyFriends, _dirtyMessages;
-        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts;
+        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts, _dirtyAlbums;
         private bool _readOnly;
         private string _saveError = "";
         private DateTime _lastSave = DateTime.MinValue;
@@ -69,7 +70,7 @@ namespace Social.Core
                 {
                     return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
                            _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
-                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls || _dirtyGifts;
+                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls || _dirtyGifts || _dirtyAlbums;
                 }
             }
         }
@@ -129,6 +130,8 @@ namespace Social.Core
                     if (_calls[i].Ended == DateTime.MinValue) _calls[i].Ended = _calls[i].Started;
                 _gifts.Clear();
                 _gifts.AddRange(LoadTable("gifts.json", GiftFromDict));
+                _albums.Clear();
+                _albums.AddRange(LoadTable("albums.json", AlbumFromDict));
 
                 // sort newest first, keeping the hot queries cheap
                 _posts.Sort(delegate(Post a, Post b) { return b.Id.CompareTo(a.Id); });
@@ -139,7 +142,7 @@ namespace Social.Core
                 EnsureCounters();
                 _loaded = true;
                 _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = false;
+                _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = false;
 
                 Log.Info("DATA", "loaded users=" + _users.Count + " posts=" + _posts.Count +
                                   " comments=" + _comments.Count + " friends=" + _friends.Count +
@@ -172,6 +175,7 @@ namespace Social.Core
                 m.NextFeedbackId = Json.GetLong(d, "nextFeedbackId", 1);
                 m.NextCallId = Json.GetLong(d, "nextCallId", 1);
                 m.NextGiftId = Json.GetLong(d, "nextGiftId", 1);
+                m.NextAlbumId = Json.GetLong(d, "nextAlbumId", 1);
                 m.TotalRegistrations = Json.GetLong(d, "totalRegistrations", 0);
                 m.LastBackup = Json.GetDate(d, "lastBackup", DateTime.MinValue);
                 m.InstallId = Json.GetString(d, "installId", "");
@@ -214,6 +218,9 @@ namespace Social.Core
             if (_meta.NextFeedbackId <= maxFeedback) _meta.NextFeedbackId = maxFeedback + 1;
             if (_meta.NextCallId <= maxCall) _meta.NextCallId = maxCall + 1;
             if (_meta.NextGiftId <= maxGift) _meta.NextGiftId = maxGift + 1;
+            long maxAlbum = 0;
+            for (int i = 0; i < _albums.Count; i++) if (_albums[i].Id > maxAlbum) maxAlbum = _albums[i].Id;
+            if (_meta.NextAlbumId <= maxAlbum) _meta.NextAlbumId = maxAlbum + 1;
         }
 
         private string ReadJson(string path)
@@ -322,9 +329,10 @@ namespace Social.Core
                     if (force || _dirtyFeedback) WriteTable("feedback.json", FeedbackToArray());
                     if (force || _dirtyCalls) WriteTable("calls.json", CallsToArray());
                     if (force || _dirtyGifts) WriteTable("gifts.json", GiftsToArray());
+                    if (force || _dirtyAlbums) WriteTable("albums.json", AlbumsToArray());
 
                     _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
-                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = false;
+                    _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = false;
                     _lastSave = DateTime.UtcNow;
                     _saveError = "";
                     if (_readOnly)
@@ -403,6 +411,7 @@ namespace Social.Core
         private void MarkFeedback() { _dirtyFeedback = true; }
         private void MarkCalls() { _dirtyCalls = true; }
         private void MarkGifts() { _dirtyGifts = true; }
+        private void MarkAlbums() { _dirtyAlbums = true; }
 
         // ============================================================== users
 
@@ -2274,6 +2283,204 @@ namespace Social.Core
             }
         }
 
+        // ============================================================== albums
+
+        public Album CreateAlbum(long owner, string name, string description)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Album a = new Album();
+                a.Id = _meta.NextAlbumId++;
+                a.Owner = owner;
+                a.Name = Util.SingleLine(name, 60);
+                a.Description = Util.CleanText(description, 500);
+                a.Created = DateTime.UtcNow;
+                a.Updated = a.Created;
+                _albums.Add(a);
+                MarkAlbums();
+                _dirtyMeta = true;
+                return a;
+            }
+        }
+
+        public Album FindAlbum(long id)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _albums.Count; i++) if (_albums[i].Id == id) return _albums[i];
+                return null;
+            }
+        }
+
+        /// <summary>Albums of one person, newest activity first.</summary>
+        public List<Album> AlbumsFor(long owner)
+        {
+            List<Album> list = new List<Album>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _albums.Count; i++) if (_albums[i].Owner == owner) list.Add(_albums[i]);
+            }
+            list.Sort(delegate(Album a, Album b) { return b.Updated.CompareTo(a.Updated); });
+            return list;
+        }
+
+        public int CountAlbums(long owner)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _albums.Count; i++) if (_albums[i].Owner == owner) n++;
+                return n;
+            }
+        }
+
+        public bool UpdateAlbum(long id, long owner, string name, string description)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Album a = FindAlbum(id);
+                if (a == null || a.Owner != owner) return false;
+                if (!string.IsNullOrEmpty(name)) a.Name = Util.SingleLine(name, 60);
+                if (description != null) a.Description = Util.CleanText(description, 500);
+                a.Updated = DateTime.UtcNow;
+                MarkAlbums();
+                return true;
+            }
+        }
+
+        public bool SetAlbumCover(long id, long owner, string url)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Album a = FindAlbum(id);
+                if (a == null || a.Owner != owner) return false;
+                a.Cover = url ?? "";
+                a.Updated = DateTime.UtcNow;
+                MarkAlbums();
+                return true;
+            }
+        }
+
+        /// <summary>Deletes the album; the photos stay on the wall, only the grouping goes.</summary>
+        public bool DeleteAlbum(long id, long owner)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Album a = FindAlbum(id);
+                if (a == null || a.Owner != owner) return false;
+                _albums.Remove(a);
+                for (int i = 0; i < _posts.Count; i++)
+                    if (_posts[i].Album == id) _posts[i].Album = 0;
+                MarkAlbums();
+                MarkPosts();
+                return true;
+            }
+        }
+
+        /// <summary>Puts a photo into an album (0 = take it out). Only the photo's author may move it.</summary>
+        public bool AssignPhoto(long postId, long albumId, long owner)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Post p = FindPost(postId);
+                if (p == null || p.Deleted || p.Author != owner || string.IsNullOrEmpty(p.Image)) return false;
+                if (albumId > 0)
+                {
+                    Album a = FindAlbum(albumId);
+                    if (a == null || a.Owner != owner) return false;
+                    a.Updated = DateTime.UtcNow;
+                    MarkAlbums();
+                }
+                p.Album = albumId;
+                MarkPosts();
+                return true;
+            }
+        }
+
+        /// <summary>Photos of one album, newest first.</summary>
+        public List<Post> AlbumPhotos(long albumId, long before, int limit)
+        {
+            List<Post> result = new List<Post>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _posts.Count && result.Count < limit; i++)
+                {
+                    Post p = _posts[i];
+                    if (p.Deleted || p.Album != albumId || string.IsNullOrEmpty(p.Image)) continue;
+                    if (!IsLive(p)) continue;
+                    if (before > 0 && p.Id >= before) continue;
+                    result.Add(p);
+                }
+            }
+            return result;
+        }
+
+        public int CountAlbumPhotos(long albumId)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _posts.Count; i++)
+                {
+                    Post p = _posts[i];
+                    if (p.Deleted || p.Album != albumId || string.IsNullOrEmpty(p.Image)) continue;
+                    n++;
+                }
+                return n;
+            }
+        }
+
+        /// <summary>First picture of an album, used as a fallback cover.</summary>
+        public string AlbumCover(Album a)
+        {
+            if (a == null) return "";
+            if (!string.IsNullOrEmpty(a.Cover)) return a.Cover;
+            lock (_sync)
+            {
+                for (int i = 0; i < _posts.Count; i++)
+                {
+                    Post p = _posts[i];
+                    if (p.Deleted || p.Album != a.Id || string.IsNullOrEmpty(p.Image)) continue;
+                    return p.Image;
+                }
+            }
+            return "";
+        }
+
+        private List<object> AlbumsToArray()
+        {
+            List<object> list = new List<object>(_albums.Count);
+            for (int i = 0; i < _albums.Count; i++)
+            {
+                Album a = _albums[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = a.Id; d["owner"] = a.Owner; d["name"] = a.Name;
+                d["description"] = a.Description; d["cover"] = a.Cover;
+                d["created"] = a.Created; d["updated"] = a.Updated;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static Album AlbumFromDict(Dictionary<string, object> d)
+        {
+            Album a = new Album();
+            a.Id = Json.GetLong(d, "id", 0);
+            a.Owner = Json.GetLong(d, "owner", 0);
+            a.Name = Json.GetString(d, "name", "");
+            a.Description = Json.GetString(d, "description", "");
+            a.Cover = Json.GetString(d, "cover", "");
+            a.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            a.Updated = Json.GetDate(d, "updated", a.Created);
+            if (a.Id <= 0 || a.Owner <= 0) return null;
+            return a;
+        }
+
         // ============================================================== games
 
         /// <summary>
@@ -3169,6 +3376,10 @@ namespace Social.Core
                 // gifts sent or received
                 removed += PurgeGiftsOf(userId);
 
+                // albums owned by the user (their photos go with the posts)
+                for (int a = _albums.Count - 1; a >= 0; a--)
+                    if (_albums[a].Owner == userId) _albums.RemoveAt(a);
+
                 _users.Remove(u);
                 _userById.Remove(userId);
                 if (!string.IsNullOrEmpty(u.Username)) _userByName.Remove(u.Username);
@@ -3181,6 +3392,7 @@ namespace Social.Core
                 MarkFriends();
                 MarkBookmarks();
                 MarkGroups();
+                MarkAlbums();
                 return removed + 1;
             }
         }
@@ -3444,6 +3656,7 @@ namespace Social.Core
             d["nextFeedbackId"] = m.NextFeedbackId;
             d["nextCallId"] = m.NextCallId;
             d["nextGiftId"] = m.NextGiftId;
+            d["nextAlbumId"] = m.NextAlbumId;
             d["totalRegistrations"] = m.TotalRegistrations;
             d["lastBackup"] = m.LastBackup;
             d["installId"] = m.InstallId;
@@ -3542,6 +3755,7 @@ namespace Social.Core
                 d["visibility"] = p.Visibility; d["likes"] = p.Likes; d["comments"] = p.Comments;
                 d["deleted"] = p.Deleted; d["pinned"] = p.Pinned;
                 if (p.Pending) d["pending"] = true;
+                if (p.Album > 0) d["album"] = p.Album;
                 d["legacySource"] = p.LegacySource; d["legacyId"] = p.LegacyId;
                 d["pollQuestion"] = p.PollQuestion; d["pollOptions"] = p.PollOptions; d["pollVotes"] = p.PollVotes;
                 d["reactions"] = p.Reactions;
@@ -3569,6 +3783,7 @@ namespace Social.Core
             p.Deleted = Json.GetBool(d, "deleted", false);
             p.Pinned = Json.GetBool(d, "pinned", false);
             p.Pending = Json.GetBool(d, "pending", false);
+            p.Album = Json.GetLong(d, "album", 0);
             p.Video = Json.GetString(d, "video", "");
             p.LegacySource = Json.GetString(d, "legacySource", "");
             p.LegacyId = Json.GetString(d, "legacyId", "");

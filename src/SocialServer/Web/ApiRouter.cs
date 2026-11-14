@@ -716,6 +716,12 @@ namespace Social.Web
             if (r == "group/answer") { RequireMethod(m, "POST"); HandleGroupAnswer(ctx); return; }
             if (r == "group/pending") { RequireMethod(m, "GET"); HandleGroupPending(ctx); return; }
             if (r == "group/review") { RequireMethod(m, "POST"); HandleGroupReview(ctx); return; }
+            if (r == "albums") { RequireMethod(m, "GET"); HandleAlbums(ctx); return; }
+            if (r == "album") { RequireMethod(m, "GET"); HandleAlbum(ctx); return; }
+            if (r == "album/save") { RequireMethod(m, "POST"); HandleAlbumSave(ctx); return; }
+            if (r == "album/delete") { RequireMethod(m, "POST"); HandleAlbumDelete(ctx); return; }
+            if (r == "album/assign") { RequireMethod(m, "POST"); HandleAlbumAssign(ctx); return; }
+            if (r == "album/unfiled") { RequireMethod(m, "GET"); HandleAlbumUnfiled(ctx); return; }
             if (r == "tag") { RequireMethod(m, "GET"); HandleTag(ctx); return; }
             if (r == "tags") { RequireMethod(m, "GET"); HandleTags(ctx); return; }
             if (r == "report") { RequireMethod(m, "POST"); HandleReport(ctx); return; }

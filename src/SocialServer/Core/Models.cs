@@ -96,6 +96,9 @@ namespace Social.Core
         // post has been shared further
         public long RepostOf;
         public int Reposts;
+
+        // photo album this picture belongs to (0 = none)
+        public long Album;
     }
 
     public sealed class Bookmark
@@ -132,6 +135,22 @@ namespace Social.Core
     /// A named list of library items. Items are media ids in play order; a playlist
     /// never owns the files, so deleting a track simply leaves a gap.
     /// </summary>
+    /// <summary>
+    /// A named photo album. Albums never own the files: they are buckets of photo
+    /// posts, so moving a photo between albums is one field on the post and
+    /// deleting an album only drops the grouping.
+    /// </summary>
+    public sealed class Album
+    {
+        public long Id;
+        public long Owner;
+        public string Name = "";
+        public string Description = "";
+        public string Cover = "";      // image url; empty = first photo in the album
+        public DateTime Created = DateTime.UtcNow;
+        public DateTime Updated = DateTime.UtcNow;
+    }
+
     public sealed class Playlist
     {
         public long Id;
@@ -316,6 +335,7 @@ namespace Social.Core
         public long NextFeedbackId = 1;
         public long NextCallId = 1;
         public long NextGiftId = 1;
+        public long NextAlbumId = 1;
         public long TotalRegistrations;
         public DateTime LastBackup = DateTime.MinValue;
         public string InstallId = "";

@@ -791,6 +791,60 @@ async function main() {
   const outsiderKick = await stranger.call('POST', '/api/group/kick', { id: commId, user: bob.user.id });
   ok('a stranger cannot kick editors', outsiderKick.status === 403, String(outsiderKick.status));
 
+  // ---- photo albums
+  const p1 = await alice.call('POST', '/api/post', { body: 'album photo one', image: PNG });
+  const p2 = await alice.call('POST', '/api/post', { body: 'album photo two', image: PNG });
+  ok('two photos posted', p1.status === 200 && p2.status === 200, '');
+
+  const albumNew = await alice.call('POST', '/api/album/save', {
+    name: 'Summer', description: 'the test album'
+  });
+  ok('album created', albumNew.status === 200 && albumNew.data.album.name === 'Summer' &&
+    albumNew.data.album.photos === 0, JSON.stringify(albumNew.data && albumNew.data.album));
+  const albumId = albumNew.data.album.id;
+
+  const emptyName = await alice.call('POST', '/api/album/save', { name: '   ' });
+  ok('an album needs a name', emptyName.status === 400, String(emptyName.status));
+
+  const unfiled = await alice.call('GET', '/api/album/unfiled');
+  ok('unfiled photos are listed', unfiled.data.photos.some(x => x.id === p1.data.post.id), '');
+
+  const moved = await alice.call('POST', '/api/album/assign', {
+    post: p1.data.post.id, album: albumId
+  });
+  ok('photo moved into the album', moved.status === 200 && moved.data.album === albumId, '');
+
+  const albumPage = await alice.call('GET', '/api/album?id=' + albumId);
+  ok('album shows its photo', albumPage.data.album.photos === 1 &&
+    albumPage.data.photos.some(x => x.id === p1.data.post.id), '');
+  ok('album cover falls back to the first photo',
+    (albumPage.data.album.cover || '').indexOf('/media/') === 0, String(albumPage.data.album.cover));
+
+  const notMineAssign = await bob.call('POST', '/api/album/assign', {
+    post: p1.data.post.id, album: albumId
+  });
+  ok('nobody else can move my photo', notMineAssign.status === 403, String(notMineAssign.status));
+  const notMineAlbum = await bob.call('POST', '/api/album/save', { id: albumId, name: 'Hijacked' });
+  ok('nobody else can rename my album', notMineAlbum.status === 403, String(notMineAlbum.status));
+
+  const albumsOf = await alice.call('GET', '/api/albums');
+  ok('album appears on the shelf', albumsOf.data.albums.some(a => a.id === albumId), '');
+  const bobAlbums = await bob.call('GET', '/api/albums?user=' + alice.user.id);
+  ok('somebody else sees the album but cannot create one',
+    bobAlbums.data.albums.some(a => a.id === albumId) && bobAlbums.data.canCreate === false, '');
+
+  const backOut = await alice.call('POST', '/api/album/assign', {
+    post: p1.data.post.id, album: 0
+  });
+  ok('photo can be taken out of an album', backOut.status === 200 && backOut.data.album === 0, '');
+
+  const deleteAlbum = await alice.call('POST', '/api/album/delete', { id: albumId });
+  ok('album deleted', deleteAlbum.status === 200, String(deleteAlbum.status));
+  const albumGone = await alice.call('GET', '/api/album?id=' + albumId);
+  ok('deleted album is gone', albumGone.status === 404, String(albumGone.status));
+  const photoStill = await alice.call('GET', '/api/post?id=' + p1.data.post.id);
+  ok('photos survive their album', photoStill.status === 200, String(photoStill.status));
+
   // ---- file attachments
   const TXT = 'data:text/plain;base64,' + Buffer.from('attachment body').toString('base64');
   const fileMsg = await bob.call('POST', '/api/messages/send', {

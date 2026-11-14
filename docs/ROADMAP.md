@@ -7,7 +7,6 @@ is a promise — it is a parking lot so good ideas do not get lost.
 
 | Idea | Notes |
 | --- | --- |
-| **Photo albums in the profile** | Named albums with covers instead of the flat gallery, drag a photo between albums, album link in the profile. |
 | **Stories** | Full-screen photos and short clips that expire after 24 hours, with a "seen by" list. |
 
 ## Later
@@ -39,5 +38,6 @@ Kept here so the list above stays honest.
   sandboxed iframe, with a shelf, search, plays counter and likes.
 - Voice and video calls plus named conference rooms over WebRTC, with history.
 - Achievements, bookmarks, photo gallery, profiles with interests and moods.
+- Photo albums: named, with a cover, filled from the wall, photos outlive the album.
 - Admin board: users, roles, badges, reports, logs, AI panel, settings, backups.
 - DeadVK import, operator CLI, self-test, CI script.

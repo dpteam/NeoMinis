@@ -567,6 +567,7 @@ namespace Social.Web
                 b.Prop("created", Util.Iso(p.Created));
                 b.Prop("likes", p.Likes.Count);
                 b.Prop("comments", p.Comments);
+                b.Prop("album", p.Album);
                 b.EndObject();
             }
             b.EndArray();

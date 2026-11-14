@@ -437,6 +437,27 @@ Only the group owner (or an administrator) may edit a group, change its picture 
 remove a member; the owner can never be removed. Editors may also remove ordinary
 members, but only the owner may remove another editor.
 
+### Photo albums
+
+Albums are named buckets of photo posts. They never own a file: moving a picture
+between albums changes one field on the post, and deleting an album leaves every
+photo on the wall.
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| GET | `/api/albums` | `user` | `{ user, albums[], canCreate }` |
+| GET | `/api/album` | `id`, `before`, `limit` | `{ album, photos[], hasMore, next }` |
+| POST | `/api/album/save` | `id` (0 = new), `name`, `description` | `{ album }` |
+| POST | `/api/album/delete` | `id` | `{ id }` |
+| POST | `/api/album/assign` | `post`, `album` (0 = take out) | `{ post, album }` |
+| GET | `/api/album/unfiled` | `before`, `limit` | `{ photos[], next }` |
+
+Only the owner may rename, delete or fill an album, and only the author of a photo
+may move it. `album.cover` falls back to the first picture when no explicit cover is
+set. Deleting an album detaches its photos (`album` becomes 0) instead of deleting
+them; deleting a photo just leaves a gap in the album. A profile may have up to 60
+albums.
+
 ### Communities
 
 A community is a group with roles, a join-request queue and post moderation.
