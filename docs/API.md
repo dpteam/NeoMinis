@@ -205,7 +205,7 @@ earned (useful after an import or a rule change).
 | --- | --- | --- | --- |
 | GET | `/api/messages/threads` | — | `{ threads[], unread }` |
 | GET | `/api/messages` | `with`, `before`, `limit` | `{ other, messages[], hasMore, next }` |
-| POST | `/api/messages/send` | `to`, `body`, `image`, `audio`, `audioSec`, `replyTo` | `{ message }` |
+| POST | `/api/messages/send` | `to`, `body`, `image`, `audio`, `audioSec`, `file`, `fileName`, `replyTo` | `{ message }` |
 | GET | `/api/messages/wait` | `with`, `after`, `timeout` | `{ messages[], latest, typing, read, unread, live }` |
 | POST | `/api/messages/typing` | `to` | `{ ok }` |
 | POST | `/api/messages/react` | `id`, `emoji` | `{ message }` |
@@ -239,9 +239,18 @@ Post reactions are the same mechanism with a different set (👍 😂 😮 😢 
 heart stays reserved for the like button) through `POST /api/reaction`.
 
 `POST /api/messages/forward` copies a message you can see into another conversation.
-Pictures and voice notes are duplicated on disk, so deleting either copy never
-breaks the other. The copy carries `forwardedFrom { id, username, displayName }`
-and forwarding an already forwarded message keeps the original author.
+Pictures, voice notes and files are duplicated on disk, so deleting either copy
+never breaks the other. The copy carries `forwardedFrom { id, username,
+displayName }` and forwarding an already forwarded message keeps the original
+author.
+
+`file` + `fileName` attach an arbitrary document (up to `limits.maxFileKB`). The
+extension must be on a whitelist (pdf, txt/md/csv/json/xml, zip/7z/rar/tar/gz,
+office documents, audio and video, raster images); anything else — html, js, exe —
+is refused with `400 unsupported-file`. Attachments land in `/media/files/` and are
+always served with `Content-Disposition: attachment` and a `default-src 'none';
+sandbox` CSP, so an uploaded document can never run script on the origin. Messages
+carry `file`, `fileName` and `fileSize`.
 
 `/api/messages/search` looks only inside the caller's own conversations (deleted
 per-side messages are skipped) and is meant for the search box above the thread

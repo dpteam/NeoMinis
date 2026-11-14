@@ -124,6 +124,9 @@ namespace Social.Core
         public int AudioSec;           // duration of the voice message in seconds
         public long ReplyTo;           // id of the quoted message, 0 = none
         public string Reactions = "";  // see Core/Reactions.cs: "emoji|id,id" per line
+        public string FileUrl = "";    // generic attachment, /media/files/...
+        public string FileName = "";   // original name, shown in the chat
+        public long FileSize;          // bytes, for the download hint
         public long ForwardedFrom;     // original author when the message was forwarded, 0 = not forwarded
         public DateTime Created = DateTime.UtcNow;
         public bool Read;

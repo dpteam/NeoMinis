@@ -114,6 +114,129 @@ namespace Social.Core
         }
 
         /// <summary>
+        /// Saves an arbitrary attachment. The extension is taken from a whitelist and
+        /// the content type is derived from that extension, never from the client, so
+        /// a renamed HTML file can never be served as a document that executes.
+        /// </summary>
+        public string SaveFile(string dataUrl, string fileName, int maxKb, out string error)
+        {
+            error = "";
+            string mime;
+            byte[] data = Util.ParseDataUrl(dataUrl, out mime);
+            if (data == null) { error = "bad-file"; return null; }
+            if (data.Length == 0) { error = "empty-file"; return null; }
+            if (data.Length > (long)maxKb * 1024L) { error = "file-too-large"; return null; }
+
+            string ext = SafeExtension(fileName);
+            if (ext == null) { error = "unsupported-file"; return null; }
+
+            string sub = "files";
+            string dir = Path.Combine(_cfg.MediaDir, sub);
+            Directory.CreateDirectory(dir);
+
+            string name = Crypto.RandomHex(16) + ext;
+            string path = Path.Combine(dir, name);
+            string tmp = path + ".tmp";
+            try
+            {
+                File.WriteAllBytes(tmp, data);
+                if (File.Exists(path)) File.Delete(path);
+                File.Move(tmp, path);
+            }
+            catch (Exception ex)
+            {
+                error = "save-failed";
+                Log.Error("MEDIA", "cannot save file: " + ex.Message);
+                try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+                return null;
+            }
+
+            Log.Debug("MEDIA", "file saved " + name + " (" + data.Length + " bytes)");
+            return "/media/" + sub + "/" + name;
+        }
+
+        /// <summary>Extensions we are willing to store and hand back.</summary>
+        public static string[] FileExtensions()
+        {
+            return new string[]
+            {
+                ".pdf", ".txt", ".md", ".csv", ".json", ".xml", ".log",
+                ".zip", ".7z", ".rar", ".tar", ".gz",
+                ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods",
+                ".mp3", ".m4a", ".ogg", ".wav", ".flac", ".opus",
+                ".mp4", ".webm", ".mkv", ".mov",
+                ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"
+            };
+        }
+
+        /// <summary>Returns the lower-case extension when it is on the whitelist.</summary>
+        public static string SafeExtension(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName)) return null;
+            string ext = Path.GetExtension(fileName);
+            if (string.IsNullOrEmpty(ext)) return null;
+            ext = ext.ToLowerInvariant();
+            if (ext.Length < 2 || ext.Length > 6) return null;
+            for (int i = 1; i < ext.Length; i++)
+            {
+                char c = ext[i];
+                if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) return null;
+            }
+            string[] allowed = FileExtensions();
+            for (int i = 0; i < allowed.Length; i++) if (allowed[i] == ext) return ext;
+            return null;
+        }
+
+        public static string MimeForFile(string ext)
+        {
+            switch ((ext ?? "").ToLowerInvariant())
+            {
+                case ".pdf": return "application/pdf";
+                case ".txt": case ".md": case ".log": return "text/plain; charset=utf-8";
+                case ".csv": return "text/csv; charset=utf-8";
+                case ".json": return "application/json; charset=utf-8";
+                case ".xml": return "application/xml; charset=utf-8";
+                case ".zip": return "application/zip";
+                case ".7z": return "application/x-7z-compressed";
+                case ".rar": return "application/vnd.rar";
+                case ".tar": return "application/x-tar";
+                case ".gz": return "application/gzip";
+                case ".doc": return "application/msword";
+                case ".docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+                case ".xls": return "application/vnd.ms-excel";
+                case ".xlsx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                case ".ppt": return "application/vnd.ms-powerpoint";
+                case ".pptx": return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+                case ".odt": return "application/vnd.oasis.opendocument.text";
+                case ".ods": return "application/vnd.oasis.opendocument.spreadsheet";
+                case ".mp3": return "audio/mpeg";
+                case ".m4a": return "audio/mp4";
+                case ".ogg": case ".opus": return "audio/ogg";
+                case ".wav": return "audio/wav";
+                case ".flac": return "audio/flac";
+                case ".mp4": return "video/mp4";
+                case ".webm": return "video/webm";
+                case ".mkv": return "video/x-matroska";
+                case ".mov": return "video/quicktime";
+                case ".png": return "image/png";
+                case ".jpg": case ".jpeg": return "image/jpeg";
+                case ".gif": return "image/gif";
+                case ".webp": return "image/webp";
+                case ".svg": return "image/svg+xml";
+                default: return "application/octet-stream";
+            }
+        }
+
+        /// <summary>Human readable size, used by the SPA and the admin list.</summary>
+        public static string HumanSize(long bytes)
+        {
+            if (bytes < 1024) return bytes + " B";
+            if (bytes < 1024 * 1024) return (bytes / 1024.0).ToString("0.#") + " KB";
+            if (bytes < 1024L * 1024 * 1024) return (bytes / (1024.0 * 1024)).ToString("0.#") + " MB";
+            return (bytes / (1024.0 * 1024 * 1024)).ToString("0.##") + " GB";
+        }
+
+        /// <summary>
         /// Copies a stored media file to a fresh name. Forwarded messages get their
         /// own copy so deleting one of them can never break the other.
         /// </summary>

@@ -571,6 +571,18 @@ namespace Social.Web
                 return;
             }
             resp.Set("X-Content-Type-Options", "nosniff");
+            // Generic attachments are always downloads: an .svg or .html file must
+            // never be able to run script on our origin.
+            if (rel.StartsWith("files/", StringComparison.OrdinalIgnoreCase))
+            {
+                string ext = Path.GetExtension(file);
+                string name = Path.GetFileName(file);
+                resp.Set("Content-Disposition", "attachment; filename=\"" + name + "\"");
+                resp.Set("Content-Security-Policy", "default-src 'none'; sandbox");
+                resp.Set("Cross-Origin-Resource-Policy", "same-site");
+                SendFile(req, resp, file, MediaStore.MimeForFile(ext), true);
+                return;
+            }
             resp.Set("Content-Disposition", "inline");
             SendFile(req, resp, file, MimeFor(file), true);
         }
@@ -697,15 +709,19 @@ namespace Social.Web
             resp.Set("Referrer-Policy", "strict-origin-when-cross-origin");
             resp.Set("Cross-Origin-Resource-Policy", "same-origin");
             resp.Set("Permissions-Policy", "camera=(), microphone=(self), geolocation=(), payment=(), usb=()");
-            resp.Set("Content-Security-Policy",
-                "default-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; " +
-                "object-src 'none'; " +
-                (_cfg.ExternalMedia
-                    ? "img-src 'self' data: blob: https:; media-src 'self' https:; "
-                    : "img-src 'self' data: blob:; media-src 'self'; ") +
-                "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " +
-                "font-src 'self' https://cdnjs.cloudflare.com data:; " +
-                "script-src 'self'; connect-src 'self'");
+            // a caller may have set a stricter policy already (downloads, sandboxes)
+            if (!resp.Headers.ContainsKey("Content-Security-Policy"))
+            {
+                resp.Set("Content-Security-Policy",
+                    "default-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; " +
+                    "object-src 'none'; " +
+                    (_cfg.ExternalMedia
+                        ? "img-src 'self' data: blob: https:; media-src 'self' https:; "
+                        : "img-src 'self' data: blob:; media-src 'self'; ") +
+                    "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " +
+                    "font-src 'self' https://cdnjs.cloudflare.com data:; " +
+                    "script-src 'self'; connect-src 'self'");
+            }
             if (_cfg.Hsts && req != null && req.IsHttps)
                 resp.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
         }

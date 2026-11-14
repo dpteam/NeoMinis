@@ -992,9 +992,12 @@ namespace Social.Web
             string text = Util.CleanText(BodyStr(ctx, "body", ""), _cfg.MaxMessageLength);
             string imageData = BodyStr(ctx, "image", "");
             string audioData = BodyStr(ctx, "audio", "");
+            string fileData = BodyStr(ctx, "file", "");
+            string fileName = Util.SingleLine(BodyStr(ctx, "fileName", ""), 120);
             int audioSec = (int)BodyLong(ctx, "audioSec", 0);
             long replyTo = BodyLong(ctx, "replyTo", 0);
-            if (text.Length == 0 && string.IsNullOrEmpty(imageData) && string.IsNullOrEmpty(audioData))
+            if (text.Length == 0 && string.IsNullOrEmpty(imageData) && string.IsNullOrEmpty(audioData) &&
+                string.IsNullOrEmpty(fileData))
                 throw new ApiException(400, "empty", "Write something first");
 
             string image = "";
@@ -1016,6 +1019,18 @@ namespace Social.Web
                 if (audio == null) throw new ApiException(400, err, "Voice message could not be saved");
                 if (audioSec == 0) audioSec = 1;
             }
+            string fileUrl = "";
+            long fileSize = 0;
+            if (!string.IsNullOrEmpty(fileData))
+            {
+                if (fileName.Length == 0) throw new ApiException(400, "bad-file", "A file needs a name");
+                string err;
+                fileUrl = _media.SaveFile(fileData, fileName, _cfg.MaxFileKB, out err);
+                if (fileUrl == null) throw new ApiException(400, err, "File could not be saved");
+                string fileMime;
+                byte[] raw = Util.ParseDataUrl(fileData, out fileMime);
+                fileSize = raw == null ? 0 : raw.Length;
+            }
             if (replyTo > 0)
             {
                 Message quoted = _store.FindMessage(replyTo);
@@ -1023,7 +1038,8 @@ namespace Social.Web
                     throw new ApiException(400, "bad-reply", "The quoted message is not part of this conversation");
             }
 
-            Message m = _store.CreateMessage(ctx.User.Id, target.Id, text, image, audio, audioSec, replyTo);
+            Message m = _store.CreateMessage(ctx.User.Id, target.Id, text, image, audio, audioSec, replyTo, 0,
+                fileUrl, fileUrl.Length == 0 ? "" : fileName, fileSize);
             TypingRegistry.Clear(ctx.User.Id, target.Id);
             ctx.User.LastMessageAt = DateTime.UtcNow;
             _store.MarkUserDirty(ctx.User);
@@ -1184,10 +1200,11 @@ namespace Social.Web
             // media is copied so the two messages never share a file on disk
             string image = string.IsNullOrEmpty(original.Image) ? "" : _media.Duplicate(original.Image);
             string audio = string.IsNullOrEmpty(original.Audio) ? "" : _media.Duplicate(original.Audio);
+            string file = string.IsNullOrEmpty(original.FileUrl) ? "" : _media.Duplicate(original.FileUrl);
             long author = original.ForwardedFrom > 0 ? original.ForwardedFrom : original.From;
 
             Message m = _store.CreateMessage(ctx.User.Id, target.Id, original.Body, image, audio,
-                original.AudioSec, 0, author);
+                original.AudioSec, 0, author, file, original.FileName, original.FileSize);
             ctx.User.LastMessageAt = DateTime.UtcNow;
             _store.MarkUserDirty(ctx.User);
             _stats.OnMessage();
@@ -1249,10 +1266,12 @@ namespace Social.Web
             if (m == null) throw new ApiException(404, "no-message", "Message not found");
             string image = m.Image;
             string audio = m.Audio;
+            string file = m.FileUrl;
             if (!_store.DeleteMessage(id, ctx.User.Id)) throw new ApiException(404, "no-message", "Message not found");
             // the file only goes away once both sides dropped the message
             if (!string.IsNullOrEmpty(image) && m.DeletedByFrom && m.DeletedByTo) _media.Delete(image);
             if (!string.IsNullOrEmpty(audio) && m.DeletedByFrom && m.DeletedByTo) _media.Delete(audio);
+            if (!string.IsNullOrEmpty(file) && m.DeletedByFrom && m.DeletedByTo) _media.Delete(file);
             JsonBuilder b = new JsonBuilder(64);
             b.BeginObject();
             SendOk(ctx, b);

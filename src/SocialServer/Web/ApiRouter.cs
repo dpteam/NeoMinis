@@ -197,7 +197,8 @@ namespace Social.Web
             b.Prop("maxCommentLength", _cfg.MaxCommentLength);
             b.Prop("maxMessageLength", _cfg.MaxMessageLength)
                 .Prop("maxMessageImageKB", _cfg.MaxMessageImageKB)
-                .Prop("maxVoiceSec", _cfg.MaxVoiceSec);
+                .Prop("maxVoiceSec", _cfg.MaxVoiceSec)
+                .Prop("maxFileKB", _cfg.MaxFileKB);
             b.Prop("maxStatusLength", _cfg.MaxStatusLength);
             b.Prop("maxBioLength", _cfg.MaxBioLength);
             b.Prop("maxNameLength", _cfg.MaxNameLength);

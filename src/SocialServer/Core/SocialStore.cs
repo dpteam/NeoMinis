@@ -1250,6 +1250,12 @@ namespace Social.Core
 
         public Message CreateMessage(long from, long to, string body, string image, string audio, int audioSec, long replyTo, long forwardedFrom)
         {
+            return CreateMessage(from, to, body, image, audio, audioSec, replyTo, forwardedFrom, "", "", 0);
+        }
+
+        public Message CreateMessage(long from, long to, string body, string image, string audio, int audioSec,
+                                     long replyTo, long forwardedFrom, string fileUrl, string fileName, long fileSize)
+        {
             lock (_sync)
             {
                 EnsureWritable();
@@ -1263,6 +1269,9 @@ namespace Social.Core
                 m.AudioSec = audioSec;
                 m.ReplyTo = replyTo;
                 m.ForwardedFrom = forwardedFrom;
+                m.FileUrl = fileUrl ?? "";
+                m.FileName = fileName ?? "";
+                m.FileSize = fileSize;
                 m.Created = DateTime.UtcNow;
                 _messages.Insert(0, m);
                 MarkMessages();
@@ -2401,6 +2410,7 @@ namespace Social.Core
                 d["audio"] = m.Audio; d["audioSec"] = m.AudioSec;
                 d["reactions"] = m.Reactions;
                 d["forwardedFrom"] = m.ForwardedFrom;
+                d["fileUrl"] = m.FileUrl; d["fileName"] = m.FileName; d["fileSize"] = m.FileSize;
                 d["created"] = m.Created; d["read"] = m.Read;
                 d["deletedByFrom"] = m.DeletedByFrom; d["deletedByTo"] = m.DeletedByTo;
                 list.Add(d);
@@ -2421,6 +2431,9 @@ namespace Social.Core
             m.ReplyTo = Json.GetLong(d, "replyTo", 0);
             m.Reactions = Json.GetString(d, "reactions", "");
             m.ForwardedFrom = Json.GetLong(d, "forwardedFrom", 0);
+            m.FileUrl = Json.GetString(d, "fileUrl", "");
+            m.FileName = Json.GetString(d, "fileName", "");
+            m.FileSize = Json.GetLong(d, "fileSize", 0);
             m.Created = Json.GetDate(d, "created", DateTime.UtcNow);
             m.Read = Json.GetBool(d, "read", false);
             m.DeletedByFrom = Json.GetBool(d, "deletedByFrom", false);

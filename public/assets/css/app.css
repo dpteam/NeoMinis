@@ -1464,3 +1464,31 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
   background: var(--accent-soft); color: var(--accent-lo);
   font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
 }
+
+/* ------------------------------------------------------ file attachments */
+
+.chat-file {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 7px; padding: 6px 9px;
+  border-radius: 8px; background: var(--hover); border-left: 3px solid var(--accent);
+}
+.chat-file-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.chat-file-main > i { color: var(--accent); font-size: 15px; }
+.chat-file-meta { min-width: 0; }
+.chat-file-meta b { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-file-meta span { display: block; font-size: 10.5px; color: var(--muted); }
+.chat-file .icon-btn { width: 22px; height: 22px; color: var(--muted); }
+
+.msg-file {
+  display: flex; align-items: center; gap: 9px;
+  margin: 2px 0 4px; padding: 7px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--field); color: var(--text); max-width: 260px;
+  transition: border-color .15s var(--ease);
+}
+.msg-file:hover { border-color: var(--accent); text-decoration: none; }
+.msg-file > i:first-child { font-size: 19px; color: var(--accent); }
+.msg-file > i:last-child { font-size: 11px; color: var(--muted); }
+.msg-file-main { flex: 1; min-width: 0; }
+.msg-file-main b { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-file-main span { display: block; font-size: 10.5px; color: var(--muted); }

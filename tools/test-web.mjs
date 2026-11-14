@@ -412,6 +412,30 @@ async function main() {
   const searchMiss = await bob.call('GET', '/api/messages/search?q=' + encodeURIComponent('zzz-nothing-here'));
   ok('search miss returns nothing', searchMiss.status === 200 && searchMiss.data.results.length === 0, '');
 
+  // ---- file attachments
+  const TXT = 'data:text/plain;base64,' + Buffer.from('attachment body').toString('base64');
+  const fileMsg = await bob.call('POST', '/api/messages/send', {
+    to: alice.user.id, body: '', file: TXT, fileName: 'notes.txt'
+  });
+  ok('file attachment saved', fileMsg.status === 200 && String(fileMsg.data.message.file).indexOf('/media/files/') === 0 &&
+    fileMsg.data.message.fileName === 'notes.txt' && fileMsg.data.message.fileSize > 0,
+    String(fileMsg.status) + ' ' + (fileMsg.data && fileMsg.data.message.file));
+  const htmlMsg = await bob.call('POST', '/api/messages/send', {
+    to: alice.user.id, body: '', file: 'data:text/html;base64,' + Buffer.from('<b>x</b>').toString('base64'),
+    fileName: 'evil.html'
+  });
+  ok('html attachment rejected', htmlMsg.status === 400, String(htmlMsg.status));
+  const noName = await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: '', file: TXT });
+  ok('file without a name rejected', noName.status === 400, String(noName.status));
+
+  const fileFetch = await fetch(BASE + fileMsg.data.message.file);
+  const fileHeaders = fileFetch.headers;
+  ok('attachment is served as a download', fileFetch.status === 200 &&
+    (fileHeaders.get('content-disposition') || '').indexOf('attachment') === 0,
+    String(fileHeaders.get('content-disposition')));
+  ok('attachment gets a sandboxed CSP', (fileHeaders.get('content-security-policy') || '').indexOf('sandbox') >= 0,
+    String(fileHeaders.get('content-security-policy')));
+
   // ---- unread divider
   await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: 'unread marker' });
   const withUnread = await alice.call('GET', '/api/messages?with=' + bob.user.id + '&limit=50');

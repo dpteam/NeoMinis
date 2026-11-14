@@ -214,6 +214,12 @@ namespace Social.Web
             b.Prop("image", m.Image);
             b.Prop("audio", m.Audio);
             b.Prop("audioSec", m.AudioSec);
+            if (!string.IsNullOrEmpty(m.FileUrl))
+            {
+                b.Prop("file", m.FileUrl);
+                b.Prop("fileName", m.FileName);
+                b.Prop("fileSize", m.FileSize);
+            }
             b.Prop("created", Util.Iso(m.Created));
             b.Prop("read", m.Read);
             b.Prop("mine", viewer != null && m.From == viewer.Id);

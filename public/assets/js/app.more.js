@@ -146,9 +146,35 @@
   function msgPreview(m) {
     var body = String((m && m.body) || '').replace(/\s+/g, ' ').trim();
     if (body) return body.substring(0, 60);
+    if (m && m.file) return T('messages.file');
     if (m && m.audio) return T('messages.voice');
     if (m && m.image) return T('messages.photo');
     return '';
+  }
+
+  function fileIcon(name) {
+    var ext = String(name || '').toLowerCase().match(/\.([a-z0-9]+)$/);
+    var e = ext ? ext[1] : '';
+    if (e === 'pdf') return 'file-pdf';
+    if (e === 'zip' || e === 'rar' || e === '7z' || e === 'tar' || e === 'gz') return 'file-zipper';
+    if (e === 'doc' || e === 'docx' || e === 'odt' || e === 'txt' || e === 'md' || e === 'rtf') return 'file-lines';
+    if (e === 'xls' || e === 'xlsx' || e === 'ods' || e === 'csv') return 'file-excel';
+    if (e === 'ppt' || e === 'pptx') return 'file-powerpoint';
+    if (e === 'mp3' || e === 'm4a' || e === 'ogg' || e === 'wav' || e === 'flac' || e === 'opus') return 'file-audio';
+    if (e === 'mp4' || e === 'webm' || e === 'mkv' || e === 'mov') return 'file-video';
+    if (e === 'png' || e === 'jpg' || e === 'jpeg' || e === 'gif' || e === 'webp' || e === 'svg') return 'file-image';
+    return 'file';
+  }
+
+  function fileCardHtml(m) {
+    var url = UI.safeUrl(m.file);
+    if (!url) return '';
+    var name = m.fileName || T('messages.file');
+    return '<a class="msg-file" href="' + UI.attr(url) + '" download="' + UI.attr(name) + '" target="_blank" rel="noopener noreferrer">' +
+      UI.icon(fileIcon(name)) +
+      '<span class="msg-file-main"><b>' + UI.esc(name) + '</b>' +
+      '<span>' + UI.esc(m.fileSize ? UI.bytes(m.fileSize) : '') + '</span></span>' +
+      UI.icon('download') + '</a>';
   }
 
   function fmtSec(sec) {
@@ -207,6 +233,7 @@
       (voice ? '<div class="msg-voice">' + UI.icon('microphone') +
         '<audio controls preload="metadata" src="' + UI.attr(voice) + '"></audio>' +
         (m.audioSec ? '<span class="msg-voice-sec">' + fmtSec(m.audioSec) + '</span>' : '') + '</div>' : '') +
+      fileCardHtml(m) +
       (m.body ? '<div class="msg-text">' + msgBodyHtml(m.body) + '</div>' : '') +
       reactionChips(m) +
       '<div class="msg-foot"><span class="time">' + UI.formatTime(m.created) + '</span>' + tick +
@@ -358,6 +385,9 @@
       '<button type="button" class="icon-btn" id="chat-reply-x">' + UI.icon('xmark') + '</button></div>' +
       '<div class="chat-attach hidden" id="chat-attach"><img id="chat-attach-img" alt="">' +
       '<button type="button" class="icon-btn" id="chat-attach-x">' + UI.icon('xmark') + '</button></div>' +
+      '<div class="chat-file hidden" id="chat-file-preview"><div class="chat-file-main">' + UI.icon('file') +
+      '<div class="chat-file-meta"><b id="chat-file-name"></b><span id="chat-file-size"></span></div></div>' +
+      '<button type="button" class="icon-btn" id="chat-file-x">' + UI.icon('xmark') + '</button></div>' +
       '<div class="chat-voice hidden" id="chat-voice"><div class="chat-voice-main">' + UI.icon('microphone') +
       '<audio id="chat-voice-audio" controls preload="metadata"></audio><span id="chat-voice-sec"></span></div>' +
       '<button type="button" class="icon-btn" id="chat-voice-x">' + UI.icon('xmark') + '</button></div>' +
@@ -370,6 +400,8 @@
       '<button type="button" class="chat-btn" id="chat-mic-btn" title="' + UI.attr(T('messages.record')) + '">' + UI.icon('microphone') + '</button>' +
       '<button type="button" class="chat-btn" id="chat-file-btn" title="' + UI.attr(T('messages.attach')) + '">' + UI.icon('image') + '</button>' +
       '<input type="file" id="chat-file" class="hidden" accept="image/png,image/jpeg,image/gif,image/webp">' +
+      '<button type="button" class="chat-btn" id="chat-doc-btn" title="' + UI.attr(T('messages.attachFile')) + '">' + UI.icon('paperclip') + '</button>' +
+      '<input type="file" id="chat-doc" class="hidden">' +
       '<button type="button" class="chat-btn" id="chat-emoji-btn" title="' + UI.attr(T('messages.emoji')) + '">' + UI.icon('face-smile') + '</button>' +
       '<textarea id="chat-text" rows="1" maxlength="' + (state.site.maxMessageLength || 4000) + '" placeholder="' + UI.attr(T('messages.placeholder')) + '"></textarea>' +
       '<button class="chat-send" type="submit" id="chat-send" title="' + UI.attr(T('common.send')) + '">' + UI.icon('paper-plane') + '</button>' +
@@ -452,6 +484,10 @@
     if (!form) return;
     var ta = document.getElementById('chat-text');
     var file = document.getElementById('chat-file');
+    var doc = document.getElementById('chat-doc');
+    var docPreview = document.getElementById('chat-file-preview');
+    var docName = document.getElementById('chat-file-name');
+    var docSize = document.getElementById('chat-file-size');
     var attach = document.getElementById('chat-attach');
     var attachImg = document.getElementById('chat-attach-img');
     var emojiPop = document.getElementById('chat-emoji');
@@ -525,6 +561,37 @@
       attach.className = 'chat-attach hidden';
       attachImg.removeAttribute('src');
     });
+
+    // generic files (documents, archives, audio and video that are not images)
+    state.im.file = null;
+    function clearDoc() {
+      state.im.file = null;
+      if (doc) doc.value = '';
+      if (docPreview) docPreview.className = 'chat-file hidden';
+    }
+    var docBtn = document.getElementById('chat-doc-btn');
+    if (docBtn && doc) docBtn.addEventListener('click', function () { doc.click(); });
+    if (doc) doc.addEventListener('change', function () {
+      var f = doc.files && doc.files[0];
+      if (!f) return;
+      var limit = (state.site.maxFileKB || 4096) * 1024;
+      if (f.size > limit) {
+        UI.toast(T('messages.fileTooBig', state.site.maxFileKB || 4096), 'err');
+        doc.value = '';
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        state.im.file = { data: String(reader.result || ''), name: f.name, size: f.size };
+        if (docName) docName.textContent = f.name;
+        if (docSize) docSize.textContent = UI.bytes(f.size);
+        if (docPreview) docPreview.className = 'chat-file';
+        ta.focus();
+      };
+      reader.readAsDataURL(f);
+    });
+    var docX = document.getElementById('chat-file-x');
+    if (docX) docX.addEventListener('click', clearDoc);
 
     // reply bar
     function clearReply() {
@@ -672,7 +739,8 @@
     function submit() {
       var text = ta.value.trim();
       var voice = state.im.voice;
-      if (!text && !state.im.image && !voice) { ta.focus(); return; }
+      var doc = state.im.file;
+      if (!text && !state.im.image && !voice && !doc) { ta.focus(); return; }
       sendBtn.disabled = true;
       Api.request('POST', '/api/messages/send', {
         to: withId,
@@ -680,6 +748,8 @@
         image: state.im.image || '',
         audio: voice ? voice.data : '',
         audioSec: voice ? voice.sec : 0,
+        file: doc ? doc.data : '',
+        fileName: doc ? doc.name : '',
         replyTo: state.im.replyTo || 0
       }, function (err, data) {
         sendBtn.disabled = false;
@@ -690,6 +760,7 @@
         file.value = '';
         attach.className = 'chat-attach hidden';
         clearVoice();
+        clearDoc();
         clearReply();
         appendMessages([data.message], other, true);
         SoundFX.play('message');
@@ -2460,6 +2531,7 @@
         field('cfg-voicekb', T('admin.maxVoiceKB'), lim.maxVoiceKB, 'number', ' min="64"') +
         field('cfg-voicesec', T('admin.maxVoiceSec'), lim.maxVoiceSec, 'number', ' min="5"') +
         '</div>' +
+        field('cfg-filekb', T('admin.maxFileKB'), lim.maxFileKB, 'number', ' min="64"') +
         field('cfg-editwin', T('admin.editWindow'), lim.editWindowMin, 'number', ' min="0"') +
         '</div>';
 
@@ -2552,6 +2624,7 @@
             maxMessageImageKB: Number(App.val('cfg-msgimagekb')),
             maxVoiceKB: Number(App.val('cfg-voicekb')),
             maxVoiceSec: Number(App.val('cfg-voicesec')),
+            maxFileKB: Number(App.val('cfg-filekb')),
             maxAvatarKB: Number(App.val('cfg-avatarkb')),
             maxPostImageKB: Number(App.val('cfg-imagekb')),
             editWindowMin: Number(App.val('cfg-editwin'))
