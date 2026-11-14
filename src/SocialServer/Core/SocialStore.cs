@@ -948,6 +948,48 @@ namespace Social.Core
             return result;
         }
 
+        /// <summary>
+        /// Filtered search over the posts the viewer may see. Returns at most
+        /// <paramref name="limit"/> items; <paramref name="hasMore"/> tells whether a
+        /// further page exists. Sorted by the filter (recent / old / popular).
+        /// </summary>
+        public List<Post> SearchPosts(PostFilter filter, long viewerId, int limit, out bool hasMore)
+        {
+            hasMore = false;
+            List<Post> result = new List<Post>();
+            if (filter == null) return result;
+
+            lock (_sync)
+            {
+                for (int i = 0; i < _posts.Count; i++)
+                {
+                    Post p = _posts[i];
+                    if (p.Group != 0) continue;
+                    if (!filter.Matches(p)) continue;
+                    if (!VisibleTo(viewerId, p)) continue;
+                    result.Add(p);
+                }
+            }
+
+            if (filter.Sort == "old")
+                result.Sort(delegate(Post a, Post b) { return a.Id.CompareTo(b.Id); });
+            else if (filter.Sort == "popular")
+                result.Sort(delegate(Post a, Post b)
+                {
+                    int scoreA = a.Likes.Count * 3 + a.Comments;
+                    int scoreB = b.Likes.Count * 3 + b.Comments;
+                    int byScore = scoreB.CompareTo(scoreA);
+                    return byScore != 0 ? byScore : b.Id.CompareTo(a.Id);
+                });
+
+            if (result.Count > limit)
+            {
+                hasMore = true;
+                result.RemoveRange(limit, result.Count - limit);
+            }
+            return result;
+        }
+
         public int CountPosts(long userId)
         {
             lock (_sync)

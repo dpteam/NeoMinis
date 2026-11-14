@@ -804,8 +804,47 @@ namespace Social.Web
             SendOk(ctx, b);
         }
 
-        // ============================================================ friends
+        private void HandleSearchPosts(ApiCtx ctx)
+        {
+            if (!Allow(ctx.User.Id, "search", _cfg.SearchPerMin, 60))
+                throw new ApiException(429, "slow-down", "Too many searches");
 
+            string authorRaw = GetQuery(ctx.Query, "author");
+            long authorId;
+            if (!string.IsNullOrEmpty(authorRaw) && long.TryParse(authorRaw, out authorId) && authorId > 0)
+            {
+                // allow ?author=username too
+                if (_store.FindUser(authorId) == null)
+                {
+                    User byName = _store.FindUser(authorRaw);
+                    if (byName != null) authorRaw = byName.Id.ToString(CultureInfo.InvariantCulture);
+                }
+            }
+
+            PostFilter filter = PostFilter.Parse(GetQuery(ctx.Query, "q"), authorRaw,
+                GetQuery(ctx.Query, "tag"), GetQuery(ctx.Query, "media"),
+                GetQuery(ctx.Query, "since"), GetQuery(ctx.Query, "until"),
+                GetQuery(ctx.Query, "sort"));
+
+            if (filter.IsEmpty)
+                throw new ApiException(400, "empty-search", "Pick a query or a filter first");
+
+            int limit = LimitParam(ctx, 20, 50);
+            bool hasMore;
+            List<Post> posts = _store.SearchPosts(filter, ctx.User.Id, limit + 1, out hasMore);
+            if (posts.Count > limit) posts.RemoveAt(posts.Count - 1);
+
+            JsonBuilder b = new JsonBuilder(8192);
+            b.BeginObject();
+            AppendPosts(b, "posts", posts, ctx.User);
+            b.Prop("hasMore", hasMore);
+            b.Prop("next", posts.Count == 0 ? 0 : posts[posts.Count - 1].Id);
+            b.Prop("total", posts.Count);
+            b.Prop("sort", filter.Sort);
+            SendOk(ctx, b);
+        }
+
+        // ============================================================ friends
         private void HandleFriends(ApiCtx ctx)
         {
             long id = LongQuery(ctx, "user");
@@ -916,6 +955,15 @@ namespace Social.Web
 
             int limit = LimitParam(ctx, 40, 100);
             long before = LongQuery(ctx, "before");
+            // remember where the unread block starts before it is marked read
+            long firstUnread = 0;
+            List<Message> all = _store.Conversation(ctx.User.Id, other.Id, 0, 200);
+            for (int i = all.Count - 1; i >= 0; i--)
+            {
+                Message m = all[i];
+                if (m.To == ctx.User.Id && !m.Read) { firstUnread = m.Id; break; }
+            }
+
             List<Message> messages = _store.Conversation(ctx.User.Id, other.Id, before, limit + 1);
             bool hasMore = messages.Count > limit;
             if (hasMore) messages.RemoveAt(messages.Count - 1);
@@ -930,6 +978,7 @@ namespace Social.Web
             b.EndArray();
             b.Prop("hasMore", hasMore);
             b.Prop("next", next);
+            b.Prop("unreadFrom", firstUnread);
             SendOk(ctx, b);
         }
 

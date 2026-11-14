@@ -146,11 +146,19 @@ can render the buttons without guessing.
 | POST | `/api/profile` | `displayName`, `bio`, `city`, `country`, `birthday`, `gender`, `website`, `email`, `status`, `favGames`, `favMovies`, `favMusic`, `favBooks`, `mood` | `{ user }` |
 | GET | `/api/people` | `q`, `offset`, `limit` | `{ users[], total, offset, hasMore }` |
 | GET | `/api/search` | `q` (≥ 2 chars) | `{ users[], posts[] }` |
+| GET | `/api/search/posts` | `q`, `author`, `tag`, `media`, `since`, `until`, `sort`, `limit` | `{ posts[], hasMore, next, total, sort }` |
 
 `birthday` must be `YYYY-MM-DD`; `gender` is `m` / `f` / `other` / empty.
 `mood` is `happy` / `sad` / `neutral` / empty. The four `fav*` fields are free text
 (≤ 200 chars) and, like the rest of the private block, are only returned when the
 viewer is the owner, staff, a friend, or the profile is public.
+
+`/api/search/posts` is the filtered post search: `q` matches the body, `author` is
+an id or a username, `tag` a hashtag without the `#`, `media` is
+`image` / `video` / `poll` / `text`, `since` / `until` are dates and `sort` is
+`recent` (default), `old` or `popular` (likes × 3 + comments). Only posts the
+caller may see are returned, and an entirely empty filter set is rejected with
+`400 empty-search` so a stray request cannot dump the whole network.
 
 ### Achievements
 
@@ -207,6 +215,10 @@ earned (useful after an import or a rule change).
 | POST | `/api/messages/delete` | `id` | `{ ok }` (per-side delete) |
 
 Reading a conversation marks it read. Blocked users cannot exchange messages.
+
+`GET /api/messages` also returns `unreadFrom`: the id of the first message that was
+still unread when the request arrived (0 when nothing was unread). The SPA draws the
+"Unread messages" divider there and scrolls to it instead of the very bottom.
 
 `image` is a data URL (png/jpeg/gif/webp, up to `limits.maxMessageImageKB`) stored
 under `/media/messages/`; animated GIFs keep animating in the chat. `replyTo` is

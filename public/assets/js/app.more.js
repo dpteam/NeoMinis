@@ -403,9 +403,15 @@
       if (data.hasMore) body += '<div class="center" style="padding:6px"><button type="button" class="btn btn-xs" id="chat-older">' + T('messages.loadOlder') + '</button></div>';
       if (!messages.length) body += '<div class="chat-empty">' + T('messages.empty') + '</div>';
       var lastDay = '';
+      var unreadFrom = Number(data.unreadFrom || 0);
+      var dividerShown = false;
       for (var i = 0; i < messages.length; i++) {
         var day = dayLabel(messages[i].created);
         if (day && day !== lastDay) { body += '<div class="chat-day">' + UI.esc(day) + '</div>'; lastDay = day; }
+        if (!dividerShown && unreadFrom > 0 && messages[i].id >= unreadFrom) {
+          body += '<div class="chat-unread">' + T('messages.unreadDivider') + '</div>';
+          dividerShown = true;
+        }
         body += bubbleHtml(messages[i], other);
       }
       body += '</div>';
@@ -417,6 +423,14 @@
 
       var newBody = document.getElementById('chat-body');
       if (newBody && (atBottom || !silent)) newBody.scrollTop = newBody.scrollHeight;
+      // with unread messages, land on the divider instead of the very bottom
+      if (newBody && !silent && unreadFrom > 0) {
+        var div = newBody.querySelector('.chat-unread');
+        if (div) {
+          var top = div.offsetTop - 24;
+          newBody.scrollTop = top > 0 ? top : 0;
+        }
+      }
       var newText = document.getElementById('chat-text');
       if (newText && typed) newText.value = typed;
       if (newText && hadFocus) { try { newText.focus(); } catch (e) { } }
@@ -2714,30 +2728,117 @@
 
   views.search = function (main, r) {
     var q = App.qs('q') || '';
-    main.innerHTML = spinnerCard();
-    if (!q) { main.innerHTML = '<div class="card"><div class="card-b">' + UI.empty('magnifying-glass', T('search.title')) + '</div></div>'; return; }
-    Api.request('GET', '/api/search?q=' + encodeURIComponent(q), null, function (err, data) {
-      if (err) { main.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
-      var users = data.users || [];
-      var posts = data.posts || [];
-      var html = '<div class="card"><div class="card-h">' + UI.icon('magnifying-glass') + ' ' + T('search.resultsFor', q) + '</div><div class="card-b">';
-      if (!users.length && !posts.length) html += UI.empty('magnifying-glass', T('search.empty'));
-      else {
-        if (users.length) {
-          html += '<div class="section-title">' + UI.icon('users') + ' ' + T('search.users') + '</div><div class="user-grid" style="margin-bottom:12px">';
-          for (var i = 0; i < users.length; i++) html += actionCard(users[i]);
-          html += '</div>';
-        }
-        if (posts.length) {
-          html += '<div class="section-title">' + UI.icon('comments') + ' ' + T('search.posts') + '</div>';
-          for (var j = 0; j < posts.length; j++) html += App.postHtml(posts[j]);
-        }
-      }
-      html += '</div></div>';
-      main.innerHTML = html;
-      App.bindPosts(main);
-      App.bindFriendActions(main);
+    var media = App.qs('media') || '';
+    var sort = App.qs('sort') || 'recent';
+    var author = App.qs('author') || '';
+    var next = 0;
+
+    function filterUrl(extra) {
+      var parts = [];
+      if (q) parts.push('q=' + encodeURIComponent(q));
+      if (media) parts.push('media=' + encodeURIComponent(media));
+      if (sort && sort !== 'recent') parts.push('sort=' + encodeURIComponent(sort));
+      if (author) parts.push('author=' + encodeURIComponent(author));
+      if (extra) parts.push(extra);
+      return '#/search' + (parts.length ? '?' + parts.join('&') : '');
+    }
+
+    var html = '<div class="card"><div class="card-h">' + UI.icon('magnifying-glass') + ' ' + T('search.title') + '</div><div class="card-b">';
+    html += '<form id="search-form" class="search-form">' +
+      '<input class="input" id="search-q" type="search" value="' + UI.attr(q) + '" placeholder="' + UI.attr(T('search.placeholder')) + '" autocomplete="off">' +
+      '<button class="btn btn-primary" type="submit">' + T('common.search') + '</button></form>';
+    html += '<div class="search-filters">' +
+      '<select class="select" id="search-media">' +
+      '<option value=""' + (!media ? ' selected' : '') + '>' + T('search.anyMedia') + '</option>' +
+      '<option value="image"' + (media === 'image' ? ' selected' : '') + '>' + T('search.withImage') + '</option>' +
+      '<option value="video"' + (media === 'video' ? ' selected' : '') + '>' + T('search.withVideo') + '</option>' +
+      '<option value="poll"' + (media === 'poll' ? ' selected' : '') + '>' + T('search.withPoll') + '</option>' +
+      '<option value="text"' + (media === 'text' ? ' selected' : '') + '>' + T('search.textOnly') + '</option>' +
+      '</select>' +
+      '<select class="select" id="search-sort">' +
+      '<option value="recent"' + (sort === 'recent' ? ' selected' : '') + '>' + T('search.sortRecent') + '</option>' +
+      '<option value="popular"' + (sort === 'popular' ? ' selected' : '') + '>' + T('search.sortPopular') + '</option>' +
+      '<option value="old"' + (sort === 'old' ? ' selected' : '') + '>' + T('search.sortOld') + '</option>' +
+      '</select>' +
+      (author ? '<a class="btn btn-sm" href="' + UI.attr(filterUrl('author=')) + '">' + UI.icon('user') + ' ' + T('search.clearAuthor') + '</a>' : '') +
+      '</div></div></div>';
+
+    html += '<div id="search-body"></div>';
+    main.innerHTML = html;
+    var body = document.getElementById('search-body');
+
+    document.getElementById('search-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var v = document.getElementById('search-q').value.trim();
+      q = v;
+      App.go(filterUrl(''));
     });
+    document.getElementById('search-media').addEventListener('change', function () {
+      media = this.value;
+      App.go(filterUrl(''));
+    });
+    document.getElementById('search-sort').addEventListener('change', function () {
+      sort = this.value;
+      App.go(filterUrl(''));
+    });
+
+    if (!q && !media && !author) {
+      body.innerHTML = '<div class="card"><div class="card-b">' + UI.empty('magnifying-glass', T('search.hint'), T('search.hintSub')) + '</div></div>';
+      return;
+    }
+
+    body.innerHTML = '<div class="card"><div class="card-b center" style="padding:22px">' + UI.spinner() + '</div></div>';
+
+    function loadPosts(more) {
+      var url = '/api/search/posts?limit=20' + (q ? '&q=' + encodeURIComponent(q) : '') +
+        (media ? '&media=' + encodeURIComponent(media) : '') +
+        (sort ? '&sort=' + encodeURIComponent(sort) : '') +
+        (author ? '&author=' + encodeURIComponent(author) : '') +
+        (more && next ? '&before=' + encodeURIComponent(next) : '');
+      Api.request('GET', url, null, function (err, data) {
+        if (err) {
+          body.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>';
+          return;
+        }
+        var posts = data.posts || [];
+        if (!more) {
+          body.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('comments') + ' ' + T('search.posts') +
+            '<span class="right tiny muted">' + T('search.found', posts.length) + '</span></div>' +
+            '<div class="card-b" id="search-posts">' + (posts.length ? '' : UI.empty('magnifying-glass', T('search.empty'))) + '</div></div>' +
+            '<div id="search-more"></div>';
+        }
+        var list = document.getElementById('search-posts');
+        if (!list) return;
+        var h = '';
+        for (var i = 0; i < posts.length; i++) h += App.postHtml(posts[i]);
+        list.insertAdjacentHTML('beforeend', h);
+        App.bindPosts(list);
+        next = data.next || 0;
+        var moreBox = document.getElementById('search-more');
+        if (moreBox) {
+          moreBox.innerHTML = data.hasMore
+            ? '<button type="button" class="load-more" id="search-load">' + T('feed.loadMore') + '</button>' : '';
+          var b = document.getElementById('search-load');
+          if (b) b.addEventListener('click', function () { loadPosts(true); });
+        }
+      });
+    }
+
+    loadPosts(false);
+
+    // people, only when there is free text to match on
+    if (q.length >= 2) {
+      Api.request('GET', '/api/search?q=' + encodeURIComponent(q), null, function (err, data) {
+        if (err || !data || !(data.users || []).length) return;
+        var users = data.users;
+        var h = '<div class="card"><div class="card-h">' + UI.icon('users') + ' ' + T('search.users') +
+          '<span class="right tiny muted">' + users.length + '</span></div><div class="card-b"><div class="user-grid">';
+        for (var i = 0; i < users.length; i++) h += actionCard(users[i]);
+        h += '</div></div></div>';
+        body.insertAdjacentHTML('afterbegin', h);
+        App.bindFriendActions(body);
+      });
+    }
   };
 
   // start once every view is registered

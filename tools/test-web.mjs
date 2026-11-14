@@ -412,6 +412,36 @@ async function main() {
   const searchMiss = await bob.call('GET', '/api/messages/search?q=' + encodeURIComponent('zzz-nothing-here'));
   ok('search miss returns nothing', searchMiss.status === 200 && searchMiss.data.results.length === 0, '');
 
+  // ---- unread divider
+  await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: 'unread marker' });
+  const withUnread = await alice.call('GET', '/api/messages?with=' + bob.user.id + '&limit=50');
+  ok('conversation reports where unread starts', withUnread.status === 200 && withUnread.data.unreadFrom > 0,
+    String(withUnread.data && withUnread.data.unreadFrom));
+  const againUnread = await alice.call('GET', '/api/messages?with=' + bob.user.id + '&limit=50');
+  ok('second read has no unread marker', againUnread.data.unreadFrom === 0, String(againUnread.data.unreadFrom));
+
+  // ---- filtered post search
+  const spQ = await alice.call('GET', '/api/search/posts?q=' + encodeURIComponent('choose one'));
+  ok('post search by text', spQ.status === 200 && spQ.data.posts.some(p => p.id === pollId), String(spQ.status));
+  const spPoll = await alice.call('GET', '/api/search/posts?media=poll');
+  ok('post search filters polls', spPoll.status === 200 && spPoll.data.posts.length >= 1 &&
+    spPoll.data.posts.every(p => p.poll), String(spPoll.status));
+  const spText = await alice.call('GET', '/api/search/posts?media=text&limit=50');
+  ok('text filter skips media posts', spText.status === 200 &&
+    spText.data.posts.every(p => !p.image && !p.video && !p.poll), String(spText.status));
+  const spTag = await alice.call('GET', '/api/search/posts?tag=newtag');
+  ok('post search by tag', spTag.status === 200 && spTag.data.posts.length >= 1, String(spTag.status));
+  const spAuthor = await alice.call('GET', '/api/search/posts?author=' + bob.user.id);
+  ok('post search by author', spAuthor.status === 200 &&
+    spAuthor.data.posts.every(p => p.author.id === bob.user.id), String(spAuthor.status));
+  const spPopular = await alice.call('GET', '/api/search/posts?media=text&sort=popular&limit=50');
+  ok('popular sorting answers', spPopular.status === 200 && Array.isArray(spPopular.data.posts), '');
+  const spOld = await alice.call('GET', '/api/search/posts?media=text&sort=old&limit=50');
+  const oldIds = (spOld.data.posts || []).map(p => p.id);
+  ok('old sorting is ascending', oldIds.every((v, i) => i === 0 || oldIds[i - 1] <= v), JSON.stringify(oldIds.slice(0, 4)));
+  const spEmpty = await alice.call('GET', '/api/search/posts');
+  ok('empty search rejected', spEmpty.status === 400, String(spEmpty.status));
+
   // ---- message forwarding
   const fwd = await bob.call('POST', '/api/messages/forward', { id: quotedId, to: alice.user.id });
   ok('message forwarded', fwd.status === 200 && fwd.data.message.forwardedFrom &&
