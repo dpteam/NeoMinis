@@ -1647,6 +1647,8 @@ async function main() {
   const claim = await xferBob.call('POST', '/api/transfer/claim', { code: xfer.code });
   ok('the receiver opens the transfer with the code', claim.status === 200 &&
     claim.data.transfer.state === 'claimed', String(claim.status));
+  ok('the code is never handed back to the receiver', claim.data.transfer.code === '',
+    JSON.stringify(claim.data.transfer.code));
 
   const noAcceptYet = await xferAlice.call('GET', '/api/transfer/chunk?id=' + xfer.id + '&index=0');
   ok('nothing can be uploaded before the receiver accepts', noAcceptYet.status === 400 ||
@@ -1711,6 +1713,39 @@ async function main() {
     to: bob.user.id, name: 'huge.bin', size: 512 * 1024 * 1024
   });
   ok('an oversized transfer is refused', tooBig.status === 400, String(tooBig.status));
+
+  // the code is a shared secret between exactly two people, and a third one
+  // holding a valid code must still not be able to open somebody else's transfer
+  const xfer3 = await xferAlice.call('POST', '/api/transfer/start', {
+    to: bob.user.id, name: 'third-party.bin', size: 2048
+  });
+  const thirdCode = xfer3.data.transfer.code;
+  const thirdClaim = await xferStranger.call('POST', '/api/transfer/claim', { code: thirdCode });
+  ok('a valid code in the wrong hands opens nothing', thirdClaim.status === 404,
+    String(thirdClaim.status));
+  const stillOpen = await xferAlice.call('GET', '/api/transfer?id=' + xfer3.data.transfer.id);
+  ok('the transfer is still waiting for its real receiver',
+    stillOpen.data.transfer.state === 'offered', stillOpen.data.transfer.state);
+  await xferAlice.call('POST', '/api/transfer/cancel', { id: xfer3.data.transfer.id });
+
+  // ---- per-address account cap
+  // The suite itself runs with the cap off (dozens of accounts from 127.0.0.1),
+  // so flip it on through the admin API, prove the gate holds, then put it back.
+  if (admin) {
+    const capOn = await admin.call('POST', '/api/admin/settings/save',
+      { site: { accountsPerIp: 1 } });
+    ok('the per-address cap can be set', capOn.status === 200, String(capOn.status));
+
+    const blocked = await new Client('ip-cap').register('cap_' + stamp, 'cap-password-1');
+    ok('registration is refused once the address is full', blocked.status === 403 &&
+      blocked.data && blocked.data.error === 'ip-limit', String(blocked.status));
+
+    const capOff = await admin.call('POST', '/api/admin/settings/save',
+      { site: { accountsPerIp: 0 } });
+    const allowed = await new Client('ip-cap2').register('cap2_' + stamp, 'cap-password-1');
+    ok('raising the cap lets registration through again', capOff.status === 200 &&
+      allowed.status === 200, String(allowed.status));
+  }
 
   // ---- guest / kiosk (read-only browsing)
   const guest = new Client('guest');

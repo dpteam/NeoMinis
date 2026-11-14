@@ -65,7 +65,7 @@ namespace Social.Web
             if (target.Id == ctx.User.Id) throw new ApiException(400, "self", "You cannot send to yourself");
             // friends only: a code alone must never be enough to reach a stranger
             if (!_store.AreFriends(ctx.User.Id, target.Id))
-                throw new ApiException(403, "not-friend", "You can only send files to friends");
+                throw new ApiException(403, "not-friend", "You can only send files to friends - add them first");
             if (!CanMessageUser(ctx.User, target))
                 throw new ApiException(403, "cannot-message", "You cannot send to this user");
 
@@ -125,9 +125,23 @@ namespace Social.Web
         private void HandleTransferClaim(ApiCtx ctx)
         {
             RequireTransfers();
+            // a code is eight digits, so guessing is cheap for an attacker and
+            // pointless for a user; cap it well above any honest retry
+            if (!Allow(ctx.User.Id, "xfer-claim", 20, 600))
+                throw new ApiException(429, "slow-down", "Too many attempts, try later");
             string code = BodyStr(ctx, "code", "");
             Transfer t = TransferRegistry.ByCodeFor(code, ctx.User.Id);
-            if (t == null) throw new ApiException(404, "bad-code", "No open transfer with that code");
+            if (t == null)
+            {
+                // Tell the sender they typed their own code - they own it, so that
+                // leaks nothing. Everybody else gets the same flat "no such code":
+                // a different answer for a real-but-foreign code would let somebody
+                // fishing for codes learn which ones exist.
+                string why = TransferRegistry.WhyCode(code, ctx.User.Id);
+                if (why == "own")
+                    throw new ApiException(400, "own-code", "That is your own code - give it to your friend, they type it");
+                throw new ApiException(404, "bad-code", "No open transfer with that code");
+            }
             if (!TransferRegistry.Claim(t.Id, ctx.User.Id))
                 throw new ApiException(400, "already-claimed", "That transfer was already opened");
             Log.Info("XFER", "@" + ctx.User.Username + " claimed transfer #" + t.Id);

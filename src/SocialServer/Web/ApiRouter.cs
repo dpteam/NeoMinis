@@ -183,6 +183,7 @@ namespace Social.Web
             b.Prop("baseUrl", _cfg.BaseUrl);
             b.Prop("registration", _cfg.Registration);
             b.Prop("inviteOnly", _cfg.InviteOnly);
+            b.Prop("accountsPerIp", _cfg.AccountsPerIp);
             b.Prop("guestMode", _cfg.GuestOnBoard(_web != null && _web.IsAdminBoard));
             b.Prop("kioskMode", _cfg.KioskMode && _cfg.GuestOnBoard(_web != null && _web.IsAdminBoard));
             b.Prop("guestPasswordRequired", _cfg.GuestPasswordRequired);
@@ -372,6 +373,17 @@ namespace Social.Web
             string role = (_store.CountUsers() == 0 && _cfg.FirstUserAdmin) ? "admin" : "user";
             string recovery = Crypto.NewRecoveryCode();
             string ipHash = Crypto.HashIp(ip, _cfg.ServerSecret);
+
+            // One address may hold a few accounts, not an unlimited supply of them.
+            // Checked here, after the cheap validations and the signature, so a bot
+            // cannot learn the limit by hammering the endpoint with garbage.
+            if (_cfg.AccountsPerIp > 0 && _store.CountUsersByIp(ipHash) >= _cfg.AccountsPerIp)
+            {
+                Log.Warn("AUTH", "register refused from " + ip + ": " + _cfg.AccountsPerIp +
+                                 " accounts already use this address");
+                throw new ApiException(403, "ip-limit",
+                    "This address already has the maximum number of accounts");
+            }
 
             User user;
             try

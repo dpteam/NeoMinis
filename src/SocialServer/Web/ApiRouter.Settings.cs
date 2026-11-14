@@ -29,6 +29,7 @@ namespace Social.Web
                 .Prop("defaultTheme", _cfg.DefaultTheme)
                 .Prop("registration", _cfg.Registration)
                 .Prop("inviteOnly", _cfg.InviteOnly)
+                .Prop("accountsPerIp", _cfg.AccountsPerIp)
                 .Prop("guestMode", _cfg.GuestMode)
                 .Prop("guestPassword", _cfg.GuestPassword)
                 .Prop("kioskMode", _cfg.KioskMode)
@@ -221,6 +222,14 @@ namespace Social.Web
                 {
                     _cfg.InviteOnly = Json.GetBool(site, "inviteOnly", _cfg.InviteOnly);
                     _cfg.SetIniValue("site", "inviteOnly", _cfg.InviteOnly ? "true" : "false");
+                }
+                if (site.ContainsKey("accountsPerIp"))
+                {
+                    int perIp = Json.GetInt(site, "accountsPerIp", _cfg.AccountsPerIp);
+                    if (perIp < 0) perIp = 0;
+                    if (perIp > 100) perIp = 100;
+                    _cfg.AccountsPerIp = perIp;
+                    _cfg.SetIniValue("site", "accountsPerIp", perIp.ToString(CultureInfo.InvariantCulture));
                 }
                 if (site.ContainsKey("firstUserAdmin"))
                 {

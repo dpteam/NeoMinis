@@ -147,6 +147,29 @@ namespace Social.Core
             }
         }
 
+        /// <summary>
+        /// Why a code did not work. "No open transfer with that code" is true but
+        /// useless: the sender who types their own code needs to be told to hand it
+        /// over, not to keep retrying.
+        /// </summary>
+        public static string WhyCode(string code, long userId)
+        {
+            lock (Sync)
+            {
+                Sweep();
+                string digits = NormalizeCode(code);
+                if (digits.Length != 8) return "malformed";
+                long id;
+                if (!ByCode.TryGetValue(digits, out id)) return "unknown";
+                Transfer t;
+                if (!ById.TryGetValue(id, out t)) return "unknown";
+                if (t.From == userId) return "own";
+                if (t.To != userId) return "someone-else";
+                if (!t.IsOpen) return "closed";
+                return "ok";
+            }
+        }
+
         /// <summary>The receiver proves they know the code, which is the whole point of it.</summary>
         public static bool Claim(long id, long userId)
         {

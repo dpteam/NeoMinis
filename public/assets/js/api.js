@@ -334,8 +334,14 @@ var Api = (function () {
     if (code === 'rate-limit' || code === 'slow-down') return I18N.t('errors.rateLimit');
     if (code === 'read-only') return I18N.t('errors.readOnly');
     if (code === 'guest-readonly') return I18N.t('guest.readonly');
+    if (code === 'ip-limit') return I18N.t('auth.ipLimit');
     if (code === 'bad-guest-password') return I18N.t('guest.badPassword');
-    if (code === 'forbidden' || code === 'not-member' || code === 'not-friend') return I18N.t('errors.forbidden');
+    if (code === 'own-code') return I18N.t('xfer.ownCode');
+    if (code === 'not-yours') return I18N.t('xfer.notYours');
+    if (code === 'closed') return I18N.t('xfer.closed');
+    if (code === 'bad-code' || code === 'bad-code-format') return I18N.t('xfer.noCode');
+    if (code === 'not-friend') return I18N.t('xfer.notFriend');
+    if (code === 'forbidden' || code === 'not-member') return I18N.t('errors.forbidden');
     if (code === 'notfound' || code === 'no-user' || code === 'no-post' || code === 'no-comment' || code === 'no-group' || code === 'no-message' || code === 'no-report') return I18N.t('errors.notFound');
     if (code === 'captcha') return I18N.t('auth.captchaWrong');
     if (code === 'bad-credentials') return I18N.t('auth.badCredentials');

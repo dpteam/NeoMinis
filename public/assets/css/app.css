@@ -861,14 +861,21 @@ img { max-width: 100%; }
 
 /* ------------------------------------------------------- file transfers */
 .xfer-panel {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  display: flex; flex-direction: column; align-items: stretch; gap: 7px;
   padding: 8px 12px; border-top: 1px solid var(--border);
   background: var(--panel-2); font-size: 12px;
 }
-.xfer-panel.in { border-left: 3px solid var(--accent); }
-.xfer-panel.ok { border-left: 3px solid var(--ok); color: var(--text-soft); }
-.xfer-panel.err { border-left: 3px solid var(--err); color: var(--text-soft); }
-.xfer-panel.ok i, .xfer-panel.err i { margin-right: 4px; }
+.xfer-status { display: flex; flex-direction: column; gap: 5px; }
+.xfer-status:empty { display: none; }
+.xfer-block {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding-left: 8px; border-left: 3px solid var(--border);
+}
+.xfer-block.in { border-left-color: var(--accent); }
+.xfer-block.out { border-left-color: var(--accent); }
+.xfer-block.ok { border-left-color: var(--ok); color: var(--text-soft); }
+.xfer-block.err { border-left-color: var(--err); color: var(--text-soft); }
+.xfer-block.ok i, .xfer-block.err i { margin-right: 4px; }
 .xfer-main { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .xfer-main b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 .xfer-main i { color: var(--accent); margin-right: 3px; }
@@ -885,6 +892,7 @@ img { max-width: 100%; }
 @media (max-width: 720px) {
   .xfer-panel { padding: 7px 9px; }
   .xfer-main b { max-width: 140px; }
+  .xfer-code-input { width: 92px; }
 }
 
 /* ------------------------------------------------------------ notifications */

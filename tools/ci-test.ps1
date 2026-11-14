@@ -73,9 +73,12 @@ Remove-Item -Path (Join-Path $temp 'logs') -Recurse -Force -ErrorAction Silently
 $cfgPath = Join-Path $temp 'config.ini'
 $example = Join-Path $temp 'config.example.ini'
 if (Test-Path $example) {
-    # guest mode on as well, so the suite can exercise the read-only session
+    # guest mode on as well, so the suite can exercise the read-only session;
+    # the per-address account cap is off because the suite registers dozens of
+    # accounts from 127.0.0.1 - the cap itself is tested through the admin API
     (Get-Content $example -Raw) -replace 'requireCaptcha=true', 'requireCaptcha=false' `
-        -replace '(?m)^guestMode=false', 'guestMode=true' |
+        -replace '(?m)^guestMode=false', 'guestMode=true' `
+        -replace '(?m)^accountsPerIp=\d+', 'accountsPerIp=0' |
         Set-Content -Path $cfgPath -Encoding UTF8
 } else {
     Remove-Item -Path $cfgPath -ErrorAction SilentlyContinue

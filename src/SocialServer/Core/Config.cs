@@ -34,6 +34,11 @@ namespace Social.Core
         public bool Registration = true;
         public bool InviteOnly = false;
         public string InviteCode = "";
+        // How many live accounts one address may create. 0 disables the check.
+        // The point is not to punish a household sharing a router, only to stop a
+        // loop that registers a hundred throwaways: three is a main account plus
+        // two twins, which is as much as an honest person ever needs.
+        public int AccountsPerIp = 3;
         // Guest / kiosk browsing. guestMode lets a visitor read the public side of
         // the site without an account; kioskMode is the same thing with no login
         // form at all and an idle timer that returns to the feed.
@@ -382,6 +387,7 @@ namespace Social.Core
                     else if (key == "registration") Registration = Bool(val, Registration);
                     else if (key == "inviteonly") InviteOnly = Bool(val, InviteOnly);
                     else if (key == "invitecode") InviteCode = val;
+                    else if (key == "accountsperip") AccountsPerIp = Int(val, AccountsPerIp);
                     else if (key == "guestmode") GuestMode = Bool(val, GuestMode);
                     else if (key == "guestpassword") GuestPassword = val;
                     else if (key == "kioskmode") KioskMode = Bool(val, KioskMode);
@@ -579,6 +585,8 @@ namespace Social.Core
             if (NotifyWaitSec < 1) NotifyWaitSec = 1;
             if (NotifyWaitSec > 25) NotifyWaitSec = 25;
             if (MaxAvatarKB < 16) MaxAvatarKB = 16;
+            if (AccountsPerIp < 0) AccountsPerIp = 0;
+            if (AccountsPerIp > 100) AccountsPerIp = 100;
             if (MaxPostImageKB < 64) MaxPostImageKB = 64;
             if (GiftPerHour < 0) GiftPerHour = 0;
             if (MaxGiftMessage < 0) MaxGiftMessage = 0;

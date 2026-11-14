@@ -450,6 +450,27 @@ namespace Social.Core
             lock (_sync) { return new List<User>(_users); }
         }
 
+        /// <summary>
+        /// How many live accounts were registered from this address hash. Deleted
+        /// and banned rows do not count, so a banned throwaway does not keep an
+        /// honest person from ever registering again from the same address.
+        /// </summary>
+        public int CountUsersByIp(string ipHash)
+        {
+            if (string.IsNullOrEmpty(ipHash)) return 0;
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _users.Count; i++)
+                {
+                    User u = _users[i];
+                    if (u.Deleted || u.Banned) continue;
+                    if (string.Equals(u.IpHash, ipHash, StringComparison.Ordinal)) n++;
+                }
+                return n;
+            }
+        }
+
         public bool UsernameExists(string username)
         {
             return FindUser(username) != null;

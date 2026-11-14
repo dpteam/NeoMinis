@@ -447,9 +447,18 @@
       var oldText = document.getElementById('chat-text');
       var typed = oldText ? oldText.value : '';
       var hadFocus = oldText && document.activeElement === oldText;
+      // the transfer code box lives outside the composer, and a chat refresh
+      // would otherwise steal the caret out of it mid-typing
+      var oldCode = document.getElementById('xfer-code-input');
+      var codeFocused = !!oldCode && document.activeElement === oldCode;
+      var codeTyped = oldCode ? oldCode.value : '';
+      var codeCaret = oldCode ? oldCode.selectionStart : 0;
       var oldBody = document.getElementById('chat-body');
       var atBottom = true;
       if (oldBody) atBottom = (oldBody.scrollHeight - oldBody.scrollTop - oldBody.clientHeight) < 60;
+
+      // tell the transfer panel which conversation it is being built for
+      if (window.TransferUI) TransferUI.setPeer(withId);
 
       var body = '<div class="chat-head">' + UI.avatar(other, 34) +
         '<div class="chat-head-main"><div class="name">' + UI.esc(other.displayName) + ' ' + UI.vipBadge(other) + '</div>' +
@@ -495,6 +504,12 @@
       if (newText && typed) newText.value = typed;
       if (newText && hadFocus) { try { newText.focus(); } catch (e) { } }
       if (newText) autoGrow(newText);
+
+      var newCode = document.getElementById('xfer-code-input');
+      if (newCode && codeTyped) newCode.value = codeTyped;
+      if (newCode && codeFocused) {
+        try { newCode.focus(); newCode.setSelectionRange(codeCaret, codeCaret); } catch (e) { }
+      }
 
       bindChat(withId, other);
       var ca = document.getElementById('chat-call-audio');
@@ -3688,6 +3703,7 @@
         select('cfg-theme', T('settings.theme'), [['light', T('theme.light')], ['dark', T('theme.dark')], ['oled', T('theme.oled')]], s.defaultTheme) +
         check('cfg-registration', T('admin.registrationOpen'), s.registration) +
         check('cfg-invite', T('admin.inviteOnly'), s.inviteOnly) +
+        field('cfg-perip', T('admin.accountsPerIp'), s.accountsPerIp, 'number', ' min="0" max="100"') +
         check('cfg-firstadmin', T('admin.firstUserAdmin'), s.firstUserAdmin) +
         '<hr>' +
         check('cfg-guest', T('admin.guestMode'), s.guestMode) +
@@ -3836,6 +3852,7 @@
             defaultLanguage: App.val('cfg-lang'), defaultTheme: App.val('cfg-theme'),
             registration: document.getElementById('cfg-registration').checked,
             inviteOnly: document.getElementById('cfg-invite').checked,
+            accountsPerIp: Number(App.val('cfg-perip')),
             firstUserAdmin: document.getElementById('cfg-firstadmin').checked,
             guestMode: document.getElementById('cfg-guest').checked,
             guestPassword: App.val('cfg-guestpass'),
