@@ -1094,6 +1094,47 @@ namespace Social.Web
             SendOk(ctx, b);
         }
 
+        private void HandleMessageReact(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            string emoji = BodyStr(ctx, "emoji", "").Trim();
+            if (!Reactions.IsAllowed(emoji))
+                throw new ApiException(400, "bad-emoji", "That reaction is not supported");
+            Message m = _store.ReactMessage(id, ctx.User.Id, emoji);
+            if (m == null) throw new ApiException(404, "no-message", "Message not found");
+
+            JsonBuilder b = new JsonBuilder(512);
+            b.BeginObject();
+            b.Name("message").Raw(MessageView(m, ctx.User));
+            SendOk(ctx, b);
+        }
+
+        private void HandleMessageSearch(ApiCtx ctx)
+        {
+            string q = GetQuery(ctx.Query, "q");
+            if (string.IsNullOrEmpty(q) || q.Trim().Length < 2)
+                throw new ApiException(400, "bad-query", "Type at least two characters");
+            long with = LongQuery(ctx, "with");
+            int limit = LimitParam(ctx, 30, 100);
+            List<Message> found = _store.SearchMessages(ctx.User.Id, with, q, limit);
+
+            JsonBuilder b = new JsonBuilder(4096);
+            b.BeginObject();
+            b.Name("results").BeginArray();
+            for (int i = 0; i < found.Count; i++)
+            {
+                Message m = found[i];
+                long peerId = m.From == ctx.User.Id ? m.To : m.From;
+                b.BeginObject();
+                b.Name("message").Raw(MessageView(m, ctx.User));
+                b.Name("peer").Raw(UserSummary(_store.FindUser(peerId)));
+                b.EndObject();
+            }
+            b.EndArray();
+            b.Prop("total", found.Count);
+            SendOk(ctx, b);
+        }
+
         private void HandleMessageDelete(ApiCtx ctx)
         {
             long id = BodyLong(ctx, "id", 0);

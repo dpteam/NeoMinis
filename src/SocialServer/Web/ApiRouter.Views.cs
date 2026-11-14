@@ -203,6 +203,20 @@ namespace Social.Web
             b.Prop("created", Util.Iso(m.Created));
             b.Prop("read", m.Read);
             b.Prop("mine", viewer != null && m.From == viewer.Id);
+            List<KeyValuePair<string, List<long>>> reactions = Reactions.Parse(m.Reactions);
+            if (reactions.Count > 0)
+            {
+                b.Name("reactions").BeginArray();
+                for (int i = 0; i < reactions.Count; i++)
+                {
+                    b.BeginObject()
+                        .Prop("emoji", reactions[i].Key)
+                        .Prop("count", reactions[i].Value.Count)
+                        .Prop("mine", viewer != null && reactions[i].Value.Contains(viewer.Id))
+                        .EndObject();
+                }
+                b.EndArray();
+            }
             if (m.ReplyTo > 0)
             {
                 Message q = _store.FindMessage(m.ReplyTo);

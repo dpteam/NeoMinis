@@ -1215,6 +1215,49 @@ namespace Social.Core
             }
         }
 
+        /// <summary>Toggles a reaction on a message the user is part of.</summary>
+        public Message ReactMessage(long id, long userId, string emoji)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                Message m = FindMessage(id);
+                if (m == null) return null;
+                if (m.From != userId && m.To != userId) return null;
+                string updated;
+                Reactions.Toggle(m.Reactions, userId, emoji, out updated);
+                m.Reactions = updated;
+                MarkMessages();
+                return m;
+            }
+        }
+
+        /// <summary>
+        /// Full text search over the viewer's own conversations. When
+        /// <paramref name="with"/> is set only that conversation is searched.
+        /// </summary>
+        public List<Message> SearchMessages(long viewer, long with, string query, int limit)
+        {
+            List<Message> result = new List<Message>();
+            if (string.IsNullOrEmpty(query) || query.Trim().Length < 2) return result;
+            string q = query.Trim().ToLowerInvariant();
+            lock (_sync)
+            {
+                for (int i = 0; i < _messages.Count && result.Count < limit; i++)
+                {
+                    Message m = _messages[i];
+                    if (m.From != viewer && m.To != viewer) continue;
+                    if (m.From == viewer && m.DeletedByFrom) continue;
+                    if (m.To == viewer && m.DeletedByTo) continue;
+                    if (with > 0 && m.From != with && m.To != with) continue;
+                    if (string.IsNullOrEmpty(m.Body)) continue;
+                    if (m.Body.ToLowerInvariant().IndexOf(q, StringComparison.Ordinal) < 0) continue;
+                    result.Add(m);
+                }
+            }
+            return result;
+        }
+
         /// <summary>Messages of a conversation with an id greater than <paramref name="after"/>.</summary>
         public List<Message> MessagesAfter(long viewer, long other, long after, int limit)
         {
@@ -2290,6 +2333,7 @@ namespace Social.Core
                 d["id"] = m.Id; d["from"] = m.From; d["to"] = m.To; d["body"] = m.Body;
                 d["image"] = m.Image; d["replyTo"] = m.ReplyTo;
                 d["audio"] = m.Audio; d["audioSec"] = m.AudioSec;
+                d["reactions"] = m.Reactions;
                 d["created"] = m.Created; d["read"] = m.Read;
                 d["deletedByFrom"] = m.DeletedByFrom; d["deletedByTo"] = m.DeletedByTo;
                 list.Add(d);
@@ -2308,6 +2352,7 @@ namespace Social.Core
             m.Audio = Json.GetString(d, "audio", "");
             m.AudioSec = Json.GetInt(d, "audioSec", 0);
             m.ReplyTo = Json.GetLong(d, "replyTo", 0);
+            m.Reactions = Json.GetString(d, "reactions", "");
             m.Created = Json.GetDate(d, "created", DateTime.UtcNow);
             m.Read = Json.GetBool(d, "read", false);
             m.DeletedByFrom = Json.GetBool(d, "deletedByFrom", false);

@@ -390,6 +390,28 @@ async function main() {
   const voiceList = await alice.call('GET', '/api/messages?with=' + bob.user.id);
   ok('voice message in the thread', voiceList.data && voiceList.data.messages.some(m => m.audio), '');
 
+  // ---- message reactions and search
+  const targetMsg = voiceList.data.messages[voiceList.data.messages.length - 1];
+  const react = await bob.call('POST', '/api/messages/react', { id: targetMsg.id, emoji: '👍' });
+  ok('message reaction added', react.status === 200 && (react.data.message.reactions || []).length === 1 &&
+    react.data.message.reactions[0].count === 1 && react.data.message.reactions[0].mine === true,
+    JSON.stringify(react.data && react.data.message.reactions));
+  const react2 = await bob.call('POST', '/api/messages/react', { id: targetMsg.id, emoji: '🔥' });
+  ok('reaction replaces the old one', (react2.data.message.reactions || []).length === 1 &&
+    react2.data.message.reactions[0].emoji === '🔥', JSON.stringify(react2.data && react2.data.message.reactions));
+  const react3 = await bob.call('POST', '/api/messages/react', { id: targetMsg.id, emoji: '🔥' });
+  ok('reaction toggles off', (react3.data.message.reactions || []).length === 0, '');
+  const badEmoji = await bob.call('POST', '/api/messages/react', { id: targetMsg.id, emoji: '🚀' });
+  ok('unknown reaction rejected', badEmoji.status === 400, String(badEmoji.status));
+
+  const searchMsg = await bob.call('GET', '/api/messages/search?q=' + encodeURIComponent('quote me'));
+  ok('message search finds text', searchMsg.status === 200 && searchMsg.data.results.length >= 1 &&
+    searchMsg.data.results[0].peer.id === alice.user.id, String(searchMsg.status));
+  const searchShort = await bob.call('GET', '/api/messages/search?q=a');
+  ok('too short query rejected', searchShort.status === 400, String(searchShort.status));
+  const searchMiss = await bob.call('GET', '/api/messages/search?q=' + encodeURIComponent('zzz-nothing-here'));
+  ok('search miss returns nothing', searchMiss.status === 200 && searchMiss.data.results.length === 0, '');
+
   await bob.call('POST', '/api/messages/typing', { to: alice.user.id });
   const typingWait = await alice.call('GET', '/api/messages/wait?with=' + bob.user.id + '&after=0&timeout=3');
   ok('typing is visible', typingWait.status === 200 && typingWait.data.typing === true, JSON.stringify(typingWait.data && typingWait.data.typing));

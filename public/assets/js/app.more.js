@@ -202,10 +202,87 @@
         '<audio controls preload="metadata" src="' + UI.attr(voice) + '"></audio>' +
         (m.audioSec ? '<span class="msg-voice-sec">' + fmtSec(m.audioSec) + '</span>' : '') + '</div>' : '') +
       (m.body ? '<div class="msg-text">' + msgBodyHtml(m.body) + '</div>' : '') +
+      reactionChips(m) +
       '<div class="msg-foot"><span class="time">' + UI.formatTime(m.created) + '</span>' + tick +
+      '<button type="button" class="msg-act msg-react" data-id="' + m.id + '" title="' + UI.attr(T('messages.react')) + '">' + UI.icon('face-smile') + '</button>' +
       '<button type="button" class="msg-act msg-reply" data-id="' + m.id + '" title="' + UI.attr(T('messages.reply')) + '">' + UI.icon('reply') + '</button>' +
       (mine ? '<button type="button" class="msg-act msg-del" data-id="' + m.id + '" title="' + UI.attr(T('common.delete')) + '">' + UI.icon('xmark') + '</button>' : '') +
       '</div></div></div>';
+  }
+
+  var REACTIONS = ['❤️', '👍', '👎', '😂', '😀', '😮', '😢', '🔥'];
+
+  function reactionChips(m) {
+    var list = m.reactions || [];
+    if (!list.length) return '';
+    var html = '<div class="msg-reactions">';
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i];
+      html += '<button type="button" class="reaction-chip' + (r.mine ? ' mine' : '') +
+        '" data-id="' + m.id + '" data-emoji="' + UI.attr(r.emoji) + '" title="' + UI.attr(T('messages.reactCount', r.count)) + '">' +
+        '<span class="re-emoji">' + UI.esc(r.emoji) + '</span><b>' + r.count + '</b></button>';
+    }
+    return html + '</div>';
+  }
+
+  function closeReactionPicker() {
+    var pop = document.getElementById('react-pop');
+    if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
+    if (reactionOutside) {
+      document.removeEventListener('mousedown', reactionOutside, true);
+      reactionOutside = null;
+    }
+  }
+
+  var reactionOutside = null;
+
+  function openReactionPicker(anchor, messageId) {
+    closeReactionPicker();
+    var pop = document.createElement('div');
+    pop.className = 'react-pop';
+    pop.id = 'react-pop';
+    var html = '';
+    for (var i = 0; i < REACTIONS.length; i++) {
+      html += '<button type="button" class="react-item" data-emoji="' + UI.attr(REACTIONS[i]) + '">' + UI.esc(REACTIONS[i]) + '</button>';
+    }
+    pop.innerHTML = html;
+    document.body.appendChild(pop);
+
+    var rect = anchor.getBoundingClientRect();
+    var width = pop.offsetWidth || 300;
+    var left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.left - width / 2 + 12));
+    var top = rect.top - (pop.offsetHeight || 40) - 6;
+    if (top < 8) top = rect.bottom + 6;
+    pop.style.left = Math.round(left) + 'px';
+    pop.style.top = Math.round(top) + 'px';
+
+    var items = pop.querySelectorAll('.react-item');
+    for (var k = 0; k < items.length; k++) {
+      items[k].addEventListener('click', function () {
+        var emoji = this.getAttribute('data-emoji');
+        closeReactionPicker();
+        sendReaction(messageId, emoji);
+      });
+    }
+
+    reactionOutside = function (e) {
+      if (pop.parentNode && !pop.contains(e.target)) closeReactionPicker();
+    };
+    setTimeout(function () { if (reactionOutside) document.addEventListener('mousedown', reactionOutside, true); }, 0);
+  }
+
+  function sendReaction(messageId, emoji) {
+    Api.request('POST', '/api/messages/react', { id: Number(messageId), emoji: emoji }, function (err, data) {
+      if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+      var row = document.querySelector('.bubble-row[data-id="' + messageId + '"]');
+      if (!row || !data.message) return;
+      var tmp = document.createElement('div');
+      tmp.innerHTML = bubbleHtml(data.message, state.im.other || {});
+      var fresh = tmp.firstChild;
+      row.parentNode.replaceChild(fresh, row);
+      bindBubbles(fresh.parentNode);
+      SoundFX.play('click');
+    });
   }
 
   views.im = function (main, r) {
@@ -223,15 +300,19 @@
       var threads = data.threads || [];
       var html = '<div class="card"><div class="card-h">' + UI.icon('envelope') + ' ' + T('messages.title') +
         '<span class="right"><a href="#/people">' + UI.icon('user-plus') + ' ' + T('profile.message') + '</a></span></div>';
-      html += '<div class="msg-layout"><div class="threads" id="threads">';
+      html += '<div class="msg-layout"><div class="threads" id="threads">' +
+        '<form class="thread-search" id="thread-search">' + UI.icon('magnifying-glass') +
+        '<input type="search" id="thread-q" placeholder="' + UI.attr(T('messages.searchPlaceholder')) + '" autocomplete="off">' +
+        '</form><div id="thread-list">';
       if (!threads.length) html += '<div class="empty" style="padding:24px 10px">' + UI.icon('inbox') + '<b>' + T('messages.noThreads') + '</b></div>';
       for (var i = 0; i < threads.length; i++) html += threadHtml(threads[i], withId);
-      html += '</div><div class="chat" id="chat">';
+      html += '</div></div><div class="chat" id="chat">';
       if (!withId) html += '<div class="chat-empty">' + UI.icon('comments') + ' ' + T('messages.select') + '</div>';
       else html += '<div class="chat-empty">' + UI.spinner() + '</div>';
       html += '</div></div></div>';
       main.innerHTML = html;
       bindThreads(main);
+      bindThreadSearch();
       if (withId) loadConversation(withId, false);
       // cheap safety net; the live loop does the real work
       state.im.timer = setInterval(function () {
@@ -638,6 +719,25 @@
   }
 
   function bindBubbles(scope) {
+    var reacts = (scope || document).querySelectorAll('.msg-react');
+    for (var r = 0; r < reacts.length; r++) {
+      if (reacts[r].getAttribute('data-bound')) continue;
+      reacts[r].setAttribute('data-bound', '1');
+      reacts[r].addEventListener('click', function (e) {
+        e.preventDefault();
+        openReactionPicker(this, this.getAttribute('data-id'));
+      });
+    }
+
+    var chips = (scope || document).querySelectorAll('.reaction-chip');
+    for (var c = 0; c < chips.length; c++) {
+      if (chips[c].getAttribute('data-bound')) continue;
+      chips[c].setAttribute('data-bound', '1');
+      chips[c].addEventListener('click', function () {
+        sendReaction(this.getAttribute('data-id'), this.getAttribute('data-emoji'));
+      });
+    }
+
     var replies = (scope || document).querySelectorAll('.msg-reply');
     for (var r = 0; r < replies.length; r++) {
       if (replies[r].getAttribute('data-bound')) continue;
@@ -755,9 +855,12 @@
   }
 
   function refreshThreads() {
+    // while the search box has a query, the list shows results; don't overwrite it
+    var qBox = document.getElementById('thread-q');
+    if (qBox && qBox.value.trim().length >= 2) return;
     Api.request('GET', '/api/messages/threads', null, function (err, data) {
       if (err) return;
-      var box = document.getElementById('threads');
+      var box = document.getElementById('thread-list');
       if (!box) return;
       var threads = data.threads || [];
       var h = '';
@@ -766,6 +869,65 @@
       bindThreads(box);
       if (typeof data.unread === 'number') App.setBadge('badge-msg', data.unread);
     });
+  }
+
+  function bindThreadSearch() {
+    var form = document.getElementById('thread-search');
+    var input = document.getElementById('thread-q');
+    if (!form || !input) return;
+    var timer = null;
+    var seq = 0;
+
+    function schedule() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        var q = input.value.trim();
+        if (q.length < 2) { refreshThreads(); return; }
+        var my = ++seq;
+        Api.request('GET', '/api/messages/search?q=' + encodeURIComponent(q) + '&limit=40', null, function (err, data) {
+          if (my !== seq) return;
+          var box = document.getElementById('thread-list');
+          if (!box) return;
+          if (err) {
+            box.innerHTML = '<div class="alert err" style="margin:8px">' + UI.esc(Api.errorText(err)) + '</div>';
+            return;
+          }
+          box.innerHTML = searchResultsHtml((data && data.results) || [], q);
+        });
+      }, 300);
+    }
+
+    input.addEventListener('input', schedule);
+    input.addEventListener('search', schedule);
+    form.addEventListener('submit', function (e) { e.preventDefault(); schedule(); });
+  }
+
+  function markMatch(text, q) {
+    var raw = String(text || '');
+    var safe = UI.esc(raw);
+    if (!q) return safe;
+    var needle = UI.esc(q);
+    var idx = safe.toLowerCase().indexOf(needle.toLowerCase());
+    if (idx < 0) return safe;
+    return safe.substring(0, idx) + '<mark>' + safe.substring(idx, idx + needle.length) + '</mark>' +
+      safe.substring(idx + needle.length);
+  }
+
+  function searchResultsHtml(results, q) {
+    if (!results.length) {
+      return UI.empty('magnifying-glass', T('messages.searchEmpty'), T('messages.searchEmptyHint'));
+    }
+    var html = '<div class="search-count tiny muted">' + T('messages.searchFound', results.length) + '</div>';
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      var m = r.message || {};
+      var p = r.peer || {};
+      html += '<a class="thread search-hit" href="#/im/' + p.id + '">' + UI.avatar(p, 34) +
+        '<div class="thread-main"><div class="name">' + UI.esc(p.displayName || p.username) + '</div>' +
+        '<div class="last">' + (m.mine ? UI.icon('reply') + ' ' : '') + markMatch(m.body, q) + '</div></div>' +
+        '<div class="thread-side"><span class="thread-time">' + UI.timeAgo(m.created) + '</span></div></a>';
+    }
+    return html;
   }
 
   // ---------------------------------------------------------------- groups

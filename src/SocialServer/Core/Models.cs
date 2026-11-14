@@ -120,6 +120,7 @@ namespace Social.Core
         public string Audio = "";      // optional voice message, /media/messages/...
         public int AudioSec;           // duration of the voice message in seconds
         public long ReplyTo;           // id of the quoted message, 0 = none
+        public string Reactions = "";  // see Core/Reactions.cs: "emoji|id,id" per line
         public DateTime Created = DateTime.UtcNow;
         public bool Read;
         public bool DeletedByFrom;

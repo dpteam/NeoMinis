@@ -199,6 +199,8 @@ earned (useful after an import or a rule change).
 | POST | `/api/messages/send` | `to`, `body`, `image`, `audio`, `audioSec`, `replyTo` | `{ message }` |
 | GET | `/api/messages/wait` | `with`, `after`, `timeout` | `{ messages[], latest, typing, read, unread, live }` |
 | POST | `/api/messages/typing` | `to` | `{ ok }` |
+| POST | `/api/messages/react` | `id`, `emoji` | `{ message }` |
+| GET | `/api/messages/search` | `q` (≥ 2 chars), `with` (optional), `limit` | `{ results[{ message, peer }], total }` |
 | POST | `/api/messages/read` | `with` | `{ unread }` |
 | POST | `/api/messages/delete` | `id` | `{ ok }` (per-side delete) |
 
@@ -214,6 +216,14 @@ sniffs the container, not the codec), at most `limits.maxVoiceKB` and
 `limits.maxVoiceSec` seconds (`audioSec` carries the duration, 0 is tolerated and
 clamped to 1). The file lands in `/media/messages/` and the message comes back with
 `audio` and `audioSec`.
+
+Reactions: one per account per message from the fixed set ❤️ 👍 👎 😂 😀 😮 😢 🔥.
+`POST /api/messages/react` sets, replaces or (same emoji) removes it; messages come
+back with `reactions[{ emoji, count, mine }]`.
+
+`/api/messages/search` looks only inside the caller's own conversations (deleted
+per-side messages are skipped) and is meant for the search box above the thread
+list; every hit carries the peer summary so the SPA can link straight to the chat.
 
 `/api/messages/wait` is the chat long poll: it holds the request (max 25s,
 `ui.notifyWaitSec` by default) and answers as soon as a message newer than

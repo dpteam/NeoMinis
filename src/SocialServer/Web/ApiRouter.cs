@@ -585,6 +585,8 @@ namespace Social.Web
             if (r == "messages/delete") { RequireMethod(m, "POST"); HandleMessageDelete(ctx); return; }
             if (r == "messages/wait") { RequireMethod(m, "GET"); HandleMessagesWait(ctx); return; }
             if (r == "messages/typing") { RequireMethod(m, "POST"); HandleMessageTyping(ctx); return; }
+            if (r == "messages/react") { RequireMethod(m, "POST"); HandleMessageReact(ctx); return; }
+            if (r == "messages/search") { RequireMethod(m, "GET"); HandleMessageSearch(ctx); return; }
             if (r == "notifications") { RequireMethod(m, "GET"); HandleNotifications(ctx); return; }
             if (r == "notifications/read") { RequireMethod(m, "POST"); HandleNotificationsRead(ctx); return; }
             if (r == "notifications/wait") { RequireMethod(m, "GET"); HandleNotificationsWait(ctx); return; }
