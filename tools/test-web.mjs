@@ -577,6 +577,94 @@ async function main() {
   const notMine = await alice.call('POST', '/api/gifts/delete', { id: anonGift.data.gift.id });
   ok('only the recipient can hide a gift', notMine.status === 404, String(notMine.status));
 
+  // ---- Flash games (Ruffle)
+  // Ruffle is vendored, not committed: a fresh clone must run
+  // tools\fetch-ruffle.ps1 first and the shelf stays off until it does.
+  const siteInfo = await alice.call('GET', '/api/settings');
+  const gamesOn = !!(siteInfo.data && siteInfo.data.site && siteInfo.data.site.gamesEnabled);
+  if (!gamesOn) {
+    ok('games shelf is off when Ruffle is missing (skipped)', true, 'no ruffle bundle');
+  } else {
+  const swf = Buffer.concat([
+    Buffer.from('FWS'), Buffer.from([6]), Buffer.alloc(4),
+    Buffer.from([0x00, 0x00, 0x0C, 0x01, 0x00]),        // RECT: 11000 x 8000 twips
+    Buffer.from([0x00, 0x0C]), Buffer.from([0x01, 0x00]), // 12 fps, 1 frame
+    Buffer.from([0x43, 0x02, 0xE0, 0x28, 0x22]),        // SetBackgroundColor red
+    Buffer.from([0x00, 0x00])                           // End
+  ]);
+  swf.writeUInt32LE(swf.length, 4);
+  const SWF = 'data:application/x-shockwave-flash;base64,' + swf.toString('base64');
+
+  const up = await alice.call('POST', '/api/game/upload', {
+    data: SWF, title: 'Test game', description: 'uploaded by the suite'
+  });
+  ok('game uploaded', up.status === 200 && up.data.game.kind === 'game' &&
+    up.data.game.url.startsWith('/media/games/') && up.data.game.url.endsWith('.swf') &&
+    up.data.game.size === swf.length,
+    JSON.stringify(up.data && up.data.game));
+  const gameId = up.data && up.data.game && up.data.game.id;
+
+  const fake = await alice.call('POST', '/api/game/upload', {
+    data: 'data:application/x-shockwave-flash;base64,' + Buffer.from('<html>nope</html>').toString('base64'),
+    title: 'Not a game'
+  });
+  ok('a renamed html file is not accepted as a game', fake.status === 400 && fake.data.error === 'bad-swf',
+    JSON.stringify(fake.data));
+
+  const shelf = await bob.call('GET', '/api/games');
+  ok('game appears on the shelf', shelf.status === 200 && shelf.data.games.some(g => g.id === gameId), '');
+  const searched = await bob.call('GET', '/api/games?q=' + encodeURIComponent('test game'));
+  ok('games are searchable', searched.data.games.some(g => g.id === gameId), '');
+  const missSearch = await bob.call('GET', '/api/games?q=zzz-nothing');
+  ok('game search misses cleanly', missSearch.data.games.length === 0, '');
+
+  const one = await bob.call('GET', '/api/game?id=' + gameId);
+  ok('single game fetch', one.status === 200 && one.data.game.title === 'Test game', '');
+  const missing = await bob.call('GET', '/api/game?id=999999');
+  ok('unknown game 404s', missing.status === 404, String(missing.status));
+
+  const played = await bob.call('POST', '/api/game/play', { id: gameId });
+  ok('play counter grows', played.status === 200 && played.data.plays === 1, JSON.stringify(played.data));
+
+  const liked = await bob.call('POST', '/api/game/like', { id: gameId });
+  ok('game liked', liked.status === 200 && liked.data.liked === true && liked.data.likes === 1, '');
+  const unliked = await bob.call('POST', '/api/game/like', { id: gameId });
+  ok('game like toggles off', unliked.data.liked === false && unliked.data.likes === 0, '');
+
+  const stolen = await bob.call('POST', '/api/game/edit', { id: gameId, title: 'Mine now' });
+  ok('only the owner may rename a game', stolen.status === 403, String(stolen.status));
+  const edited = await alice.call('POST', '/api/game/edit', { id: gameId, title: 'Renamed game' });
+  ok('owner renames the game', edited.status === 200 && edited.data.game.title === 'Renamed game', '');
+
+  // the movie must never come back as something a browser would run
+  const movie = await bob.raw('GET', up.data.game.url);
+  ok('swf is served as an inert download',
+    movie.status === 200 &&
+    (movie.headers.get('content-type') || '').indexOf('application/octet-stream') === 0 &&
+    (movie.headers.get('content-disposition') || '').indexOf('attachment') >= 0 &&
+    (movie.headers.get('x-content-type-options') || '') === 'nosniff',
+    movie.headers.get('content-type') + ' | ' + movie.headers.get('content-disposition'));
+
+  const player = await bob.raw('GET', '/play/' + gameId);
+  ok('player page loads', player.status === 200 &&
+    player.text.indexOf('/assets/vendor/ruffle/ruffle.js') >= 0 &&
+    player.text.indexOf('/assets/js/player.js') >= 0, String(player.status));
+  ok('player page has no inline script', player.text.indexOf('<script>') < 0, '');
+  ok('player page allows wasm but not inline script',
+    /script-src[^;]*wasm-unsafe-eval/.test(player.headers.get('content-security-policy') || '') &&
+    !/script-src[^;]*unsafe-inline/.test(player.headers.get('content-security-policy') || ''),
+    String(player.headers.get('content-security-policy')).slice(0, 120));
+  const badPlayer = await bob.raw('GET', '/play/999999');
+  ok('player page 404s for an unknown game', badPlayer.status === 404, String(badPlayer.status));
+
+  const foreignDelete = await bob.call('POST', '/api/game/delete', { id: gameId });
+  ok('only the owner may delete a game', foreignDelete.status === 403, String(foreignDelete.status));
+  const removed = await alice.call('POST', '/api/game/delete', { id: gameId });
+  ok('owner deletes the game', removed.status === 200, String(removed.status));
+  const gone = await alice.call('GET', '/api/game?id=' + gameId);
+  ok('deleted game is gone', gone.status === 404, String(gone.status));
+  }
+
   // ---- file attachments
   const TXT = 'data:text/plain;base64,' + Buffer.from('attachment body').toString('base64');
   const fileMsg = await bob.call('POST', '/api/messages/send', {

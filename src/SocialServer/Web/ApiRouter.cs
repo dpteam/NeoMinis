@@ -211,7 +211,10 @@ namespace Social.Web
                 .Prop("callStun", _cfg.CallStun)
                 .Prop("giftPerHour", _cfg.GiftPerHour)
                 .Prop("maxGiftMessage", _cfg.MaxGiftMessage)
-                .Prop("giftsEnabled", _cfg.GiftsEnabled);
+                .Prop("giftsEnabled", _cfg.GiftsEnabled)
+                .Prop("gamesEnabled", GamesAvailable())
+                .Prop("maxGameKB", _cfg.MaxGameKB)
+                .Prop("maxGameFiles", _cfg.MaxGameFiles);
             b.Prop("maxStatusLength", _cfg.MaxStatusLength);
             b.Prop("maxBioLength", _cfg.MaxBioLength);
             b.Prop("maxNameLength", _cfg.MaxNameLength);
@@ -674,6 +677,13 @@ namespace Social.Web
             if (r == "gifts/send") { RequireMethod(m, "POST"); HandleGiftSend(ctx); return; }
             if (r == "gifts/seen") { RequireMethod(m, "POST"); HandleGiftSeen(ctx); return; }
             if (r == "gifts/delete") { RequireMethod(m, "POST"); HandleGiftDelete(ctx); return; }
+            if (r == "games") { RequireMethod(m, "GET"); HandleGames(ctx); return; }
+            if (r == "game") { RequireMethod(m, "GET"); HandleGame(ctx); return; }
+            if (r == "game/upload") { RequireMethod(m, "POST"); HandleGameUpload(ctx); return; }
+            if (r == "game/edit") { RequireMethod(m, "POST"); HandleGameEdit(ctx); return; }
+            if (r == "game/delete") { RequireMethod(m, "POST"); HandleGameDelete(ctx); return; }
+            if (r == "game/play") { RequireMethod(m, "POST"); HandleGamePlay(ctx); return; }
+            if (r == "game/like") { RequireMethod(m, "POST"); HandleGameLike(ctx); return; }
             if (r == "friends") { RequireMethod(m, "GET"); HandleFriends(ctx); return; }
             if (r == "friend") { RequireMethod(m, "POST"); HandleFriendAction(ctx); return; }
             if (r == "messages/threads") { RequireMethod(m, "GET"); HandleThreads(ctx); return; }

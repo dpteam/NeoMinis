@@ -68,6 +68,11 @@ memory together with a small per-user event queue, because a call only exists wh
 the browsers are connected. Only the finished record (who, when, how long) lands in
 `calls.json` for the history list.
 
+Flash games are media rows with `kind=game`; the `.swf` sits in `data/media/games/`.
+The player itself (Ruffle, ~28 MB of wasm) is deliberately *not* in git: it is
+fetched by `tools\fetch-ruffle.ps1` into `public/assets/vendor/ruffle/`, served from
+our own origin, and only ever started inside the sandboxed `/play/<id>` iframe.
+
 ## Request pipeline
 
 1. `HttpConnection` parses the request (limits: 8 KB request line, 64 KB headers,

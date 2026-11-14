@@ -3040,6 +3040,8 @@
         field('cfg-fbph', T('admin.feedbackPerHour'), lim.feedbackPerHour, 'number', ' min="1"') +
         field('cfg-giftph', T('admin.giftPerHour'), lim.giftPerHour, 'number', ' min="0"') +
         field('cfg-giftmsg', T('admin.maxGiftMessage'), lim.maxGiftMessage, 'number', ' min="0"') +
+        field('cfg-gamekb', T('admin.maxGameKB'), lim.maxGameKB, 'number', ' min="64"') +
+        field('cfg-gamefiles', T('admin.maxGameFiles'), lim.maxGameFiles, 'number', ' min="0"') +
         field('cfg-callmembers', T('admin.maxCallMembers'), lim.maxCallMembers, 'number', ' min="2"') +
         field('cfg-callstun', T('admin.callStun'), lim.callStun) +
         '</div>';
@@ -3054,6 +3056,8 @@
         check('cfg-sounds', T('admin.allowSounds'), ui.allowSounds) +
         check('cfg-live', T('admin.liveNotifications'), ui.liveNotifications) +
         check('cfg-gifts', T('admin.giftsEnabled'), ui.giftsEnabled) +
+        check('cfg-games', T('admin.gamesEnabled'), ui.gamesEnabled) +
+        (ui.gamesReady === false ? '<div class="alert warn" style="margin:6px 0">' + T('admin.gamesNoRuffle') + '</div>' : '') +
         field('cfg-notifywait', T('admin.notifyWait'), ui.notifyWaitSec, 'number', ' min="1" max="25"') +
         '<div style="margin-top:6px"><button class="btn btn-sm" id="cfg-notify-test">' + UI.icon('bell') + ' ' + T('admin.notifyTest') + '</button></div>' +
         '<hr><h3 style="margin-top:10px">' + T('admin.settingsLogging') + '</h3>' +
@@ -3145,6 +3149,8 @@
             feedbackPerHour: Number(App.val('cfg-fbph')),
             giftPerHour: Number(App.val('cfg-giftph')),
             maxGiftMessage: Number(App.val('cfg-giftmsg')),
+            maxGameKB: Number(App.val('cfg-gamekb')),
+            maxGameFiles: Number(App.val('cfg-gamefiles')),
             maxCallMembers: Number(App.val('cfg-callmembers')),
             callStun: App.val('cfg-callstun')
           },
@@ -3155,6 +3161,7 @@
             allowSounds: document.getElementById('cfg-sounds').checked,
             liveNotifications: document.getElementById('cfg-live').checked,
             giftsEnabled: document.getElementById('cfg-gifts').checked,
+            gamesEnabled: document.getElementById('cfg-games').checked,
             notifyWaitSec: Number(App.val('cfg-notifywait'))
           },
           logging: {

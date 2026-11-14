@@ -2013,7 +2013,7 @@ namespace Social.Core
                 MediaItem m = new MediaItem();
                 m.Id = _meta.NextMediaId++;
                 m.Owner = owner;
-                m.Kind = kind == "video" ? "video" : "audio";
+                m.Kind = kind == "video" ? "video" : kind == "game" ? "game" : "audio";
                 m.Title = Util.SingleLine(title ?? "", 120);
                 m.Artist = Util.SingleLine(artist ?? "", 120);
                 m.Url = url ?? "";
@@ -2078,13 +2078,111 @@ namespace Social.Core
         }
 
         /// <summary>True while any item still points at that file.</summary>
-        public bool IsMediaUrlUsed(string url)
-        {
+        public bool IsMediaUrlUsed(string url)        {
             if (string.IsNullOrEmpty(url)) return false;
             lock (_sync)
             {
                 for (int i = 0; i < _media.Count; i++) if (_media[i].Url == url) return true;
                 return false;
+            }
+        }
+
+        // ============================================================== games
+
+        /// <summary>
+        /// The games shelf: newest first, optionally filtered by a search string
+        /// and by owner. Paged with an id cursor so the client can "load more".
+        /// </summary>
+        public List<MediaItem> Games(long owner, string query, long before, int limit, out bool hasMore)
+        {
+            List<MediaItem> list = new List<MediaItem>();
+            hasMore = false;
+            string needle = (query ?? "").Trim().ToLowerInvariant();
+            lock (_sync)
+            {
+                for (int i = 0; i < _media.Count; i++)
+                {
+                    MediaItem m = _media[i];
+                    if (m.Kind != "game") continue;
+                    if (owner > 0 && m.Owner != owner) continue;
+                    if (before > 0 && m.Id >= before) continue;
+                    if (needle.Length > 0)
+                    {
+                        bool hit = m.Title.ToLowerInvariant().Contains(needle) ||
+                                   m.Description.ToLowerInvariant().Contains(needle) ||
+                                   m.Artist.ToLowerInvariant().Contains(needle);
+                        if (!hit) continue;
+                    }
+                    if (list.Count >= limit) { hasMore = true; break; }
+                    list.Add(m);
+                }
+            }
+            return list;
+        }
+
+        public int CountGames()
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _media.Count; i++) if (_media[i].Kind == "game") n++;
+                return n;
+            }
+        }
+
+        public MediaItem AddGame(long owner, string title, string description, string url, long size)
+        {
+            MediaItem m = AddMedia(owner, "game", title, "", url, size, 0);
+            if (m == null) return null;
+            lock (_sync)
+            {
+                m.Description = description ?? "";
+                MarkMedia();
+                return m;
+            }
+        }
+
+        /// <summary>Renames a game; only the owner may do it.</summary>
+        public bool UpdateGame(long id, long owner, string title, string description)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                MediaItem m = FindMedia(id);
+                if (m == null || m.Owner != owner || m.Kind != "game") return false;
+                if (title != null) m.Title = Util.SingleLine(title, 120);
+                if (description != null) m.Description = Util.CleanText(description, 1000);
+                MarkMedia();
+                return true;
+            }
+        }
+
+        /// <summary>Counts one play. Cheap on purpose: no notification, no history.</summary>
+        public int AddGamePlay(long id)
+        {
+            lock (_sync)
+            {
+                MediaItem m = FindMedia(id);
+                if (m == null || m.Kind != "game") return -1;
+                m.Plays++;
+                MarkMedia();
+                return m.Plays;
+            }
+        }
+
+        /// <summary>Toggles the caller's like; returns the new count, -1 when missing.</summary>
+        public int ToggleGameLike(long id, long userId, out bool liked)
+        {
+            liked = false;
+            lock (_sync)
+            {
+                EnsureWritable();
+                MediaItem m = FindMedia(id);
+                if (m == null || m.Kind != "game") return -1;
+                if (m.Likes.Contains(userId)) m.Likes.Remove(userId);
+                else { m.Likes.Add(userId); liked = true; }
+                MarkMedia();
+                return m.Likes.Count;
             }
         }
 
@@ -2228,6 +2326,14 @@ namespace Social.Core
                 d["title"] = m.Title; d["artist"] = m.Artist; d["url"] = m.Url;
                 d["size"] = m.Size; d["duration"] = m.Duration; d["created"] = m.Created;
                 if (m.SavedFrom > 0) d["savedFrom"] = m.SavedFrom;
+                if (m.Kind == "game")
+                {
+                    d["description"] = m.Description;
+                    d["plays"] = m.Plays;
+                    List<object> likes = new List<object>(m.Likes.Count);
+                    for (int k = 0; k < m.Likes.Count; k++) likes.Add(m.Likes[k]);
+                    d["likes"] = likes;
+                }
                 list.Add(d);
             }
             return list;
@@ -2246,6 +2352,19 @@ namespace Social.Core
             m.Duration = Json.GetInt(d, "duration", 0);
             m.SavedFrom = Json.GetLong(d, "savedFrom", 0);
             m.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            m.Description = Json.GetString(d, "description", "");
+            m.Plays = Json.GetInt(d, "plays", 0);
+            List<object> likes = Json.Get(d, "likes") as List<object>;
+            if (likes != null)
+            {
+                for (int i = 0; i < likes.Count; i++)
+                {
+                    long id;
+                    if (likes[i] is long) id = (long)likes[i];
+                    else if (!long.TryParse(Convert.ToString(likes[i]), out id)) continue;
+                    if (id > 0) m.Likes.Add(id);
+                }
+            }
             if (m.Id <= 0 || m.Owner <= 0 || string.IsNullOrEmpty(m.Url)) return null;
             return m;
         }

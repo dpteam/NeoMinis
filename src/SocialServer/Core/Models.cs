@@ -110,7 +110,7 @@ namespace Social.Core
     {
         public long Id;
         public long Owner;
-        public string Kind = "audio";   // audio | video
+        public string Kind = "audio";   // audio | video | game
         public string Title = "";
         public string Artist = "";
         public string Url = "";
@@ -118,6 +118,11 @@ namespace Social.Core
         public int Duration;            // seconds, 0 when the browser could not tell
         public long SavedFrom;          // owner id of the original when copied from a shelf
         public DateTime Created = DateTime.UtcNow;
+
+        // games only
+        public string Description = "";
+        public int Plays;
+        public List<long> Likes = new List<long>();
     }
 
     /// <summary>

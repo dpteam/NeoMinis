@@ -1761,3 +1761,41 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .gift-badge-sm {
   flex: 0 0 auto; width: 32px; height: 32px; border-radius: 8px; font-size: 14px;
 }
+
+/* ----------------------------------------------------------------- games */
+
+.game-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px; padding: 10px;
+}
+.game-card {
+  display: block; text-decoration: none; color: inherit;
+  border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  background: var(--panel-2); transition: border-color .12s, transform .12s;
+}
+.game-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.game-cover {
+  position: relative; aspect-ratio: 4 / 3; display: flex;
+  align-items: center; justify-content: center;
+  background: radial-gradient(circle at 30% 25%, rgba(124, 140, 255, .28), transparent 62%), #0d1520;
+  color: var(--accent); font-size: 30px;
+}
+.game-plays {
+  position: absolute; right: 6px; bottom: 6px; font-size: 10px;
+  padding: 2px 6px; border-radius: 999px; color: #fff;
+  background: rgba(8, 14, 22, .68);
+}
+.game-meta { padding: 7px 9px 9px; }
+.game-title {
+  font-size: 12.5px; font-weight: 600; margin-bottom: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.game-frame-wrap { background: #0b1119; }
+.game-frame { display: block; width: 100%; height: 460px; border: 0; background: #0b1119; }
+.game-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.game-desc { margin-top: 10px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+
+@media (max-width: 640px) {
+  .game-frame { height: 300px; }
+}

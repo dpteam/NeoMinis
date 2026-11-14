@@ -69,6 +69,8 @@ namespace Social.Web
                 .Prop("callStun", _cfg.CallStun)
                 .Prop("giftPerHour", _cfg.GiftPerHour)
                 .Prop("maxGiftMessage", _cfg.MaxGiftMessage)
+                .Prop("maxGameKB", _cfg.MaxGameKB)
+                .Prop("maxGameFiles", _cfg.MaxGameFiles)
                 .Prop("maxAvatarKB", _cfg.MaxAvatarKB)
                 .Prop("maxPostImageKB", _cfg.MaxPostImageKB)
                 .Prop("editWindowMin", _cfg.EditWindowMin)
@@ -92,6 +94,8 @@ namespace Social.Web
                 .Prop("liveNotifications", _cfg.LiveNotifications)
                 .Prop("notifyWaitSec", _cfg.NotifyWaitSec)
                 .Prop("giftsEnabled", _cfg.GiftsEnabled)
+                .Prop("gamesEnabled", _cfg.GamesEnabled)
+                .Prop("gamesReady", RufflePresent())
                 .EndObject();
 
             b.Name("logging").BeginObject()
@@ -306,6 +310,8 @@ namespace Social.Web
                 ApplyLimit(limits, "maxCallMembers", _cfg.MaxCallMembers, 2, delegate(int v) { _cfg.MaxCallMembers = v; });
                 ApplyLimit(limits, "giftPerHour", _cfg.GiftPerHour, 0, delegate(int v) { _cfg.GiftPerHour = v; });
                 ApplyLimit(limits, "maxGiftMessage", _cfg.MaxGiftMessage, 0, delegate(int v) { _cfg.MaxGiftMessage = v; });
+                ApplyLimit(limits, "maxGameKB", _cfg.MaxGameKB, 64, delegate(int v) { _cfg.MaxGameKB = v; });
+                ApplyLimit(limits, "maxGameFiles", _cfg.MaxGameFiles, 0, delegate(int v) { _cfg.MaxGameFiles = v; });
                 if (limits.ContainsKey("callStun"))
                 {
                     _cfg.CallStun = Util.SingleLine(Json.GetString(limits, "callStun", _cfg.CallStun), 400);
@@ -361,6 +367,11 @@ namespace Social.Web
                 {
                     _cfg.GiftsEnabled = Json.GetBool(ui, "giftsEnabled", _cfg.GiftsEnabled);
                     _cfg.SetIniValue("ui", "giftsEnabled", _cfg.GiftsEnabled ? "true" : "false");
+                }
+                if (ui.ContainsKey("gamesEnabled"))
+                {
+                    _cfg.GamesEnabled = Json.GetBool(ui, "gamesEnabled", _cfg.GamesEnabled);
+                    _cfg.SetIniValue("ui", "gamesEnabled", _cfg.GamesEnabled ? "true" : "false");
                 }
             }
 

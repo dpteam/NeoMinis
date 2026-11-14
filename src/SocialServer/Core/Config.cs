@@ -167,6 +167,10 @@ namespace Social.Core
         public int MaxVideoKB = 5120;
         public int MaxAudioFiles = 200;
         public int MaxVideoFiles = 50;
+
+        // Flash games (Ruffle): uploaded .swf files
+        public int MaxGameKB = 8192;
+        public int MaxGameFiles = 20;
         public int MaxStatusLength = 140;
         public int MaxBioLength = 2000;
         public int MaxNameLength = 40;
@@ -205,6 +209,8 @@ namespace Social.Core
         public int NotifyWaitSec = 20;
         // the gift shop on profiles
         public bool GiftsEnabled = true;
+        // Flash games shelf (needs public/assets/vendor/ruffle)
+        public bool GamesEnabled = true;
 
         public bool Degraded;
         public string DegradedReason = "";
@@ -459,6 +465,8 @@ namespace Social.Core
                     else if (key == "maxvideokb") MaxVideoKB = Int(val, MaxVideoKB);
                     else if (key == "maxaudiofiles") MaxAudioFiles = Int(val, MaxAudioFiles);
                     else if (key == "maxvideofiles") MaxVideoFiles = Int(val, MaxVideoFiles);
+                    else if (key == "maxgamekb") MaxGameKB = Int(val, MaxGameKB);
+                    else if (key == "maxgamefiles") MaxGameFiles = Int(val, MaxGameFiles);
                     else if (key == "maxstatuslength") MaxStatusLength = Int(val, MaxStatusLength);
                     else if (key == "maxbiolength") MaxBioLength = Int(val, MaxBioLength);
                     else if (key == "maxnamelength") MaxNameLength = Int(val, MaxNameLength);
@@ -498,6 +506,7 @@ namespace Social.Core
                     else if (key == "livenotifications") LiveNotifications = Bool(val, LiveNotifications);
                     else if (key == "notifywaitsec") NotifyWaitSec = Int(val, NotifyWaitSec);
                     else if (key == "giftsenabled") GiftsEnabled = Bool(val, GiftsEnabled);
+                    else if (key == "gamesenabled") GamesEnabled = Bool(val, GamesEnabled);
                     break;
             }
         }
@@ -529,6 +538,8 @@ namespace Social.Core
             if (GiftPerHour < 0) GiftPerHour = 0;
             if (MaxGiftMessage < 0) MaxGiftMessage = 0;
             if (MaxGiftMessage > 1000) MaxGiftMessage = 1000;
+            if (MaxGameKB < 64) MaxGameKB = 64;
+            if (MaxGameFiles < 0) MaxGameFiles = 0;
             if (BackupKeep < 1) BackupKeep = 1;
             if (SaveDebounceMs < 100) SaveDebounceMs = 100;
             if (string.IsNullOrEmpty(CookieName)) CookieName = "sid";

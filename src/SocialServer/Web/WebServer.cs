@@ -433,6 +433,13 @@ namespace Social.Web
                 return;
             }
 
+            // the sandboxed Ruffle host page (see ApiRouter.ServePlayer)
+            if (path.StartsWith("/play/", StringComparison.OrdinalIgnoreCase) &&
+                _api.ServePlayer(req, resp, path))
+            {
+                return;
+            }
+
             // optional brand palette generated from config.ini [branding]
             if (path.Equals("/brand.css", StringComparison.OrdinalIgnoreCase))
             {
@@ -481,6 +488,9 @@ namespace Social.Web
             m[".ttf"] = "font/ttf";
             m[".txt"] = "text/plain; charset=utf-8";
             m[".map"] = "application/json; charset=utf-8";
+            // WebAssembly.instantiateStreaming only accepts the real type; a wrong
+            // one makes Ruffle fall back to the slower buffer path.
+            m[".wasm"] = "application/wasm";
             m[".xml"] = "application/xml; charset=utf-8";
             m[".webmanifest"] = "application/manifest+json";
             m[".webm"] = "audio/webm";
@@ -536,6 +546,15 @@ namespace Social.Web
                 Log.Warn("SEC", "path traversal attempt: " + req.Target);
                 SendText(req, resp, 400, "Bad request");
                 return;
+            }
+
+            // The Ruffle player runs in an opaque-origin iframe, so its assets are
+            // fetched cross-origin and need an explicit allow. They are public
+            // files with no credentials involved, so "*" is safe here.
+            if (relative.StartsWith("/assets/", StringComparison.OrdinalIgnoreCase))
+            {
+                resp.Set("Access-Control-Allow-Origin", "*");
+                resp.Set("Cross-Origin-Resource-Policy", "cross-origin");
             }
 
             if (Directory.Exists(file))
@@ -605,6 +624,23 @@ namespace Social.Web
                 resp.Set("Content-Disposition", "inline");
                 resp.Set("Accept-Ranges", "none");
                 SendFile(req, resp, file, MediaStore.MimeForFile(ext), true);
+                return;
+            }
+            // Flash movies: never handed out as a plugin type. The player page
+            // fetches the bytes and feeds them to Ruffle, so the browser has no
+            // reason to ever treat this as executable content.
+            if (rel.StartsWith("games/", StringComparison.OrdinalIgnoreCase))
+            {
+                string ext = Path.GetExtension(file).ToLowerInvariant();
+                if (ext != ".swf")
+                {
+                    SendText(req, resp, 404, "Not found");
+                    return;
+                }
+                resp.Set("Content-Disposition", "attachment; filename=\"game.swf\"");
+                resp.Set("Content-Security-Policy", "default-src 'none'; sandbox");
+                resp.Set("Access-Control-Allow-Origin", "*");
+                SendFile(req, resp, file, "application/octet-stream", true);
                 return;
             }
             resp.Set("Content-Disposition", "inline");
@@ -729,9 +765,12 @@ namespace Social.Web
         {
             if (resp == null) return;
             resp.Set("X-Content-Type-Options", "nosniff");
-            resp.Set("X-Frame-Options", "DENY");
+            if (!resp.Headers.ContainsKey("X-Frame-Options")) resp.Set("X-Frame-Options", "DENY");
             resp.Set("Referrer-Policy", "strict-origin-when-cross-origin");
-            resp.Set("Cross-Origin-Resource-Policy", "same-origin");
+            // a caller may have relaxed this on purpose (the sandboxed player page
+            // is framed by us and has an opaque origin)
+            if (!resp.Headers.ContainsKey("Cross-Origin-Resource-Policy"))
+                resp.Set("Cross-Origin-Resource-Policy", "same-origin");
             resp.Set("Permissions-Policy", "camera=(), microphone=(self), geolocation=(), payment=(), usb=()");
             // a caller may have set a stricter policy already (downloads, sandboxes)
             if (!resp.Headers.ContainsKey("Content-Security-Policy"))

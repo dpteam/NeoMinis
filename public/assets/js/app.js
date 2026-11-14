@@ -342,6 +342,8 @@ var App = (function () {
     html += side('#/calls', 'phone', T('nav.calls'), 'calls');
     if (!App.state.site || App.state.site.giftsEnabled !== false)
       html += side('#/gifts', 'gift', T('nav.gifts'), 'gifts');
+    if (!App.state.site || App.state.site.gamesEnabled !== false)
+      html += side('#/games', 'gamepad', T('nav.games'), 'games');
     html += '<div class="side-sep"></div>';
     html += side('#/profile/' + u.id, 'id-card', T('nav.profile'), 'profile');
     html += side('#/settings', 'gear', T('nav.settings'), 'settings');

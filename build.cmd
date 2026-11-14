@@ -55,4 +55,9 @@ echo   exe   : %OUT%\SocialServer.exe
 echo   run   : run.cmd
 echo   web   : http://localhost:8080/   (see bin\config.ini for the real port)
 echo.
+if not exist "%OUT%\public\assets\vendor\ruffle\ruffle.js" (
+  echo [NOTE] Ruffle is not bundled: Flash games stay off until you run
+  echo        powershell -NoProfile -ExecutionPolicy Bypass -File tools\fetch-ruffle.ps1
+  echo.
+)
 endlocal

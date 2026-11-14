@@ -153,3 +153,24 @@ Quoted arguments survive: `--cmd "broadcast \"maintenance at 22:00\""`.
 
 The console is the "root" channel: it bypasses authentication on purpose, so it
 must stay local. The web board is the one you expose.
+
+---
+
+## Optional pieces
+
+Some features need a file that is too big to keep in git. They ship switched off
+and turn themselves on once the file is there (no restart of the data needed):
+
+| Feature | Needs | Fetch it with |
+| --- | --- | --- |
+| Flash games (Ruffle) | `public/assets/vendor/ruffle/ruffle.js` (~28 MB of wasm) | `tools\fetch-ruffle.ps1` |
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\fetch-ruffle.ps1
+```
+
+The script downloads the pinned Ruffle release from the npm registry, unpacks only
+the runtime files and leaves them in `public/assets/vendor/ruffle/`. Run it again
+with `-Force` to update, or with `-Version 0.7.2` to pin something else. Until it
+has run, `/api/games` answers `403 games-off`, the Games entry disappears from the
+sidebar, and Admin → Settings shows a warning instead of the switch.

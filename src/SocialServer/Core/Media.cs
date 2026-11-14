@@ -197,9 +197,61 @@ namespace Social.Core
             return "/media/" + sub + "/" + name;
         }
 
-        /// <summary>Audio containers every browser can play.</summary>
-        public static string[] AudioExtensions()
+        /// <summary>
+        /// Stores an uploaded Flash movie. The file is accepted only when its first
+        /// three bytes are a real SWF signature (FWS/CWS/ZWS): the extension the
+        /// browser reports is never trusted, so an .html or .svg renamed to .swf is
+        /// rejected. The result is always stored as ".swf" and served as an opaque
+        /// download, never as a Flash plugin type.
+        /// </summary>
+        public string SaveGame(string dataUrl, int maxKb, out string error)
         {
+            error = "";
+            string mime;
+            byte[] data = Util.ParseDataUrl(dataUrl, out mime);
+            if (data == null) { error = "bad-file"; return null; }
+            if (data.Length < 8) { error = "empty-file"; return null; }
+            if (data.Length > (long)maxKb * 1024L) { error = "file-too-large"; return null; }
+            if (!IsSwf(data)) { error = "unsupported-game"; return null; }
+
+            string sub = "games";
+            string dir = Path.Combine(_cfg.MediaDir, sub);
+            Directory.CreateDirectory(dir);
+
+            string name = Crypto.RandomHex(16) + ".swf";
+            string path = Path.Combine(dir, name);
+            string tmp = path + ".tmp";
+            try
+            {
+                File.WriteAllBytes(tmp, data);
+                if (File.Exists(path)) File.Delete(path);
+                File.Move(tmp, path);
+            }
+            catch (Exception ex)
+            {
+                error = "save-failed";
+                Log.Error("MEDIA", "cannot save game: " + ex.Message);
+                try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+                return null;
+            }
+
+            Log.Debug("MEDIA", "game saved " + name + " (" + data.Length + " bytes)");
+            return "/media/" + sub + "/" + name;
+        }
+
+        /// <summary>True when the bytes start with an uncompressed or compressed SWF header.</summary>
+        public static bool IsSwf(byte[] data)
+        {
+            if (data == null || data.Length < 8) return false;
+            char a = (char)data[0], b = (char)data[1], c = (char)data[2];
+            if (!((a == 'F' || a == 'C' || a == 'Z') && b == 'W' && c == 'S')) return false;
+            // byte 3 is the Flash version, bytes 4..7 the uncompressed length
+            if (data[3] < 1) return false;
+            return true;
+        }
+
+        /// <summary>Audio containers every browser can play.</summary>
+        public static string[] AudioExtensions()        {
             return new string[] { ".mp3", ".m4a", ".aac", ".ogg", ".oga", ".opus", ".wav", ".flac", ".weba" };
         }
 

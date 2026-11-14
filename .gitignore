@@ -22,3 +22,6 @@ obj/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# vendored Ruffle (fetched by tools\fetch-ruffle.ps1, ~28 MB of wasm)
+public/assets/vendor/ruffle/

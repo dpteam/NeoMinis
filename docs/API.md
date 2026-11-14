@@ -336,6 +336,39 @@ and is what `#/calls` shows. `limits.maxCallMembers` (default 8) caps a call, an
 `limits.callStun` holds the comma-separated ICE servers the browsers use (empty =
 LAN only, no external lookups; add your own TURN for strict NATs).
 
+### Flash games
+
+Games are `.swf` files played by [Ruffle](https://ruffle.rs), a Flash player
+compiled to WebAssembly. Ruffle is **vendored, not committed** (~28 MB of wasm):
+run `tools\fetch-ruffle.ps1` once and it lands in `public/assets/vendor/ruffle/`.
+Until then `site.gamesEnabled` is `false`, the shelf and every endpoint answer
+`403 games-off`, and Admin → Settings shows a warning.
+
+| Method | Path | Body / query | Result |
+| --- | --- | --- | --- |
+| GET | `/api/games` | `user`, `q`, `before`, `limit` | `{ games[], total, hasMore, next }` |
+| GET | `/api/game` | `id` | `{ game }` |
+| POST | `/api/game/upload` | `data`, `title`, `description` | `{ game }` |
+| POST | `/api/game/edit` | `id`, `title`, `description` | `{ game }` |
+| POST | `/api/game/delete` | `id` | `{ id }` |
+| POST | `/api/game/play` | `id` | `{ plays }` |
+| POST | `/api/game/like` | `id` | `{ likes, liked }` |
+| GET | `/play/<id>` | — | HTML player page |
+
+`data` is a data URL. The server never trusts the extension or the claimed MIME:
+the bytes must start with a real SWF signature (`FWS`/`CWS`/`ZWS` plus a Flash
+version), otherwise the upload is rejected with `400 bad-swf`. Files are stored
+as `/media/games/<random>.swf` and served as `application/octet-stream` with
+`Content-Disposition: attachment`, `nosniff` and `default-src 'none'; sandbox`,
+so a browser can never be talked into treating one as executable content.
+
+`/play/<id>` is a standalone page that loads Ruffle and hands it the movie bytes.
+The SPA embeds it in `<iframe sandbox="allow-scripts">`: the movie runs on an
+opaque origin with no cookies, no `localStorage` and no handle on the parent
+document, even through `ExternalInterface` (`allowScriptAccess` is off and
+`openUrlMode` is `deny`). Limits: `limits.maxGameKB` (8192) per file and
+`limits.maxGameFiles` (20) per account; `ui.gamesEnabled` hides the shelf.
+
 ### Gifts
 
 A small built-in catalogue instead of uploads: every gift is a key, and the
