@@ -79,7 +79,8 @@ namespace Social.Web
             b.Prop("hasMore", hasMore);
             b.Prop("next", gifts.Count > 0 ? gifts[gifts.Count - 1].Id : 0);
             b.Prop("canSend", _cfg.GiftsEnabled && target.Id != ctx.User.Id &&
-                              !_store.IsBlocked(target.Id, ctx.User.Id) && CanViewProfile(ctx.User, target));
+                              !_store.IsBlocked(target.Id, ctx.User.Id) && CanViewProfile(ctx.User, target) &&
+                              Privacy.Allows(target, ctx.User, "gifts", _store.AreFriends(ctx.User.Id, target.Id)));
             SendOk(ctx, b);
         }
 
@@ -110,6 +111,8 @@ namespace Social.Web
             if (target.Deleted) throw new ApiException(404, "no-user", "User not found");
             if (!CanViewProfile(ctx.User, target))
                 throw new ApiException(403, "private", "This profile is private");
+            if (!Privacy.Allows(target, ctx.User, "gifts", _store.AreFriends(ctx.User.Id, target.Id)))
+                throw new ApiException(403, "gifts-closed", "This user does not accept gifts");
             if (_store.IsBlocked(target.Id, ctx.User.Id))
                 throw new ApiException(403, "blocked", "This user does not accept gifts from you");
 

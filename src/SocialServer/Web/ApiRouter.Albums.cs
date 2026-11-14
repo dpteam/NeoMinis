@@ -40,6 +40,8 @@ namespace Social.Web
             long userId = LongQuery(ctx, "user");
             User target = userId > 0 ? RequireUser(userId) : ctx.User;
             if (!CanViewProfile(ctx.User, target)) throw new ApiException(403, "private", "This profile is private");
+            if (!Privacy.Allows(target, ctx.User, "albums", _store.AreFriends(ctx.User.Id, target.Id)))
+                throw new ApiException(403, "albums-closed", "This user keeps their albums private");
 
             List<Album> albums = _store.AlbumsFor(target.Id);
             JsonBuilder b = new JsonBuilder(4096);
@@ -58,6 +60,8 @@ namespace Social.Web
             User owner = _store.FindUser(a.Owner);
             if (owner == null || owner.Deleted) throw new ApiException(404, "no-album", "Album not found");
             if (!CanViewProfile(ctx.User, owner)) throw new ApiException(403, "private", "This profile is private");
+            if (!Privacy.Allows(owner, ctx.User, "albums", _store.AreFriends(ctx.User.Id, owner.Id)))
+                throw new ApiException(403, "albums-closed", "This user keeps their albums private");
 
             long before = LongQuery(ctx, "before");
             int limit = LimitParam(ctx, 24, 60);

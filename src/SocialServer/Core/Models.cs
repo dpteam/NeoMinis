@@ -63,6 +63,9 @@ namespace Social.Core
         // profile cover strip; empty = the default gradient
         public string Cover = "";
 
+        // per-area privacy switches, see Core/Privacy.cs (empty = everything open)
+        public string PrivacyPrefs = "";
+
         public bool IsAdmin { get { return Role == "admin"; } }
         public bool IsModerator { get { return Role == "admin" || Role == "moderator"; } }
         public bool IsBannedNow { get { return Banned && (BannedUntil == DateTime.MinValue || BannedUntil > DateTime.UtcNow); } }

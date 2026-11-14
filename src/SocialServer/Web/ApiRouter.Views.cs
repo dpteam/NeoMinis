@@ -52,15 +52,21 @@ namespace Social.Web
             b.Prop("friends", _store.CountFriends(u.Id));
             b.Prop("posts", _store.CountPosts(u.Id));
             b.Prop("canMessage", CanMessageUser(viewer, u));
-            b.Prop("canCall", !self && viewer != null && _cfg.MaxCallMembers >= 2 &&
-                              CanMessageUser(viewer, u) &&
-                              !_store.IsBlocked(u.Id, viewer.Id) && !_store.IsBlocked(viewer.Id, u.Id));
+            b.Prop("canCall", !self && viewer != null && _cfg.MaxCallMembers >= 2 && CanCallUser(viewer, u));
             b.Prop("mood", u.Mood);
             b.Prop("legacySource", u.LegacySource);
             if (!string.IsNullOrEmpty(u.Badges)) b.Prop("badges", u.Badges);
             if (self || staff) b.Prop("canGames", u.CanGames || u.IsAdmin);
             b.Prop("vip", u.Vip);
             b.Prop("cover", u.Cover);
+            if (self || staff)
+            {
+                b.Name("privacyPrefs").BeginObject();
+                Dictionary<string, string> prefs = Privacy.Parse(u.PrivacyPrefs);
+                for (int i = 0; i < Privacy.Scopes.Length; i++)
+                    b.Prop(Privacy.Scopes[i], prefs[Privacy.Scopes[i]]);
+                b.EndObject();
+            }
             if (self || staff) b.Prop("lastSeen", Util.Iso(u.LastSeen));
             else if (!u.HideOnline) b.Prop("lastSeen", Util.Iso(u.LastSeen));
             else b.Prop("lastSeen", "");
@@ -431,8 +437,17 @@ namespace Social.Web
             if (viewer == null || target == null || target.Deleted || target.Banned) return false;
             if (viewer.Id == target.Id) return false;
             if (_store.IsBlocked(target.Id, viewer.Id) || _store.IsBlocked(viewer.Id, target.Id)) return false;
-            if (target.Privacy == "public" || string.IsNullOrEmpty(target.Privacy)) return true;
+            if (target.Privacy == "public" || string.IsNullOrEmpty(target.Privacy))
+                return Privacy.Allows(target, viewer, "write", _store.AreFriends(viewer.Id, target.Id));
             return _store.AreFriends(viewer.Id, target.Id);
+        }
+
+        /// <summary>True when the viewer may ring this person, by their own settings.</summary>
+        private bool CanCallUser(User viewer, User target)
+        {
+            if (viewer == null || target == null) return false;
+            if (!CanMessageUser(viewer, target)) return false;
+            return Privacy.Allows(target, viewer, "call", _store.AreFriends(viewer.Id, target.Id));
         }
 
         private User RequireUser(long id)

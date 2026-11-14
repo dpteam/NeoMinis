@@ -60,7 +60,7 @@ namespace Social.Web
             {
                 User target = RequireUser(with);
                 if (target.Id == ctx.User.Id) throw new ApiException(400, "self", "You cannot call yourself");
-                if (!CanMessageUser(ctx.User, target))
+                if (!CanCallUser(ctx.User, target))
                     throw new ApiException(403, "cannot-call", "You cannot call this user");
 
                 // already ringing? hand the same call back instead of stacking

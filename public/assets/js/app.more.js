@@ -2225,6 +2225,28 @@
     });
   };
 
+  /// <summary>
+  /// The per-area privacy switches. Every scope is "all / friends / nobody" and the
+  /// default is "all", so an untouched account behaves exactly as before.
+  /// </summary>
+  function privacyBlock(u) {
+    var prefs = u.privacyPrefs || {};
+    var scopes = ['write', 'call', 'wall', 'gifts', 'albums', 'friends'];
+    var html = '<div class="settings-block"><h3>' + T('settings.privacyDetail') + '</h3>' +
+      '<div class="hint" style="margin-bottom:8px">' + T('settings.privacyDetailHint') + '</div>';
+    for (var i = 0; i < scopes.length; i++) {
+      var key = scopes[i];
+      var value = prefs[key] || 'all';
+      html += '<div class="field"><label>' + T('privacy.scope.' + key) + '</label>' +
+        '<select class="select" data-privacy="' + key + '">' +
+        '<option value="all"' + (value === 'all' ? ' selected' : '') + '>' + T('privacy.all') + '</option>' +
+        '<option value="friends"' + (value === 'friends' ? ' selected' : '') + '>' + T('privacy.friends') + '</option>' +
+        '<option value="nobody"' + (value === 'nobody' ? ' selected' : '') + '>' + T('privacy.nobody') + '</option>' +
+        '</select></div>';
+    }
+    return html + '</div>';
+  }
+
   // ---------------------------------------------------------- media library
 
   function mediaView(kind) {
@@ -2721,7 +2743,8 @@
         '<option value="public"' + (u.privacy === 'public' ? ' selected' : '') + '>' + T('feed.public') + '</option>' +
         '<option value="friends"' + (u.privacy === 'friends' ? ' selected' : '') + '>' + T('feed.friendsOnly') + '</option>' +
         '<option value="private"' + (u.privacy === 'private' ? ' selected' : '') + '>' + T('feed.private') + '</option></select></div>' +
-        '<label class="check"><input type="checkbox" id="s-hide"' + (u.hideOnline ? ' checked' : '') + '> <span>' + T('settings.hideOnline') + '</span></label></div>';
+        '<label class="check"><input type="checkbox" id="s-hide"' + (u.hideOnline ? ' checked' : '') + '> <span>' + T('settings.hideOnline') + '</span></label></div>' +
+        privacyBlock(u);
 
       html += '<div class="settings-block"><h3>' + T('settings.notifications') + '</h3>' +
         '<div class="hint" style="margin-bottom:6px">' + T('settings.notificationsHint') + '</div>' +
@@ -2871,6 +2894,18 @@
       // privacy + hide online
       var pr = document.getElementById('s-privacy');
       if (pr) pr.addEventListener('change', function () { App.saveSetting({ privacy: pr.value }); });
+
+      // per-area privacy: collect every switch and send them as one object
+      var privacySelects = document.querySelectorAll('[data-privacy]');
+      for (var pi = 0; pi < privacySelects.length; pi++) {
+        privacySelects[pi].addEventListener('change', function () {
+          var map = {};
+          var all = document.querySelectorAll('[data-privacy]');
+          for (var k = 0; k < all.length; k++) map[all[k].getAttribute('data-privacy')] = all[k].value;
+          App.saveSetting({ privacyPrefs: map });
+          UI.toast(T('common.saved'), 'ok');
+        });
+      }
       var sh = document.getElementById('s-hide');
       if (sh) sh.addEventListener('change', function () { App.saveSetting({ hideOnline: sh.checked }); });
 

@@ -875,6 +875,62 @@ async function main() {
   const photoStill = await alice.call('GET', '/api/post?id=' + p1.data.post.id);
   ok('photos survive their album', photoStill.status === 200, String(photoStill.status));
 
+  // ---- per-area privacy
+  const closed = await bob.call('POST', '/api/settings', {
+    privacyPrefs: { write: 'nobody', call: 'nobody', gifts: 'nobody', albums: 'nobody', friends: 'nobody' }
+  });
+  ok('privacy saved', closed.status === 200 &&
+    closed.data.user && closed.data.user.privacyPrefs &&
+    closed.data.user.privacyPrefs.write === 'nobody' &&
+    closed.data.user.privacyPrefs.wall === 'all',
+    JSON.stringify(closed.data && closed.data.user && closed.data.user.privacyPrefs));
+
+  const stranger3 = await new Client('stranger3');
+  await stranger3.register('st3_' + stamp, 'outsider-pass-1');
+
+  const blockedWrite = await stranger3.call('POST', '/api/messages/send', {
+    to: bob.user.id, body: 'should not arrive'
+  });
+  ok('nobody may write when write=nobody', blockedWrite.status === 403, String(blockedWrite.status));
+
+  const blockedCall = await stranger3.call('POST', '/api/call/start', { with: bob.user.id });
+  ok('nobody may call when call=nobody', blockedCall.status === 403, String(blockedCall.status));
+
+  const blockedGift = await stranger3.call('POST', '/api/gifts/send', {
+    to: bob.user.id, kind: 'heart'
+  });
+  ok('nobody may gift when gifts=nobody', blockedGift.status === 403, String(blockedGift.status));
+
+  const blockedAlbums = await stranger3.call('GET', '/api/albums?user=' + bob.user.id);
+  ok('nobody may see albums when albums=nobody', blockedAlbums.status === 403, String(blockedAlbums.status));
+
+  const blockedFriends = await stranger3.call('GET', '/api/friends?user=' + bob.user.id);
+  ok('nobody may see friends when friends=nobody', blockedFriends.status === 403, String(blockedFriends.status));
+
+  // the owner is never locked out of their own settings
+  const ownProfile = await bob.call('GET', '/api/profile?user=' + bob.user.id);
+  ok('the owner still sees their own privacy switches', ownProfile.status === 200 &&
+    ownProfile.data.user.privacyPrefs.write === 'nobody', '');
+
+  // a friend is allowed where the rule says friends
+  await bob.call('POST', '/api/settings', { privacyPrefs: { write: 'friends' } });
+  const friendWrite = await alice.call('POST', '/api/messages/send', {
+    to: bob.user.id, body: 'friends may write'
+  });
+  ok('friends may write when write=friends', friendWrite.status === 200, String(friendWrite.status));
+  const notFriendWrite = await stranger3.call('POST', '/api/messages/send', {
+    to: bob.user.id, body: 'still not allowed'
+  });
+  ok('a stranger still cannot write when write=friends', notFriendWrite.status === 403,
+    String(notFriendWrite.status));
+
+  // back to open so the rest of the suite is unaffected
+  await bob.call('POST', '/api/settings', { privacyPrefs: {} });
+  const reopened = await stranger3.call('POST', '/api/messages/send', {
+    to: bob.user.id, body: 'open again'
+  });
+  ok('clearing the switches reopens everything', reopened.status === 200, String(reopened.status));
+
   // ---- profile cover and the cosmetic VIP label
   const cover = await alice.call('POST', '/api/profile/cover', { data: PNG });
   ok('cover uploaded', cover.status === 200 && cover.data.cover.indexOf('/media/avatars/') === 0,

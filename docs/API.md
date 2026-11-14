@@ -88,9 +88,31 @@ permission, `404` missing, `409` conflict, `413` too large, `429` rate limit,
 | GET | `/api/me` | — | `{ me, site, notifications[5], threads[5] }` |
 | POST | `/api/logout` | — | drops the session |
 | GET | `/api/settings` | — | `{ user, site }` |
-| POST | `/api/settings` | `theme`, `lang`, `sound`, `hideOnline`, `privacy`, `status`, `notifyMute[]` | `{ user }` |
+| POST | `/api/settings` | `theme`, `lang`, `sound`, `hideOnline`, `privacy`, `privacyPrefs`, `status`, `notifyMute[]` | `{ user }` |
 | POST | `/api/password` | `oldVerifier`, `newVerifier` | `{ sessionSalt }` (all other sessions dropped) |
 | POST | `/api/avatar` | `data` (data URL, png/jpg/gif/webp) | `{ avatar }` |
+| POST | `/api/profile/cover` | `data` (data URL, empty clears) | `{ cover }` |
+
+`privacy` is the old coarse profile visibility (`public` / `friends` / `private`).
+`privacyPrefs` is the per-area switch set and takes an object:
+
+```json
+{ "write": "friends", "call": "nobody", "wall": "all",
+  "gifts": "friends", "albums": "friends", "friends": "all" }
+```
+
+Each value is `all` (any signed-in account), `friends` or `nobody`; anything else
+falls back to `all`, and a missing scope is `all` too — which is why an account
+created before this feature keeps behaving exactly as before. The server stores only
+the non-default pairs as one flat string (`write=friends,call=nobody`), so there is
+no schema to migrate. `UserView` returns `privacyPrefs` to the owner and to staff
+only.
+
+Where each scope is enforced: `write` in `CanMessageUser`, `call` in
+`CanCallUser` (`/api/call/start`), `wall` in `CanPostOnWall`, `gifts` in
+`/api/gifts/send` and `canSend`, `albums` in `/api/albums` and `/api/album`,
+`friends` in `/api/friends`. The owner and moderators always pass; a block always
+wins over a permissive setting.
 
 ### Feed and posts
 

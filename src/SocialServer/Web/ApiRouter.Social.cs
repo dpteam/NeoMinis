@@ -113,6 +113,26 @@ namespace Social.Web
                     throw new ApiException(400, "bad-privacy", "Unknown privacy level");
                 ctx.User.Privacy = p;
             }
+            if (ctx.Body.ContainsKey("privacyPrefs"))
+            {
+                // one flat string of scope=value pairs; unknown scopes are ignored
+                Dictionary<string, object> prefs = Json.Get(ctx.Body, "privacyPrefs") as Dictionary<string, object>;
+                if (prefs != null)
+                {
+                    Dictionary<string, string> map = new Dictionary<string, string>(StringComparer.Ordinal);
+                    foreach (KeyValuePair<string, object> pair in prefs)
+                    {
+                        if (!Privacy.KnownScope(pair.Key)) continue;
+                        map[pair.Key] = Privacy.Normalize(Convert.ToString(pair.Value));
+                    }
+                    ctx.User.PrivacyPrefs = Privacy.Serialize(map);
+                }
+                else
+                {
+                    // a raw string is accepted too, so the CLI can set it
+                    ctx.User.PrivacyPrefs = Privacy.Serialize(Privacy.Parse(BodyStr(ctx, "privacyPrefs", "")));
+                }
+            }
             if (ctx.Body.ContainsKey("notifyMute"))
             {
                 string[] allowed = new string[] { "like", "comment", "friend", "message", "wall", "group", "mention", "badge", "reaction", "repost" };
@@ -1312,6 +1332,9 @@ namespace Social.Web
             long id = LongQuery(ctx, "user");
             User target = id > 0 ? RequireUser(id) : ctx.User;
             if (!CanViewProfile(ctx.User, target)) throw new ApiException(403, "private", "This profile is private");
+            if (target.Id != ctx.User.Id &&
+                !Privacy.Allows(target, ctx.User, "friends", _store.AreFriends(ctx.User.Id, target.Id)))
+                throw new ApiException(403, "friends-closed", "This user keeps their friend list private");
 
             List<User> friends = _store.FriendsOf(target.Id);
             JsonBuilder b = new JsonBuilder(4096);
@@ -2273,7 +2296,11 @@ namespace Social.Web
         {
             if (viewer == null || wall == null || wall.Deleted || wall.Banned) return false;
             if (viewer.Id == wall.Id) return true;
-            return _store.AreFriends(viewer.Id, wall.Id);
+            bool friend = _store.AreFriends(viewer.Id, wall.Id);
+            if (!Privacy.Allows(wall, viewer, "wall", friend)) return false;
+            // posting on a wall has always required friendship, and the default
+            // "all" must not quietly turn walls into open boards
+            return friend;
         }
 
         private void AppendPosts(JsonBuilder b, string name, List<Post> posts, User viewer)

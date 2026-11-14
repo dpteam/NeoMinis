@@ -4046,6 +4046,7 @@ namespace Social.Core
             if (u.CanGames) d["canGames"] = true;
             if (u.Vip) d["vip"] = true;
             if (!string.IsNullOrEmpty(u.Cover)) d["cover"] = u.Cover;
+            if (!string.IsNullOrEmpty(u.PrivacyPrefs)) d["privacyPrefs"] = u.PrivacyPrefs;
             return d;
         }
 
@@ -4101,6 +4102,7 @@ namespace Social.Core
             u.CanGames = Json.GetBool(d, "canGames", false);
             u.Vip = Json.GetBool(d, "vip", false);
             u.Cover = Json.GetString(d, "cover", "");
+            u.PrivacyPrefs = Json.GetString(d, "privacyPrefs", "");
             return u;
         }
 
