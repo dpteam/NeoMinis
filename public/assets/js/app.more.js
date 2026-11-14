@@ -146,7 +146,8 @@
   function msgPreview(m) {
     var body = String((m && m.body) || '').replace(/\s+/g, ' ').trim();
     if (body) return body.substring(0, 60);
-    if (m && m.file) return T('messages.file');
+    if (m.file) return T('messages.file');
+    if (m && m.images && m.images.length) return T('messages.album', m.images.length + 1);
     if (m && m.audio) return T('messages.voice');
     if (m && m.image) return T('messages.photo');
     return '';
@@ -219,6 +220,24 @@
     }
     var img = UI.safeUrl(m.image);
     var voice = UI.safeUrl(m.audio);
+    var album = [];
+    if (img) album.push(img);
+    if (m.images && m.images.length) {
+      for (var ai = 0; ai < m.images.length; ai++) {
+        var one = UI.safeUrl(m.images[ai]);
+        if (one) album.push(one);
+      }
+    }
+    var media = '';
+    if (album.length === 1) {
+      media = '<img class="msg-img" src="' + UI.attr(album[0]) + '" alt="" loading="lazy" data-zoom="1">';
+    } else if (album.length > 1) {
+      media = '<div class="msg-album n' + Math.min(album.length, 4) + '">';
+      for (var bi = 0; bi < album.length; bi++) {
+        media += '<img src="' + UI.attr(album[bi]) + '" alt="" loading="lazy" data-zoom="1">';
+      }
+      media += '</div>';
+    }
     var fwd = '';
     if (m.forwardedFrom) {
       var fn = m.forwardedFrom.displayName || m.forwardedFrom.username || '?';
@@ -229,7 +248,7 @@
       UI.icon(m.read ? 'check-double' : 'check') + '</span>' : '';
     return '<div class="bubble-row' + (mine ? ' mine' : '') + '" data-id="' + m.id + '">' + UI.avatar(u, 26) +
       '<div class="bubble">' + fwd + quote +
-      (img ? '<img class="msg-img" src="' + UI.attr(img) + '" alt="" loading="lazy">' : '') +
+      media +
       (voice ? '<div class="msg-voice">' + UI.icon('microphone') +
         '<audio controls preload="metadata" src="' + UI.attr(voice) + '"></audio>' +
         (m.audioSec ? '<span class="msg-voice-sec">' + fmtSec(m.audioSec) + '</span>' : '') + '</div>' : '') +
@@ -399,7 +418,7 @@
       '<div class="chat-row">' +
       '<button type="button" class="chat-btn" id="chat-mic-btn" title="' + UI.attr(T('messages.record')) + '">' + UI.icon('microphone') + '</button>' +
       '<button type="button" class="chat-btn" id="chat-file-btn" title="' + UI.attr(T('messages.attach')) + '">' + UI.icon('image') + '</button>' +
-      '<input type="file" id="chat-file" class="hidden" accept="image/png,image/jpeg,image/gif,image/webp">' +
+      '<input type="file" id="chat-file" class="hidden" accept="image/png,image/jpeg,image/gif,image/webp" multiple>' +
       '<button type="button" class="chat-btn" id="chat-doc-btn" title="' + UI.attr(T('messages.attachFile')) + '">' + UI.icon('paperclip') + '</button>' +
       '<input type="file" id="chat-doc" class="hidden">' +
       '<button type="button" class="chat-btn" id="chat-emoji-btn" title="' + UI.attr(T('messages.emoji')) + '">' + UI.icon('face-smile') + '</button>' +
@@ -429,7 +448,8 @@
 
       var body = '<div class="chat-head">' + UI.avatar(other, 34) +
         '<div class="chat-head-main"><div class="name">' + UI.esc(other.displayName) + '</div>' +
-        '<div class="tiny muted" id="chat-presence">' + (other.online ? T('profile.online') : '@' + UI.esc(other.username)) + '</div></div>' +
+        '<div class="tiny muted" id="chat-presence">' + (other.online ? T('profile.online') : '@' + UI.esc(other.username)) + '</div>' +
+        '<div class="tiny muted chat-read hidden" id="chat-read"></div></div>' +
         '<a class="btn btn-sm right" href="#/profile/' + other.id + '">' + T('nav.profile') + '</a></div>';
       body += '<div class="chat-body" id="chat-body">';
       if (data.hasMore) body += '<div class="center" style="padding:6px"><button type="button" class="btn btn-xs" id="chat-older">' + T('messages.loadOlder') + '</button></div>';
@@ -496,6 +516,7 @@
     var replyText = document.getElementById('chat-reply-text');
     var sendBtn = document.getElementById('chat-send');
     state.im.image = '';
+    state.im.album = [];
 
     // older messages
     var older = document.getElementById('chat-older');
@@ -538,25 +559,46 @@
       });
     }
 
-    // attachments
+    // attachments (single picture or an album of up to 6)
     document.getElementById('chat-file-btn').addEventListener('click', function () { file.click(); });
     file.addEventListener('change', function () {
-      var f = file.files && file.files[0];
-      if (!f) return;
-      UI.fileToDataUrl(f, (state.site.maxMessageImageKB || 2048) * 1024, function (err, dataUrl) {
-        if (err) {
-          UI.toast(err === 'too-large' ? T('messages.imageTooBig', state.site.maxMessageImageKB || 2048) : T('errors.generic'), 'err');
-          file.value = '';
+      var files = file.files ? Array.prototype.slice.call(file.files) : [];
+      if (!files.length) return;
+      if (files.length > 6) files = files.slice(0, 6);
+      var limit = (state.site.maxMessageImageKB || 2048) * 1024;
+      var results = [];
+      var failed = '';
+
+      function next(i) {
+        if (i >= files.length) {
+          if (failed) {
+            UI.toast(failed === 'too-large' ? T('messages.imageTooBig', state.site.maxMessageImageKB || 2048) : T('errors.generic'), 'err');
+          }
+          if (!results.length) { file.value = ''; return; }
+          state.im.album = results;
+          if (results.length === 1) {
+            attachImg.src = results[0];
+            attach.className = 'chat-attach';
+          } else {
+            attachImg.src = results[0];
+            attach.className = 'chat-attach';
+          }
+          ta.focus();
           return;
         }
-        state.im.image = dataUrl;
-        attachImg.src = dataUrl;
-        attach.className = 'chat-attach';
-        ta.focus();
-      });
+        var f = files[i];
+        if (f.size > limit) { failed = 'too-large'; next(i + 1); return; }
+        UI.fileToDataUrl(f, limit, function (err, dataUrl) {
+          if (err) { failed = 'too-large'; next(i + 1); return; }
+          results.push(dataUrl);
+          next(i + 1);
+        });
+      }
+      next(0);
     });
     document.getElementById('chat-attach-x').addEventListener('click', function () {
       state.im.image = '';
+      state.im.album = [];
       file.value = '';
       attach.className = 'chat-attach hidden';
       attachImg.removeAttribute('src');
@@ -740,23 +782,28 @@
       var text = ta.value.trim();
       var voice = state.im.voice;
       var doc = state.im.file;
-      if (!text && !state.im.image && !voice && !doc) { ta.focus(); return; }
+      var album = state.im.album || [];
+      if (!text && !album.length && !voice && !doc) { ta.focus(); return; }
       sendBtn.disabled = true;
-      Api.request('POST', '/api/messages/send', {
+      var payload = {
         to: withId,
         body: text,
-        image: state.im.image || '',
+        image: '',
         audio: voice ? voice.data : '',
         audioSec: voice ? voice.sec : 0,
         file: doc ? doc.data : '',
         fileName: doc ? doc.name : '',
         replyTo: state.im.replyTo || 0
-      }, function (err, data) {
+      };
+      if (album.length > 1) payload.images = album;
+      else if (album.length === 1) payload.image = album[0];
+      Api.request('POST', '/api/messages/send', payload, function (err, data) {
         sendBtn.disabled = false;
         if (err) { UI.toast(Api.errorText(err), 'err'); return; }
         ta.value = '';
         autoGrow(ta);
         state.im.image = '';
+        state.im.album = [];
         file.value = '';
         attach.className = 'chat-attach hidden';
         clearVoice();
@@ -886,6 +933,13 @@
   }
 
   function bindBubbles(scope) {
+    var zooms = (scope || document).querySelectorAll('.msg-img, .msg-album img');
+    for (var z = 0; z < zooms.length; z++) {
+      if (zooms[z].getAttribute('data-bound')) continue;
+      zooms[z].setAttribute('data-bound', '1');
+      zooms[z].addEventListener('click', function () { UI.imageModal(this.getAttribute('src')); });
+    }
+
     var forwards = (scope || document).querySelectorAll('.msg-forward');
     for (var f = 0; f < forwards.length; f++) {
       if (forwards[f].getAttribute('data-bound')) continue;
@@ -991,6 +1045,14 @@
     }
   }
 
+  function setReadUpTo(iso) {
+    var el = document.getElementById('chat-read');
+    if (!el) return;
+    if (!iso) { el.className = 'tiny muted chat-read hidden'; el.textContent = ''; return; }
+    el.className = 'tiny muted chat-read';
+    el.textContent = T('messages.readUpTo', UI.formatTime(iso));
+  }
+
   function markTicks(read) {
     if (!read) return;
     var ticks = document.querySelectorAll('.bubble-row.mine .tick');
@@ -1024,6 +1086,7 @@
         }
         setPresence(!!data.typing);
         markTicks(!!data.read);
+        setReadUpTo(data.readUpTo || '');
         if (typeof data.unread === 'number') App.setBadge('badge-msg', data.unread);
         pump();
       });

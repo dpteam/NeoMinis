@@ -205,7 +205,7 @@ earned (useful after an import or a rule change).
 | --- | --- | --- | --- |
 | GET | `/api/messages/threads` | — | `{ threads[], unread }` |
 | GET | `/api/messages` | `with`, `before`, `limit` | `{ other, messages[], hasMore, next }` |
-| POST | `/api/messages/send` | `to`, `body`, `image`, `audio`, `audioSec`, `file`, `fileName`, `replyTo` | `{ message }` |
+| POST | `/api/messages/send` | `to`, `body`, `image`, `images[]`, `audio`, `audioSec`, `file`, `fileName`, `replyTo` | `{ message }` |
 | GET | `/api/messages/wait` | `with`, `after`, `timeout` | `{ messages[], latest, typing, read, unread, live }` |
 | POST | `/api/messages/typing` | `to` | `{ ok }` |
 | POST | `/api/messages/react` | `id`, `emoji` | `{ message }` |
@@ -251,6 +251,14 @@ is refused with `400 unsupported-file`. Attachments land in `/media/files/` and 
 always served with `Content-Disposition: attachment` and a `default-src 'none';
 sandbox` CSP, so an uploaded document can never run script on the origin. Messages
 carry `file`, `fileName` and `fileSize`.
+
+`images` sends an album: up to 6 pictures in one message (extra entries are
+ignored). The first lands in `image` as usual and the rest come back as an
+`images[]` array, so older clients still see one picture. Forwarding copies every
+picture of the album, and deleting the message removes all of them.
+
+`GET /api/messages/wait` and the chat head show `readUpTo`: the timestamp of the
+newest message of yours the peer has read (empty when nothing is read yet).
 
 `/api/messages/search` looks only inside the caller's own conversations (deleted
 per-side messages are skipped) and is meant for the search box above the thread

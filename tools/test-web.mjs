@@ -428,6 +428,23 @@ async function main() {
   const noName = await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: '', file: TXT });
   ok('file without a name rejected', noName.status === 400, String(noName.status));
 
+  // ---- albums
+  const albumMsg = await bob.call('POST', '/api/messages/send', {
+    to: alice.user.id, body: 'album', images: [PNG, PNG, PNG]
+  });
+  ok('album saved', albumMsg.status === 200 && (albumMsg.data.message.images || []).length === 2 &&
+    !!albumMsg.data.message.image, JSON.stringify(albumMsg.data && albumMsg.data.message.images));
+  const tooMany = await bob.call('POST', '/api/messages/send', {
+    to: alice.user.id, body: '', images: [PNG, PNG, PNG, PNG, PNG, PNG, PNG]
+  });
+  ok('album is capped at six', tooMany.status === 200 && (tooMany.data.message.images || []).length === 5,
+    String(tooMany.status));
+
+  // ---- read receipts: alice opens the thread, bob sees readUpTo
+  await alice.call('GET', '/api/messages?with=' + bob.user.id);
+  const bobWait = await bob.call('GET', '/api/messages/wait?with=' + alice.user.id + '&after=0&timeout=1');
+  ok('read up to is reported', bobWait.status === 200 && !!bobWait.data.readUpTo, String(bobWait.data && bobWait.data.readUpTo));
+
   const fileFetch = await fetch(BASE + fileMsg.data.message.file);
   const fileHeaders = fileFetch.headers;
   ok('attachment is served as a download', fileFetch.status === 200 &&

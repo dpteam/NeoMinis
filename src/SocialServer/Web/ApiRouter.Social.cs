@@ -991,17 +991,52 @@ namespace Social.Web
                 throw new ApiException(429, "slow-down", "You are sending messages too fast");
             string text = Util.CleanText(BodyStr(ctx, "body", ""), _cfg.MaxMessageLength);
             string imageData = BodyStr(ctx, "image", "");
+            // an album: up to 6 pictures in one message, sent as `images`
+            List<object> albumRaw = Json.Get(ctx.Body, "images") as List<object>;
+            List<string> albumData = new List<string>();
+            if (albumRaw != null)
+            {
+                for (int i = 0; i < albumRaw.Count && albumData.Count < 6; i++)
+                {
+                    string one = albumRaw[i] as string ?? "";
+                    if (!string.IsNullOrEmpty(one)) albumData.Add(one);
+                }
+            }
+            if (albumData.Count > 0) imageData = "";
             string audioData = BodyStr(ctx, "audio", "");
             string fileData = BodyStr(ctx, "file", "");
             string fileName = Util.SingleLine(BodyStr(ctx, "fileName", ""), 120);
             int audioSec = (int)BodyLong(ctx, "audioSec", 0);
             long replyTo = BodyLong(ctx, "replyTo", 0);
-            if (text.Length == 0 && string.IsNullOrEmpty(imageData) && string.IsNullOrEmpty(audioData) &&
-                string.IsNullOrEmpty(fileData))
+            if (text.Length == 0 && string.IsNullOrEmpty(imageData) && albumData.Count == 0 &&
+                string.IsNullOrEmpty(audioData) && string.IsNullOrEmpty(fileData))
                 throw new ApiException(400, "empty", "Write something first");
 
             string image = "";
-            if (!string.IsNullOrEmpty(imageData))
+            string images = "";
+            if (albumData.Count > 0)
+            {
+                List<string> saved = new List<string>();
+                for (int i = 0; i < albumData.Count; i++)
+                {
+                    string err;
+                    string url = _media.SaveDataUrl(albumData[i], "message", _cfg.MaxMessageImageKB, out err);
+                    if (url == null)
+                    {
+                        // roll back what we already wrote so a bad picture leaves nothing behind
+                        for (int k = 0; k < saved.Count; k++) _media.Delete(saved[k]);
+                        throw new ApiException(400, err, "Image could not be saved");
+                    }
+                    saved.Add(url);
+                }
+                image = saved[0];
+                if (saved.Count > 1)
+                {
+                    List<string> rest = saved.GetRange(1, saved.Count - 1);
+                    images = string.Join("\n", rest.ToArray());
+                }
+            }
+            else if (!string.IsNullOrEmpty(imageData))
             {
                 string err;
                 image = _media.SaveDataUrl(imageData, "message", _cfg.MaxMessageImageKB, out err);
@@ -1038,7 +1073,7 @@ namespace Social.Web
                     throw new ApiException(400, "bad-reply", "The quoted message is not part of this conversation");
             }
 
-            Message m = _store.CreateMessage(ctx.User.Id, target.Id, text, image, audio, audioSec, replyTo, 0,
+            Message m = _store.CreateMessage(ctx.User.Id, target.Id, text, image, images, audio, audioSec, replyTo, 0,
                 fileUrl, fileUrl.Length == 0 ? "" : fileName, fileSize);
             TypingRegistry.Clear(ctx.User.Id, target.Id);
             ctx.User.LastMessageAt = DateTime.UtcNow;
@@ -1171,6 +1206,8 @@ namespace Social.Web
             b.Prop("latest", _store.LastMessageId(ctx.User.Id, other.Id));
             b.Prop("typing", TypingRegistry.IsTyping(other.Id, ctx.User.Id));
             b.Prop("read", _store.LastMineRead(ctx.User.Id, other.Id));
+            DateTime readUpTo = _store.ReadUpTo(ctx.User.Id, other.Id);
+            b.Prop("readUpTo", readUpTo == DateTime.MinValue ? "" : Util.Iso(readUpTo));
             b.Prop("unread", _store.UnreadMessages(ctx.User.Id));
             b.Prop("live", _cfg.LiveNotifications);
             SendOk(ctx, b);
@@ -1199,11 +1236,24 @@ namespace Social.Web
 
             // media is copied so the two messages never share a file on disk
             string image = string.IsNullOrEmpty(original.Image) ? "" : _media.Duplicate(original.Image);
+            string images = "";
+            if (!string.IsNullOrEmpty(original.Images))
+            {
+                string[] parts = original.Images.Split('\n');
+                List<string> copies = new List<string>();
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    if (parts[i].Trim().Length == 0) continue;
+                    string copy = _media.Duplicate(parts[i].Trim());
+                    if (!string.IsNullOrEmpty(copy)) copies.Add(copy);
+                }
+                images = string.Join("\n", copies.ToArray());
+            }
             string audio = string.IsNullOrEmpty(original.Audio) ? "" : _media.Duplicate(original.Audio);
             string file = string.IsNullOrEmpty(original.FileUrl) ? "" : _media.Duplicate(original.FileUrl);
             long author = original.ForwardedFrom > 0 ? original.ForwardedFrom : original.From;
 
-            Message m = _store.CreateMessage(ctx.User.Id, target.Id, original.Body, image, audio,
+            Message m = _store.CreateMessage(ctx.User.Id, target.Id, original.Body, image, images, audio,
                 original.AudioSec, 0, author, file, original.FileName, original.FileSize);
             ctx.User.LastMessageAt = DateTime.UtcNow;
             _store.MarkUserDirty(ctx.User);
@@ -1265,13 +1315,23 @@ namespace Social.Web
             Message m = _store.FindMessage(id);
             if (m == null) throw new ApiException(404, "no-message", "Message not found");
             string image = m.Image;
+            string images = m.Images;
             string audio = m.Audio;
             string file = m.FileUrl;
             if (!_store.DeleteMessage(id, ctx.User.Id)) throw new ApiException(404, "no-message", "Message not found");
             // the file only goes away once both sides dropped the message
-            if (!string.IsNullOrEmpty(image) && m.DeletedByFrom && m.DeletedByTo) _media.Delete(image);
-            if (!string.IsNullOrEmpty(audio) && m.DeletedByFrom && m.DeletedByTo) _media.Delete(audio);
-            if (!string.IsNullOrEmpty(file) && m.DeletedByFrom && m.DeletedByTo) _media.Delete(file);
+            if (m.DeletedByFrom && m.DeletedByTo)
+            {
+                if (!string.IsNullOrEmpty(image)) _media.Delete(image);
+                if (!string.IsNullOrEmpty(images))
+                {
+                    string[] parts = images.Split('\n');
+                    for (int i = 0; i < parts.Length; i++)
+                        if (parts[i].Trim().Length > 0) _media.Delete(parts[i].Trim());
+                }
+                if (!string.IsNullOrEmpty(audio)) _media.Delete(audio);
+                if (!string.IsNullOrEmpty(file)) _media.Delete(file);
+            }
             JsonBuilder b = new JsonBuilder(64);
             b.BeginObject();
             SendOk(ctx, b);

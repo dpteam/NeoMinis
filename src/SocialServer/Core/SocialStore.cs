@@ -1256,6 +1256,14 @@ namespace Social.Core
         public Message CreateMessage(long from, long to, string body, string image, string audio, int audioSec,
                                      long replyTo, long forwardedFrom, string fileUrl, string fileName, long fileSize)
         {
+            return CreateMessage(from, to, body, image, "", audio, audioSec, replyTo, forwardedFrom,
+                fileUrl, fileName, fileSize);
+        }
+
+        public Message CreateMessage(long from, long to, string body, string image, string images, string audio,
+                                     int audioSec, long replyTo, long forwardedFrom,
+                                     string fileUrl, string fileName, long fileSize)
+        {
             lock (_sync)
             {
                 EnsureWritable();
@@ -1265,6 +1273,7 @@ namespace Social.Core
                 m.To = to;
                 m.Body = body ?? "";
                 m.Image = image ?? "";
+                m.Images = images ?? "";
                 m.Audio = audio ?? "";
                 m.AudioSec = audioSec;
                 m.ReplyTo = replyTo;
@@ -1276,6 +1285,24 @@ namespace Social.Core
                 _messages.Insert(0, m);
                 MarkMessages();
                 return m;
+            }
+        }
+
+        /// <summary>
+        /// Timestamp up to which the peer has read our messages in this conversation,
+        /// or MinValue when they have not read anything yet.
+        /// </summary>
+        public DateTime ReadUpTo(long viewer, long other)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _messages.Count; i++)
+                {
+                    Message m = _messages[i];
+                    if (m.From != viewer || m.To != other || m.DeletedByFrom) continue;
+                    return m.Read ? m.Created : DateTime.MinValue;
+                }
+                return DateTime.MinValue;
             }
         }
 
@@ -2406,7 +2433,7 @@ namespace Social.Core
                 Message m = _messages[i];
                 Dictionary<string, object> d = new Dictionary<string, object>();
                 d["id"] = m.Id; d["from"] = m.From; d["to"] = m.To; d["body"] = m.Body;
-                d["image"] = m.Image; d["replyTo"] = m.ReplyTo;
+                d["image"] = m.Image; d["images"] = m.Images; d["replyTo"] = m.ReplyTo;
                 d["audio"] = m.Audio; d["audioSec"] = m.AudioSec;
                 d["reactions"] = m.Reactions;
                 d["forwardedFrom"] = m.ForwardedFrom;
@@ -2426,6 +2453,7 @@ namespace Social.Core
             m.To = Json.GetLong(d, "to", 0);
             m.Body = Json.GetString(d, "body", "");
             m.Image = Json.GetString(d, "image", "");
+            m.Images = Json.GetString(d, "images", "");
             m.Audio = Json.GetString(d, "audio", "");
             m.AudioSec = Json.GetInt(d, "audioSec", 0);
             m.ReplyTo = Json.GetLong(d, "replyTo", 0);

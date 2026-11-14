@@ -212,6 +212,14 @@ namespace Social.Web
             b.Prop("to", m.To);
             b.Prop("body", m.Body);
             b.Prop("image", m.Image);
+            if (!string.IsNullOrEmpty(m.Images))
+            {
+                b.Name("images").BeginArray();
+                string[] parts = m.Images.Split('\n');
+                for (int i = 0; i < parts.Length; i++)
+                    if (parts[i].Trim().Length > 0) b.Str(parts[i].Trim());
+                b.EndArray();
+            }
             b.Prop("audio", m.Audio);
             b.Prop("audioSec", m.AudioSec);
             if (!string.IsNullOrEmpty(m.FileUrl))
