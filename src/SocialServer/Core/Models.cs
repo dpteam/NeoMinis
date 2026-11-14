@@ -366,6 +366,15 @@ namespace Social.Core
         public bool Read;
         public bool DeletedByFrom;
         public bool DeletedByTo;
+        // "delete for everyone": the text and the files are dropped, and both sides
+        // see a placeholder instead. RevokedAt is kept so the UI can say when.
+        public bool Revoked;
+        public DateTime RevokedAt = DateTime.MinValue;
+        public long RevokedBy;
+        // pinned inside the conversation; the other side sees the same pin
+        public bool Pinned;
+        public DateTime PinnedAt = DateTime.MinValue;
+        public long PinnedBy;
     }
 
     public sealed class Notification

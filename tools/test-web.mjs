@@ -1978,6 +1978,68 @@ async function main() {
     ok('unsubscribing answers cleanly', removed.status === 200, String(removed.status));
   }
 
+  // ---- delete for everyone and pinned messages
+  // Fresh session: the admin block above bans and unbans bob, which drops his.
+  const revBob = new Client('rev-bob');
+  await revBob.login(ub, 'bob-password-1');
+
+  const revMsg = await alice.call('POST', '/api/messages/send', {
+    to: bob.user.id, body: 'this one gets taken back'
+  });
+  const revId = revMsg.data.message.id;
+  ok('a fresh message offers "delete for everyone"', revMsg.data.message.canRevoke === true, '');
+
+  const revoked = await alice.call('POST', '/api/messages/revoke', { id: revId });
+  ok('the author takes a message back', revoked.status === 200 &&
+    revoked.data.message.revoked === true && revoked.data.message.body === '',
+    String(revoked.status));
+
+  const revSeen = await revBob.call('GET', '/api/messages?with=' + alice.user.id + '&limit=20');
+  const revRow = (revSeen.data.messages || []).find(m => m.id === revId);
+  ok('the other side sees a tombstone, not the text', !!revRow &&
+    revRow.revoked === true && revRow.body === '', JSON.stringify(revRow && revRow.body));
+
+  const revTwice = await alice.call('POST', '/api/messages/revoke', { id: revId });
+  ok('taking it back twice is refused', revTwice.status === 400, String(revTwice.status));
+
+  const revForeign = await revBob.call('POST', '/api/messages/revoke', { id: revId });
+  ok('only the author may take a message back', revForeign.status === 403, String(revForeign.status));
+
+  // a quoted revoked message must not leak the text it just deleted
+  const replyToRev = await revBob.call('POST', '/api/messages/send',
+    { to: alice.user.id, body: 'quoting a ghost', replyTo: revId });
+  ok('a reply to a revoked message is allowed', replyToRev.status === 200, String(replyToRev.status));
+  const quoteCheck = await revBob.call('GET', '/api/messages?with=' + alice.user.id + '&limit=20');
+  const quoted = (quoteCheck.data.messages || []).find(m => m.id === replyToRev.data.message.id);
+  ok('the quote says "deleted" instead of the old text', !!quoted && quoted.replyTo &&
+    quoted.replyTo.revoked === true && quoted.replyTo.body === '',
+    JSON.stringify(quoted && quoted.replyTo));
+
+  // pinning
+  const pinMsg = await alice.call('POST', '/api/messages/send', { to: bob.user.id, body: 'pin this one' });
+  const pinId = pinMsg.data.message.id;
+  const pinned = await alice.call('POST', '/api/messages/pin', { id: pinId, on: true });
+  ok('a message can be pinned', pinned.status === 200 && pinned.data.pinned === true, String(pinned.status));
+
+  const pinnedList = await revBob.call('GET', '/api/messages?with=' + alice.user.id + '&limit=20');
+  ok('the other side sees the same pin', (pinnedList.data.pinned || []).some(p => p.id === pinId),
+    JSON.stringify((pinnedList.data.pinned || []).length));
+  ok('the conversation carries a revision for live refreshes',
+    typeof pinnedList.data.rev === 'number' && pinnedList.data.rev > 0, String(pinnedList.data.rev));
+
+  const unpinned = await revBob.call('POST', '/api/messages/pin', { id: pinId, on: false });
+  const afterUnpin = await alice.call('GET', '/api/messages?with=' + bob.user.id + '&limit=20');
+  ok('either side can unpin', unpinned.status === 200 &&
+    !(afterUnpin.data.pinned || []).some(p => p.id === pinId), String(unpinned.status));
+
+  const pinRevoked = await alice.call('POST', '/api/messages/pin', { id: revId, on: true });
+  ok('a taken-back message cannot be pinned', pinRevoked.status === 400, String(pinRevoked.status));
+
+  const pinOutsider = await new Client('pin-outsider');
+  await pinOutsider.register('po_' + stamp, 'outsider-pass-1');
+  const pinForeign = await pinOutsider.call('POST', '/api/messages/pin', { id: pinId, on: true });
+  ok('a stranger cannot pin somebody else\'s message', pinForeign.status === 403, String(pinForeign.status));
+
   // ---- guest / kiosk (read-only browsing)
   const guest = new Client('guest');
   const gLogin = await guest.guest('');

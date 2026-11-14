@@ -1721,8 +1721,125 @@ namespace Social.Core
             }
         }
 
-        // ====================================================== notifications
+        /// <summary>
+        /// "Delete for everyone": the message stays in place as a tombstone, so the
+        /// conversation still reads in order, but the text and every attachment are
+        /// gone for both sides. Returns a reason instead of a bool, because "you are
+        /// too late" and "that is not yours" are different answers.
+        /// </summary>
+        public string RevokeMessage(long id, long userId, int windowMinutes)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _messages.Count; i++)
+                {
+                    Message m = _messages[i];
+                    if (m.Id != id) continue;
+                    if (m.From != userId) return "not-mine";
+                    if (m.Revoked) return "already";
+                    if (windowMinutes > 0 &&
+                        (DateTime.UtcNow - m.Created).TotalMinutes > windowMinutes)
+                        return "too-late";
+                    m.Revoked = true;
+                    m.RevokedAt = DateTime.UtcNow;
+                    m.RevokedBy = userId;
+                    // the payload goes; the row stays so the history still makes sense
+                    m.Body = "";
+                    m.Image = "";
+                    m.Images = "";
+                    m.Video = "";
+                    m.Audio = "";
+                    m.FileUrl = "";
+                    m.FileName = "";
+                    m.FileSize = 0;
+                    m.Reactions = "";
+                    MarkMessages();
+                    return "ok";
+                }
+                return "not-found";
+            }
+        }
 
+        /// <summary>Pins or unpins a message inside its conversation.</summary>
+        public bool PinMessage(long id, long userId, bool pinned)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _messages.Count; i++)
+                {
+                    Message m = _messages[i];
+                    if (m.Id != id) continue;
+                    if (m.From != userId && m.To != userId) return false;
+                    if (m.Revoked) return false;   // nothing left worth pinning
+                    m.Pinned = pinned;
+                    m.PinnedAt = pinned ? DateTime.UtcNow : DateTime.MinValue;
+                    m.PinnedBy = pinned ? userId : 0;
+                    MarkMessages();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// The pinned messages of one conversation, oldest pin first so the bar
+        /// reads like a short list rather than a stack.
+        /// </summary>
+        public List<Message> PinnedMessages(long a, long b, int limit)
+        {
+            List<Message> list = new List<Message>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _messages.Count; i++)
+                {
+                    Message m = _messages[i];
+                    if (!m.Pinned || m.Revoked) continue;
+                    bool pair = (m.From == a && m.To == b) || (m.From == b && m.To == a);
+                    if (!pair) continue;
+                    list.Add(m);
+                }
+            }
+            list.Sort(delegate(Message x, Message y) { return x.PinnedAt.CompareTo(y.PinnedAt); });
+            if (limit > 0 && list.Count > limit) list.RemoveRange(limit, list.Count - limit);
+            return list;
+        }
+
+        // ====================================================== conversation rev
+
+        // A revoke or a pin changes a message that already exists, so the "last
+        // message id" the long poll watches does not move and the other side would
+        // only notice on the next message. This counter is bumped on every such
+        // change, so a parked wait wakes up and the client reloads the thread.
+        private readonly Dictionary<string, long> _convRev = new Dictionary<string, long>(StringComparer.Ordinal);
+
+        private static string ConvKey(long a, long b)
+        {
+            return a <= b ? a + ":" + b : b + ":" + a;
+        }
+
+        public long ConversationRev(long a, long b)
+        {
+            lock (_sync)
+            {
+                long rev;
+                return _convRev.TryGetValue(ConvKey(a, b), out rev) ? rev : 0;
+            }
+        }
+
+        public void BumpConversation(long a, long b)
+        {
+            lock (_sync)
+            {
+                string key = ConvKey(a, b);
+                long rev;
+                _convRev.TryGetValue(key, out rev);
+                _convRev[key] = rev + 1;
+            }
+        }
+
+        // ====================================================== notifications
         public Notification Notify(long userId, long actorId, string type, string text, string link)
         {
             lock (_sync)
@@ -5196,6 +5313,18 @@ namespace Social.Core
                 d["fileUrl"] = m.FileUrl; d["fileName"] = m.FileName; d["fileSize"] = m.FileSize;
                 d["created"] = m.Created; d["read"] = m.Read;
                 d["deletedByFrom"] = m.DeletedByFrom; d["deletedByTo"] = m.DeletedByTo;
+                if (m.Revoked)
+                {
+                    d["revoked"] = true;
+                    d["revokedAt"] = m.RevokedAt;
+                    d["revokedBy"] = m.RevokedBy;
+                }
+                if (m.Pinned)
+                {
+                    d["pinned"] = true;
+                    d["pinnedAt"] = m.PinnedAt;
+                    d["pinnedBy"] = m.PinnedBy;
+                }
                 list.Add(d);
             }
             return list;
@@ -5223,6 +5352,12 @@ namespace Social.Core
             m.Read = Json.GetBool(d, "read", false);
             m.DeletedByFrom = Json.GetBool(d, "deletedByFrom", false);
             m.DeletedByTo = Json.GetBool(d, "deletedByTo", false);
+            m.Revoked = Json.GetBool(d, "revoked", false);
+            m.RevokedAt = Json.GetDate(d, "revokedAt", DateTime.MinValue);
+            m.RevokedBy = Json.GetLong(d, "revokedBy", 0);
+            m.Pinned = Json.GetBool(d, "pinned", false);
+            m.PinnedAt = Json.GetDate(d, "pinnedAt", DateTime.MinValue);
+            m.PinnedBy = Json.GetLong(d, "pinnedBy", 0);
             return m;
         }
 

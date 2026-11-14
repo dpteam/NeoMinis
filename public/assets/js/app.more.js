@@ -211,12 +211,23 @@
   function bubbleHtml(m, other) {
     var mine = !!m.mine;
     var u = mine ? state.user : other;
+    // A message taken back by its author is a tombstone for both sides: no text,
+    // no media, and the row stays so the conversation still reads in order.
+    if (m.revoked) {
+      return '<div class="bubble-row' + (mine ? ' mine' : '') + '" data-id="' + m.id + '">' + UI.avatar(u, 26) +
+        '<div class="bubble revoked">' +
+        '<div class="msg-text msg-tombstone">' + UI.icon('ban') + ' ' +
+        UI.esc(mine ? T('messages.revokedMine') : T('messages.revokedTheirs')) + '</div>' +
+        '<div class="msg-foot"><span class="time">' + UI.formatTime(m.created) + '</span></div>' +
+        '</div></div>';
+    }
     var quote = '';
     if (m.replyTo) {
       var q = m.replyTo;
       var qname = q.mine ? T('common.you') : UI.esc(other.displayName || other.username);
       quote = '<div class="msg-quote"><b>' + qname + '</b><span>' +
-        UI.esc(q.body || (q.image ? T('messages.photo') : '')) + '</span></div>';
+        (q.revoked ? '<i class="muted">' + UI.esc(T('messages.revokedShort')) + '</i>'
+                   : UI.esc(q.body || (q.image ? T('messages.photo') : ''))) + '</span></div>';
     }
     var img = UI.safeUrl(m.image);
     var voice = UI.safeUrl(m.audio);
@@ -259,10 +270,13 @@
       (m.body ? '<div class="msg-text">' + msgBodyHtml(m.body) + '</div>' : '') +
       reactionChips(m) +
       '<div class="msg-foot"><span class="time">' + UI.formatTime(m.created) + '</span>' + tick +
+      (m.pinned ? '<span class="msg-pin" title="' + UI.attr(T('messages.pinned')) + '">' + UI.icon('thumbtack') + '</span>' : '') +
       '<button type="button" class="msg-act msg-react" data-id="' + m.id + '" title="' + UI.attr(T('messages.react')) + '">' + UI.icon('face-smile') + '</button>' +
       '<button type="button" class="msg-act msg-forward" data-id="' + m.id + '" title="' + UI.attr(T('messages.forward')) + '">' + UI.icon('share') + '</button>' +
       '<button type="button" class="msg-act msg-reply" data-id="' + m.id + '" title="' + UI.attr(T('messages.reply')) + '">' + UI.icon('reply') + '</button>' +
-      (mine ? '<button type="button" class="msg-act msg-del" data-id="' + m.id + '" title="' + UI.attr(T('common.delete')) + '">' + UI.icon('xmark') + '</button>' : '') +
+      '<button type="button" class="msg-act msg-pin-btn' + (m.pinned ? ' active' : '') + '" data-id="' + m.id + '" data-on="' + (m.pinned ? '1' : '0') + '" title="' + UI.attr(T(m.pinned ? 'messages.unpin' : 'messages.pin')) + '">' + UI.icon('thumbtack') + '</button>' +
+      (mine && m.canRevoke ? '<button type="button" class="msg-act msg-revoke" data-id="' + m.id + '" title="' + UI.attr(T('messages.revoke')) + '">' + UI.icon('ban') + '</button>' : '') +
+      (mine ? '<button type="button" class="msg-act msg-del" data-id="' + m.id + '" title="' + UI.attr(T('messages.deleteForMe')) + '">' + UI.icon('xmark') + '</button>' : '') +
       '</div></div></div>';
   }
 
@@ -442,7 +456,12 @@
       var other = data.other || {};
       var messages = data.messages || [];
       var lastId = messages.length ? messages[messages.length - 1].id : 0;
-      if (silent && chat.getAttribute('data-last') === String(lastId) && document.getElementById('chat-form')) return;
+      // A revoke or a pin changes a message that already exists, so the last id
+      // stays the same and the old guard would swallow the refresh.
+      var revNow = Number(data.rev || 0);
+      var sameRev = Number(state.im.rev || 0) === revNow;
+      if (silent && sameRev && chat.getAttribute('data-last') === String(lastId) &&
+          document.getElementById('chat-form')) return;
 
       var oldText = document.getElementById('chat-text');
       var typed = oldText ? oldText.value : '';
@@ -469,6 +488,22 @@
         '<a class="btn btn-sm right" href="#/profile/' + other.id + '">' + T('nav.profile') + '</a></div>';
       body += '<div class="chat-body" id="chat-body">';
       if (data.hasMore) body += '<div class="center" style="padding:6px"><button type="button" class="btn btn-xs" id="chat-older">' + T('messages.loadOlder') + '</button></div>';
+      // pinned bar: a short list, newest pin last, so it reads like a list
+      var pinnedList = data.pinned || [];
+      if (pinnedList.length) {
+        body += '<div class="chat-pinned" id="chat-pinned">';
+        for (var pi = 0; pi < pinnedList.length; pi++) {
+          var pm = pinnedList[pi];
+          var ptext = String(pm.body || '').replace(/\s+/g, ' ').slice(0, 90);
+          if (!ptext) ptext = pm.image ? T('messages.photo') : T('messages.attachment');
+          body += '<div class="chat-pin-row" data-id="' + pm.id + '" title="' + UI.attr(T('messages.jumpTo')) + '">' +
+            UI.icon('thumbtack') + '<b>' + UI.esc(pm.mine ? T('common.you') : (other.displayName || other.username)) + '</b>' +
+            '<span>' + UI.esc(ptext) + '</span>' +
+            '<button type="button" class="icon-btn msg-pin-btn" data-id="' + pm.id + '" data-on="1" title="' +
+            UI.attr(T('messages.unpin')) + '">' + UI.icon('xmark') + '</button></div>';
+        }
+        body += '</div>';
+      }
       if (!messages.length) body += '<div class="chat-empty">' + T('messages.empty') + '</div>';
       var lastDay = '';
       var unreadFrom = Number(data.unreadFrom || 0);
@@ -488,7 +523,23 @@
       chat.innerHTML = body;
       chat.setAttribute('data-last', lastId);
       state.im.last = lastId;
+      state.im.rev = data.rev || 0;
       state.im.other = other;
+
+      // clicking a pinned row jumps to that message
+      var pinRows = chat.querySelectorAll('.chat-pin-row');
+      for (var pr = 0; pr < pinRows.length; pr++) {
+        pinRows[pr].addEventListener('click', function (e) {
+          if (e.target && e.target.className && String(e.target.className).indexOf('msg-pin-btn') >= 0) return;
+          var id = this.getAttribute('data-id');
+          var row = chat.querySelector('.bubble-row[data-id="' + id + '"]');
+          if (row && row.scrollIntoView) {
+            try { row.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (er) { }
+            row.className += ' flash';
+            setTimeout(function () { row.className = row.className.replace(/\s*flash\b/g, ''); }, 1600);
+          }
+        });
+      }
 
       var newBody = document.getElementById('chat-body');
       if (newBody && (atBottom || !silent)) newBody.scrollTop = newBody.scrollHeight;
@@ -1094,6 +1145,43 @@
         }, true);
       });
     }
+    // "delete for everyone" and the pin toggle
+    var revokes = (scope || document).querySelectorAll('.msg-revoke');
+    for (var rv = 0; rv < revokes.length; rv++) {
+      if (revokes[rv].getAttribute('data-bound')) continue;
+      revokes[rv].setAttribute('data-bound', '1');
+      revokes[rv].addEventListener('click', function (e) {
+        e.preventDefault();
+        var id = Number(this.getAttribute('data-id'));
+        UI.confirm(T('messages.revoke'), T('messages.revokeConfirm'), T('messages.revoke'), function () {
+          Api.request('POST', '/api/messages/revoke', { id: id }, function (err) {
+            if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+            UI.toast(T('messages.revoked'), 'ok');
+            loadConversation(state.im.withId, true);
+          });
+        }, true);
+      });
+    }
+
+    var pins = (scope || document).querySelectorAll('.msg-pin-btn');
+    for (var pn = 0; pn < pins.length; pn++) {
+      if (pins[pn].getAttribute('data-bound')) continue;
+      pins[pn].setAttribute('data-bound', '1');
+      pins[pn].addEventListener('click', function (e) {
+        e.preventDefault();
+        var id = Number(this.getAttribute('data-id'));
+        var on = this.getAttribute('data-on') !== '1';
+        var btn = this;
+        btn.disabled = true;
+        Api.request('POST', '/api/messages/pin', { id: id, on: on }, function (err) {
+          btn.disabled = false;
+          if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+          UI.toast(T(on ? 'messages.pinnedToast' : 'messages.unpinnedToast'), 'ok');
+          loadConversation(state.im.withId, true);
+        });
+      });
+    }
+
     // clicking a quote scrolls to the quoted message
     var quotes = (scope || document).querySelectorAll('.msg-quote');
     for (var q = 0; q < quotes.length; q++) {
@@ -1164,6 +1252,11 @@
           appendMessages(data.messages, state.im.other || {}, false);
           SoundFX.play('message');
           refreshThreads();
+        }
+        // a revoke or a pin touched a message we already had: reload the thread
+        if (typeof data.rev === 'number' && data.rev !== Number(state.im.rev || 0)) {
+          state.im.rev = data.rev;
+          loadConversation(withId, true);
         }
         setPresence(!!data.typing);
         markTicks(!!data.read);
@@ -3799,6 +3892,7 @@
         field('cfg-voicesec', T('admin.maxVoiceSec'), lim.maxVoiceSec, 'number', ' min="5"') +
         '</div>' +
         field('cfg-filekb', T('admin.maxFileKB'), lim.maxFileKB, 'number', ' min="64"') +
+        field('cfg-revokemin', T('admin.messageRevokeMin'), lim.messageRevokeMin, 'number', ' min="0"') +
         '<div class="inline-fields">' +
         field('cfg-audiokb', T('admin.maxAudioKB'), lim.maxAudioKB, 'number', ' min="256"') +
         field('cfg-videokb', T('admin.maxVideoKB'), lim.maxVideoKB, 'number', ' min="256"') +
@@ -3950,6 +4044,7 @@
             maxVoiceKB: Number(App.val('cfg-voicekb')),
             maxVoiceSec: Number(App.val('cfg-voicesec')),
             maxFileKB: Number(App.val('cfg-filekb')),
+            messageRevokeMin: Number(App.val('cfg-revokemin')),
             maxAudioKB: Number(App.val('cfg-audiokb')),
             maxVideoKB: Number(App.val('cfg-videokb')),
             maxMessageVideoKB: Number(App.val('cfg-msgvideokb')),

@@ -163,6 +163,9 @@ namespace Social.Core
         public int MaxVoiceSec = 300;
         // generic file attachments in private messages
         public int MaxFileKB = 4096;
+        // How long after sending a message it can still be taken back for
+        // everybody. 0 disables "delete for everyone" entirely.
+        public int MessageRevokeMin = 60;
 
         // Third-party apps. A token grants exactly the scopes the user approved;
         // HTML apps run on our own origin, so only staff may publish them.
@@ -524,6 +527,7 @@ namespace Social.Core
                     else if (key == "maxvoicekb") MaxVoiceKB = Int(val, MaxVoiceKB);
                     else if (key == "maxvoicesec") MaxVoiceSec = Int(val, MaxVoiceSec);
                     else if (key == "maxfilekb") MaxFileKB = Int(val, MaxFileKB);
+                    else if (key == "messagerevokemin") MessageRevokeMin = Int(val, MessageRevokeMin);
                     else if (key == "maxtransfermb") MaxTransferMB = Int(val, MaxTransferMB);
                     else if (key == "appsenabled") AppsEnabled = Bool(val, AppsEnabled);
                     else if (key == "appstoragekeys") AppStorageKeys = Int(val, AppStorageKeys);
@@ -678,6 +682,8 @@ namespace Social.Core
             if (AppStorageKeys > 10000) AppStorageKeys = 10000;
             if (AppValueBytes < 64) AppValueBytes = 64;
             if (AppValueBytes > 65536) AppValueBytes = 65536;
+            if (MessageRevokeMin < 0) MessageRevokeMin = 0;
+            if (MessageRevokeMin > 10080) MessageRevokeMin = 10080;
             if (PushTtlSec < 60) PushTtlSec = 60;
             if (PushTtlSec > 2419200) PushTtlSec = 2419200;
             if (PushMaxPerUser < 1) PushMaxPerUser = 1;

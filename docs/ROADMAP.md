@@ -140,10 +140,8 @@ Small things that would make what already exists noticeably better.
 
 **Messages**
 - Search inside one conversation (the global search already finds them).
-- Pinned messages inside a chat.
-- "Delete for everyone" with a time window.
-- Scheduled messages ("send at 9:00").
 - Sticker packs next to the emoji picker.
+- Scheduled messages ("send at 9:00").
 
 **Communities**
 - Per-community rules shown before joining.
@@ -215,6 +213,9 @@ Kept here so the list above stays honest.
 - Push notifications: VAPID signing with a generated P-256 key, per-browser
   subscriptions, a service worker that shows what is waiting, and a settings switch
   that explains itself when the browser blocks notifications.
+- "Delete for everyone" with a time window, and pinned messages inside a chat.
+  A revoke leaves a tombstone and deletes the files; a pin shows in a small bar
+  above the conversation for both sides.
 - Groups with editable settings, pictures and member management.
 - Communities: owner / editor / member roles, join requests for closed groups and a
   moderation queue ("members post, editors approve").

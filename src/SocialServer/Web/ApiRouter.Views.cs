@@ -306,6 +306,14 @@ namespace Social.Web
             b.Prop("created", Util.Iso(m.Created));
             b.Prop("read", m.Read);
             b.Prop("mine", viewer != null && m.From == viewer.Id);
+            // a revoked message is a tombstone: no text, no files, but the row stays
+            b.Prop("revoked", m.Revoked);
+            if (m.Revoked) b.Prop("revokedAt", Util.Iso(m.RevokedAt));
+            if (m.Pinned) b.Prop("pinned", true);
+            // "delete for everyone" is only offered while the window is open
+            if (viewer != null && m.From == viewer.Id && !m.Revoked && _cfg.MessageRevokeMin > 0 &&
+                (DateTime.UtcNow - m.Created).TotalMinutes <= _cfg.MessageRevokeMin)
+                b.Prop("canRevoke", true);
             if (m.ForwardedFrom > 0)
             {
                 User author = _store.FindUser(m.ForwardedFrom);
@@ -337,8 +345,11 @@ namespace Social.Web
                     b.Name("replyTo").BeginObject()
                         .Prop("id", q.Id)
                         .Prop("from", q.From)
-                        .Prop("body", Util.SingleLine(q.Body, 120))
-                        .Prop("image", q.Image)
+                        // a quoted message that was taken back says so, instead of
+                        // quoting the text its author just deleted
+                        .Prop("body", q.Revoked ? "" : Util.SingleLine(q.Body, 120))
+                        .Prop("image", q.Revoked ? "" : q.Image)
+                        .Prop("revoked", q.Revoked)
                         .Prop("mine", viewer != null && q.From == viewer.Id)
                         .EndObject();
                 }

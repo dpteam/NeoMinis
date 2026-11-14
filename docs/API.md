@@ -325,6 +325,27 @@ earned (useful after an import or a rule change).
 | GET | `/api/messages/search` | `q` (≥ 2 chars), `with` (optional), `limit` | `{ results[{ message, peer }], total }` |
 | POST | `/api/messages/read` | `with` | `{ unread }` |
 | POST | `/api/messages/delete` | `id` | `{ ok }` (per-side delete) |
+| POST | `/api/messages/revoke` | `id` | `{ message }` — delete for everyone |
+| POST | `/api/messages/pin` | `id`, `on` | `{ pinned }` |
+
+**Delete for me vs. delete for everyone.** `/api/messages/delete` hides the row on
+one side only; the other person keeps their copy and the file stays until both
+sides have dropped it. `/api/messages/revoke` is the other thing entirely: only the
+author may call it, only within `limits.messageRevokeMin` minutes (default 60,
+0 disables it), and it **empties the message for both sides** — text, image,
+album, clip, voice, attachment and reactions — while the row stays as a tombstone
+so the conversation still reads in order. The files are deleted from disk at that
+moment. A reply that quoted it says "deleted message" instead of leaking the text
+its author just removed.
+
+`GET /api/messages` and `/api/messages/wait` both carry `rev`, a per-conversation
+revision counter. It moves when a message is revoked or pinned — changes that do
+not create a new message id, so a client watching only the last id would never
+notice. When `rev` changes, the client reloads the thread.
+
+`GET /api/messages` also returns `pinned[]`, the conversation's pinned messages
+(oldest pin first, up to three), which the chat draws as a small bar above the
+messages. Either side may pin or unpin; a taken-back message cannot be pinned.
 
 Reading a conversation marks it read. Blocked users cannot exchange messages.
 

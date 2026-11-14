@@ -855,6 +855,31 @@ img { max-width: 100%; }
 .bubble { max-width: 72%; padding: 7px 10px; border-radius: 12px; background: var(--bubble-in); border: 1px solid var(--border); font-size: 12.5px; overflow-wrap: break-word; }
 .bubble-row.mine .bubble { background: var(--bubble-out); border-color: transparent; }
 .bubble .time { display: block; font-size: 9.5px; color: var(--muted); margin-top: 3px; text-align: right; }
+
+/* a message taken back by its author: a tombstone, not a gap */
+.bubble.revoked { opacity: .72; }
+.msg-tombstone { font-style: italic; color: var(--muted); }
+.msg-tombstone i { margin-right: 4px; }
+.msg-pin { color: var(--accent); font-size: 9.5px; margin-left: 4px; }
+.msg-act.msg-pin-btn.active { color: var(--accent); }
+
+/* pinned messages above the conversation */
+.chat-pinned {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 5px 8px; background: var(--panel-2); border-bottom: 1px solid var(--border);
+}
+.chat-pin-row {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 3px 6px; border-radius: var(--radius-sm); font-size: 11.5px;
+  border-left: 2px solid var(--accent);
+}
+.chat-pin-row:hover { background: var(--panel); }
+.chat-pin-row i { color: var(--accent); flex: 0 0 auto; }
+.chat-pin-row b { flex: 0 0 auto; font-weight: 600; }
+.chat-pin-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-soft); }
+.chat-pin-row .icon-btn { padding: 1px 4px; font-size: 10px; opacity: .6; }
+.chat-pin-row:hover .icon-btn { opacity: 1; }
+.bubble-row.flash .bubble { box-shadow: 0 0 0 2px var(--accent); transition: box-shadow .25s; }
 .chat-form { display: flex; gap: 8px; padding: 9px 12px; border-top: 1px solid var(--border); background: var(--panel); }
 .chat-form textarea { flex: 1; min-height: 36px; max-height: 120px; resize: none; }
 .chat-empty { flex: 1; display: grid; place-items: center; color: var(--muted); font-size: 12px; }

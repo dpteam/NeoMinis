@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -1480,6 +1480,12 @@ namespace Social.Web
             b.Prop("unreadFrom", firstUnread);
             // the thread was just marked read, so hand back the new counter too
             b.Prop("unreadMessages", _store.UnreadMessages(ctx.User.Id));
+            // the pinned bar above the conversation
+            List<Message> pinned = _store.PinnedMessages(ctx.User.Id, other.Id, 3);
+            b.Name("pinned").BeginArray();
+            for (int i = 0; i < pinned.Count; i++) b.Raw(MessageView(pinned[i], ctx.User));
+            b.EndArray();
+            b.Prop("rev", _store.ConversationRev(ctx.User.Id, other.Id));
             SendOk(ctx, b);
         }
 
@@ -1686,11 +1692,13 @@ namespace Social.Web
 
             bool typingAtStart;
             bool readAtStart;
+            long revAtStart;
             List<Message> fresh;
             try
             {
                 typingAtStart = TypingRegistry.IsTyping(other.Id, ctx.User.Id);
                 readAtStart = _store.LastMineRead(ctx.User.Id, other.Id);
+                revAtStart = _store.ConversationRev(ctx.User.Id, other.Id);
                 DateTime until = DateTime.UtcNow.AddSeconds(timeout);
                 fresh = new List<Message>();
 
@@ -1701,6 +1709,8 @@ namespace Social.Web
                         fresh = _store.MessagesAfter(ctx.User.Id, other.Id, after, 50);
                         if (fresh.Count > 0) break;
                     }
+                    // a revoke or a pin edited a message we already have
+                    if (_store.ConversationRev(ctx.User.Id, other.Id) != revAtStart) break;
                     bool typing = TypingRegistry.IsTyping(other.Id, ctx.User.Id);
                     bool read = _store.LastMineRead(ctx.User.Id, other.Id);
                     if (typing != typingAtStart || read != readAtStart) break;
@@ -1729,6 +1739,9 @@ namespace Social.Web
             b.Prop("readUpTo", readUpTo == DateTime.MinValue ? "" : Util.Iso(readUpTo));
             b.Prop("unread", _store.UnreadMessages(ctx.User.Id));
             b.Prop("live", _cfg.LiveNotifications);
+            // the client reloads the thread when this moved: a revoke or a pin
+            // changed a message it already has
+            b.Prop("rev", _store.ConversationRev(ctx.User.Id, other.Id));
             SendOk(ctx, b);
         }
 
@@ -1856,8 +1869,75 @@ namespace Social.Web
             SendOk(ctx, b);
         }
 
-        // ====================================================== notifications
+        /// <summary>
+        /// Takes a message back for both sides. The window and the ownership are
+        /// checked in the store, so the same rules apply to the API and the CLI.
+        /// </summary>
+        private void HandleMessageRevoke(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            Message m = _store.FindMessage(id);
+            if (m == null) throw new ApiException(404, "no-message", "Message not found");
 
+            string image = m.Image;
+            string images = m.Images;
+            string audio = m.Audio;
+            string file = m.FileUrl;
+            string video = m.Video;
+
+            string result = _store.RevokeMessage(id, ctx.User.Id, _cfg.MessageRevokeMin);
+            if (result == "not-found") throw new ApiException(404, "no-message", "Message not found");
+            if (result == "not-mine") throw new ApiException(403, "not-mine", "That is not your message");
+            if (result == "already") throw new ApiException(400, "already-revoked", "That message is already taken back");
+            if (result == "too-late")
+                throw new ApiException(400, "too-late",
+                    "Messages can only be taken back within " + _cfg.MessageRevokeMin + " minutes");
+
+            // the files are gone for everybody, so they go now
+            if (!string.IsNullOrEmpty(image)) _media.Delete(image);
+            if (!string.IsNullOrEmpty(images))
+            {
+                string[] parts = images.Split('\n');
+                for (int i = 0; i < parts.Length; i++)
+                    if (parts[i].Trim().Length > 0) _media.Delete(parts[i].Trim());
+            }
+            if (!string.IsNullOrEmpty(audio)) _media.Delete(audio);
+            if (!string.IsNullOrEmpty(file)) _media.Delete(file);
+            if (!string.IsNullOrEmpty(video)) _media.Delete(video);
+            Log.Info("MSG", "@" + ctx.User.Username + " took back message #" + id);
+
+            // the other side is watching the long poll, so it sees the tombstone now
+            long other = m.From == ctx.User.Id ? m.To : m.From;
+            _store.BumpConversation(ctx.User.Id, other);
+
+            JsonBuilder b = new JsonBuilder(256);
+            b.BeginObject();
+            b.Name("message").Raw(MessageView(m, ctx.User));
+            SendOk(ctx, b);
+        }
+
+        private void HandleMessagePin(ApiCtx ctx)
+        {
+            long id = BodyLong(ctx, "id", 0);
+            Message m = _store.FindMessage(id);
+            if (m == null) throw new ApiException(404, "no-message", "Message not found");
+            if (m.From != ctx.User.Id && m.To != ctx.User.Id)
+                throw new ApiException(403, "not-yours", "That message is not in your conversation");
+            if (m.Revoked) throw new ApiException(400, "revoked", "A taken-back message cannot be pinned");
+
+            bool pinned = BodyBool(ctx, "on", true);
+            if (!_store.PinMessage(id, ctx.User.Id, pinned))
+                throw new ApiException(404, "no-message", "Message not found");
+
+            long other = m.From == ctx.User.Id ? m.To : m.From;
+            _store.BumpConversation(ctx.User.Id, other);
+            JsonBuilder b = new JsonBuilder(256);
+            b.BeginObject();
+            b.Prop("pinned", pinned);
+            SendOk(ctx, b);
+        }
+
+        // ====================================================== notifications
         private void HandleNotifications(ApiCtx ctx)
         {
             int limit = LimitParam(ctx, 30, 100);

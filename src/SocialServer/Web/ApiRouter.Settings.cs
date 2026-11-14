@@ -65,6 +65,7 @@ namespace Social.Web
                 .Prop("maxVoiceKB", _cfg.MaxVoiceKB)
                 .Prop("maxVoiceSec", _cfg.MaxVoiceSec)
                 .Prop("maxFileKB", _cfg.MaxFileKB)
+                .Prop("messageRevokeMin", _cfg.MessageRevokeMin)
                 .Prop("maxAudioKB", _cfg.MaxAudioKB)
                 .Prop("maxVideoKB", _cfg.MaxVideoKB)
                 .Prop("maxAudioFiles", _cfg.MaxAudioFiles)
@@ -357,6 +358,7 @@ namespace Social.Web
                 ApplyLimit(limits, "maxVoiceKB", _cfg.MaxVoiceKB, 64, delegate(int v) { _cfg.MaxVoiceKB = v; });
                 ApplyLimit(limits, "maxVoiceSec", _cfg.MaxVoiceSec, 5, delegate(int v) { _cfg.MaxVoiceSec = v; });
                 ApplyLimit(limits, "maxFileKB", _cfg.MaxFileKB, 64, delegate(int v) { _cfg.MaxFileKB = v; });
+                ApplyLimit(limits, "messageRevokeMin", _cfg.MessageRevokeMin, 0, delegate(int v) { _cfg.MessageRevokeMin = v; });
                 ApplyLimit(limits, "maxAudioKB", _cfg.MaxAudioKB, 256, delegate(int v) { _cfg.MaxAudioKB = v; });
                 ApplyLimit(limits, "maxVideoKB", _cfg.MaxVideoKB, 256, delegate(int v) { _cfg.MaxVideoKB = v; });
                 ApplyLimit(limits, "maxAudioFiles", _cfg.MaxAudioFiles, 1, delegate(int v) { _cfg.MaxAudioFiles = v; });
