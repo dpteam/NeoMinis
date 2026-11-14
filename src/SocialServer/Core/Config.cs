@@ -125,7 +125,10 @@ namespace Social.Core
         public int MaxFailedLoginsPerUser = 8;
         public int LoginLockSeconds = 180;
         public int BanSeconds = 600;
-        public int MaxBodyBytes = 8 * 1024 * 1024;
+        // A file travels as base64 inside the encrypted request, so it grows twice:
+        // once into a data URL (4/3) and again when the sealed envelope is encoded
+        // (another 4/3). A 10 MB clip therefore needs ~18.6 MB of body.
+        public int MaxBodyBytes = 20 * 1024 * 1024;
         public int MaxJsonDepth = 64;
         public bool AdminPrivateOnly = false;
         public bool Hsts = false;
@@ -156,6 +159,13 @@ namespace Social.Core
         // generic file attachments in private messages
         public int MaxFileKB = 4096;
 
+        // Peer file transfer between friends: the server only relays chunks in
+        // memory, so nothing is ever written to data/media and nothing survives a
+        // restart. 0 disables the whole feature.
+        public int MaxTransferMB = 32;
+        public int TransferChunkKB = 256;
+        public int TransferTtlMin = 30;
+
         // anonymous feedback to the operators
         public int FeedbackPerHour = 5;
 
@@ -170,7 +180,7 @@ namespace Social.Core
 
         // personal media library (music / clips)
         public int MaxAudioKB = 4096;
-        public int MaxVideoKB = 5120;
+        public int MaxVideoKB = 10240;
         public int MaxAudioFiles = 200;
         public int MaxVideoFiles = 50;
 
@@ -181,12 +191,12 @@ namespace Social.Core
         // stories: how long one lives, how big it may be, how many a day
         public int StoryHours = 24;
         public int MaxStoryKB = 4096;
-        public int MaxStoryVideoKB = 8192;
+        public int MaxStoryVideoKB = 10240;
         public int StoryPerDay = 20;
         public int MaxStoryCaption = 200;
 
         // short clips inside private messages
-        public int MaxMessageVideoKB = 8192;
+        public int MaxMessageVideoKB = 10240;
         public int MaxStatusLength = 140;
         public int MaxBioLength = 2000;
         public int MaxNameLength = 40;
@@ -247,9 +257,12 @@ namespace Social.Core
                 if (!File.Exists(cfg.ConfigPath)) cfg.CreateDefaultFile();
                 cfg.ParseFile(cfg.ConfigPath);
                 cfg.GenerateSecretsIfMissing();
+                // Re-read so the secrets that were just appended are in memory, then
+                // validate once. Validating before the second read would let the file
+                // overwrite anything the checks corrected, which is exactly how a
+                // raised maxBodyBytes used to snap back to the value in the file.
+                cfg.ParseFile(cfg.ConfigPath);
                 cfg.Validate();
-                cfg.ResolvePaths();
-                cfg.ParseFile(cfg.ConfigPath); // re-read after secrets were appended
                 cfg.ResolvePaths();
             }
             catch (Exception ex)
@@ -478,6 +491,9 @@ namespace Social.Core
                     else if (key == "maxvoicekb") MaxVoiceKB = Int(val, MaxVoiceKB);
                     else if (key == "maxvoicesec") MaxVoiceSec = Int(val, MaxVoiceSec);
                     else if (key == "maxfilekb") MaxFileKB = Int(val, MaxFileKB);
+                    else if (key == "maxtransfermb") MaxTransferMB = Int(val, MaxTransferMB);
+                    else if (key == "transferchunkkb") TransferChunkKB = Int(val, TransferChunkKB);
+                    else if (key == "transferttlmin") TransferTtlMin = Int(val, TransferTtlMin);
                     else if (key == "feedbackperhour") FeedbackPerHour = Int(val, FeedbackPerHour);
                     else if (key == "giftperhour") GiftPerHour = Int(val, GiftPerHour);
                     else if (key == "maxgiftmessage") MaxGiftMessage = Int(val, MaxGiftMessage);
@@ -577,6 +593,35 @@ namespace Social.Core
             if (MaxStoryCaption < 0) MaxStoryCaption = 0;
             if (MaxStoryCaption > 500) MaxStoryCaption = 500;
             if (MaxMessageVideoKB < 64) MaxMessageVideoKB = 64;
+
+            // A file travels as base64 inside the sealed request and grows twice:
+            // once into a data URL (4/3) and again when the envelope is encoded
+            // (another 4/3). Raising a size cap without raising this one is the
+            // trap that makes uploads die mid-request, so make sure the body is
+            // always big enough for the largest cap the config allows.
+            int biggestKb = MaxVideoKB;
+            if (MaxStoryVideoKB > biggestKb) biggestKb = MaxStoryVideoKB;
+            if (MaxMessageVideoKB > biggestKb) biggestKb = MaxMessageVideoKB;
+            if (MaxAudioKB > biggestKb) biggestKb = MaxAudioKB;
+            if (MaxFileKB > biggestKb) biggestKb = MaxFileKB;
+            if (MaxGameKB > biggestKb) biggestKb = MaxGameKB;
+            if (MaxVoiceKB > biggestKb) biggestKb = MaxVoiceKB;
+            if (MaxPostImageKB > biggestKb) biggestKb = MaxPostImageKB;
+            if (MaxMessageImageKB > biggestKb) biggestKb = MaxMessageImageKB;
+            long needed = (long)biggestKb * 1024L * 16L / 9L + 1024L * 1024L;
+            if (needed > 64L * 1024L * 1024L) needed = 64L * 1024L * 1024L;
+            if (MaxBodyBytes < needed)
+            {
+                Warnings.Add("maxBodyBytes raised to " + ((needed + 1024L * 1024L - 1) / (1024L * 1024L)) +
+                             " MB to fit the largest upload cap");
+                MaxBodyBytes = (int)needed;
+            }
+            if (MaxTransferMB < 1) MaxTransferMB = 1;
+            if (MaxTransferMB > 512) MaxTransferMB = 512;
+            if (TransferChunkKB < 32) TransferChunkKB = 32;
+            if (TransferChunkKB > 2048) TransferChunkKB = 2048;
+            if (TransferTtlMin < 1) TransferTtlMin = 1;
+            if (TransferTtlMin > 240) TransferTtlMin = 240;
             if (BackupKeep < 1) BackupKeep = 1;
             if (SaveDebounceMs < 100) SaveDebounceMs = 100;
             if (string.IsNullOrEmpty(CookieName)) CookieName = "sid";

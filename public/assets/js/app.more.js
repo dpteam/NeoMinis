@@ -1,4 +1,4 @@
-﻿/* =========================================================================
+/* =========================================================================
    Social SPA - remaining views: friends, people, messages, groups,
    notifications, settings, admin, search. Loaded after app.js.
    ========================================================================= */
@@ -577,14 +577,14 @@
 
       // a clip is its own kind of message, so it travels alone
       if (/^video\//.test(files[0].type)) {
-        var clipLimit = (state.site.maxMessageVideoKB || 8192) * 1024;
+        var clipLimit = (state.site.maxMessageVideoKB || 10240) * 1024;
         if (files[0].size > clipLimit) {
-          UI.toast(T('messages.videoTooBig', state.site.maxMessageVideoKB || 8192), 'err');
+          UI.toast(T('messages.videoTooBig', state.site.maxMessageVideoKB || 10240), 'err');
           file.value = '';
           return;
         }
         UI.fileToDataUrl(files[0], clipLimit, function (err, dataUrl) {
-          if (err) { UI.toast(T('messages.videoTooBig', state.site.maxMessageVideoKB || 8192), 'err'); file.value = ''; return; }
+          if (err) { UI.toast(T('messages.videoTooBig', state.site.maxMessageVideoKB || 10240), 'err'); file.value = ''; return; }
           state.im.clip = dataUrl;
           state.im.album = [];
           attach.innerHTML = '<video src="' + UI.attr(dataUrl) + '" muted playsinline></video>' +
@@ -3746,6 +3746,7 @@
         field('cfg-audiofiles', T('admin.maxAudioFiles'), lim.maxAudioFiles, 'number', ' min="1"') +
         field('cfg-videofiles', T('admin.maxVideoFiles'), lim.maxVideoFiles, 'number', ' min="1"') +
         '</div>' +
+        field('cfg-msgvideokb', T('admin.maxMessageVideoKB'), lim.maxMessageVideoKB, 'number', ' min="64"') +
         field('cfg-editwin', T('admin.editWindow'), lim.editWindowMin, 'number', ' min="0"') +
         field('cfg-fbph', T('admin.feedbackPerHour'), lim.feedbackPerHour, 'number', ' min="1"') +
         field('cfg-giftph', T('admin.giftPerHour'), lim.giftPerHour, 'number', ' min="0"') +
@@ -3861,6 +3862,7 @@
             maxFileKB: Number(App.val('cfg-filekb')),
             maxAudioKB: Number(App.val('cfg-audiokb')),
             maxVideoKB: Number(App.val('cfg-videokb')),
+            maxMessageVideoKB: Number(App.val('cfg-msgvideokb')),
             maxAudioFiles: Number(App.val('cfg-audiofiles')),
             maxVideoFiles: Number(App.val('cfg-videofiles')),
             maxAvatarKB: Number(App.val('cfg-avatarkb')),

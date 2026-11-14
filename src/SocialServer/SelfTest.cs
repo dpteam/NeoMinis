@@ -29,6 +29,7 @@ namespace Social
             TestSignature();
             TestJson();
             TestCaptcha();
+            TestUploadLimits();
             TestStore();
 
             Console.WriteLine("-----------------------");
@@ -112,6 +113,37 @@ namespace Social
             string code = Captcha.NewCode();
             string svg = Captcha.Svg(code);
             Check("captcha has no <text>", svg.IndexOf("<text", StringComparison.OrdinalIgnoreCase) < 0 && svg.IndexOf("<svg", StringComparison.Ordinal) >= 0, code);
+        }
+
+        /// <summary>
+        /// A file is base64'd twice on its way in (data URL, then the sealed
+        /// envelope), so a size cap that outgrows maxBodyBytes makes uploads die
+        /// mid-request with a bare connection reset. Validate() must raise the body
+        /// limit by itself instead of letting that happen.
+        /// </summary>
+        private static void TestUploadLimits()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "social-limits-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(dir);
+                string ini = "[security]\r\nmaxBodyBytes=1048576\r\n[limits]\r\nmaxVideoKB=10240\r\n";
+                File.WriteAllText(Path.Combine(dir, "config.ini"), ini, Encoding.UTF8);
+
+                Config cfg = Config.Load(dir);
+                long need = 10L * 1024L * 1024L * 16L / 9L;
+                Check("maxBodyBytes grows to fit a 10 MB cap", cfg.MaxBodyBytes >= need,
+                      cfg.MaxBodyBytes.ToString());
+                bool warned = false;
+                for (int i = 0; i < cfg.Warnings.Count; i++)
+                    if (cfg.Warnings[i].IndexOf("maxBodyBytes", StringComparison.Ordinal) >= 0) warned = true;
+                Check("the raise is reported as a warning", warned, "");
+                Check("a 10 MB clip fits the body", cfg.MaxBodyBytes > cfg.MaxVideoKB * 1024L, "");
+            }
+            finally
+            {
+                try { Directory.Delete(dir, true); } catch { }
+            }
         }
 
         private static void TestStore()

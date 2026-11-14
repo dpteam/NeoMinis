@@ -545,7 +545,7 @@ else, so a renamed `.html` is not accepted. `expiresIn` is computed on every rea
 their own viewer list.
 
 Limits: `limits.storyHours` (24, 1-168), `limits.maxStoryKB` (4096),
-`limits.maxStoryVideoKB` (8192), `limits.storyPerDay` (20, 0 = no limit) and
+`limits.maxStoryVideoKB` (10240), `limits.storyPerDay` (20, 0 = no limit) and
 `limits.maxStoryCaption` (200). `ui.storiesEnabled` hides the whole bar. Files live
 in `data/media/stories/` and are deleted by the supervisor when the story expires,
 so the folder does not grow with things nobody can see.
@@ -635,9 +635,10 @@ page never mixes your files with everybody else's.
 `/api/media/edit` renames a track (`title`, `artist`) or a clip (`title`,
 `description`) and is owner-only; games are edited through `/api/game/edit`.
 Uploads are data URLs of real audio/video containers — `limits.maxAudioKB` /
-`maxVideoKB` cap the size and `maxAudioFiles` / `maxVideoFiles` the count, all
-editable in Admin → Settings. A file whose extension does not belong to the
-requested kind is refused, so a "video" upload can never smuggle in a document.
+`maxVideoKB` (10240 = 10 MB) cap the size and `maxAudioFiles` / `maxVideoFiles`
+the count, all editable in Admin → Settings. A file whose extension does not
+belong to the requested kind is refused, so a "video" upload can never smuggle in
+a document.
 Files live under `/media/library/` and are served inline with the type derived
 from the extension, which is what lets the browser play them.
 
