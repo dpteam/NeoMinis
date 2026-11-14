@@ -278,6 +278,9 @@ namespace Social.Web
             List<CallEvent> events = new List<CallEvent>();
             DateTime until = DateTime.UtcNow.AddSeconds(timeout);
 
+            // this poll doubles as a heartbeat: it is what keeps a room member "here"
+            CallRegistry.Touch(ctx.User.Id);
+
             if (!EnterWait())
             {
                 events = CallRegistry.Since(ctx.User.Id, after);

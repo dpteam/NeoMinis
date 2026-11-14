@@ -72,7 +72,7 @@ poll) but they are the minimum.
 | **Discord-style call page** | Done: `#/calls` is a channel sidebar plus a room view, backed by `/api/channels`. Still open: drag-to-reorder channels. |
 | **Noise suppression / echo cancel** | `getUserMedia({ audio: { echoCancellation, noiseSuppression, autoGainControl } })` as toggles. The speaking ring is in, so the level meter is already there to build on. |
 | **Ringing when the tab is closed** | Web Push with a `call` payload, a ringtone, and an "answer" action in the notification. |
-| **Group layout** | Grid that switches to speaker view, mute-all, "raise hand", per-member volume. |
+| **Group layout** | Grid that switches to speaker view, mute-all, "raise hand", per-member volume. The people strip (avatars, count, a blue dot when somebody joins) and the minimised call window are in. |
 | **Call link** | `#/call/<room>` with a copy button, so a room can be pasted into a chat. |
 | **Recording** | `MediaRecorder` over a mixed stream into the media library, with a visible "recording" badge and consent from every participant. |
 
@@ -220,7 +220,9 @@ Kept here so the list above stays honest.
 - Calls that feel less raw: a speaking ring driven by a real audio level meter, a
   microphone badge on muted tiles, the camera switchable on mid-call (with
   renegotiation), a tile layout that does not stretch one person across the screen,
-  and a participant count that ignores people who declined.
+  a participant count that ignores people who declined, a minimised floating call
+  window that keeps the media flowing, avatars of who is on the line with a blue dot
+  when somebody joins, and rooms that no longer die under the last person in them.
 - Groups with editable settings, pictures and member management.
 - Communities: owner / editor / member roles, join requests for closed groups and a
   moderation queue ("members post, editors approve").

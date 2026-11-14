@@ -1829,7 +1829,6 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .call-title { font-weight: 700; font-size: 13px; flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .call-timer { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
-.call-count { color: var(--muted); }
 
 .call-grid {
   flex: 1; min-height: 220px; max-height: 64vh; overflow: auto;
@@ -1882,6 +1881,83 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .call-btn.off { background: var(--err); color: #fff; border-color: transparent; }
 .call-btn.call-hang { background: var(--err); color: #fff; border-color: transparent; }
 .call-btn.call-hang:hover { filter: brightness(1.1); }
+
+/* the minimize button sits in the header, quiet until hovered */
+.call-min {
+  margin-left: auto; border: 0; background: transparent; color: var(--muted);
+  padding: 2px 6px; border-radius: var(--radius-sm); cursor: pointer; font-size: 12px;
+}
+.call-min:hover { color: var(--text); background: var(--hover); }
+
+/* who is on the line, drawn like a notification badge */
+.call-people { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; position: relative; }
+.call-person {
+  display: inline-flex; width: 20px; height: 20px; border-radius: 50%;
+  overflow: hidden; border: 1px solid rgba(255, 255, 255, .22);
+}
+.call-person .avatar { width: 100%; height: 100%; border-radius: 50%; }
+.call-person.me { border-color: var(--ok, #51b579); }
+.call-person.more {
+  width: auto; min-width: 20px; padding: 0 5px; border-radius: 999px;
+  background: rgba(255, 255, 255, .14); color: #fff; font-size: 10px;
+  align-items: center; justify-content: center;
+}
+.call-count-badge {
+  margin-left: 3px; padding: 0 6px; border-radius: 999px;
+  background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
+}
+.call-dot {
+  position: absolute; top: -2px; right: -7px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #4c9dff; box-shadow: 0 0 0 2px var(--panel-2);
+  animation: call-dot-pulse 1.4s ease-in-out infinite;
+}
+@keyframes call-dot-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: .65; }
+}
+
+/* a blue dot on the Calls entry while somebody is talking */
+.side-link.call-live, .tab.call-live { position: relative; }
+.side-link.call-live::after, .tab.call-live::after {
+  content: ''; position: absolute; top: 8px; right: 8px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #4c9dff; box-shadow: 0 0 0 2px var(--panel);
+}
+
+/* ---- minimised call: a small floating window in the corner ---- */
+.call-overlay.mini {
+  background: transparent; align-items: flex-end; justify-content: flex-end;
+  padding: 0; pointer-events: none;
+}
+.call-overlay.mini .call-panel {
+  pointer-events: auto; cursor: pointer;
+  width: 240px; max-height: 320px; margin: 14px;
+  border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  border: 1px solid var(--border);
+}
+.call-overlay.mini .call-top { padding: 6px 8px; gap: 6px; }
+.call-overlay.mini .call-title { font-size: 11.5px; }
+.call-overlay.mini .call-timer { font-size: 10.5px; }
+.call-overlay.mini .call-people { margin-left: auto; }
+/* the mini window keeps the count and the blue join dot, drops the avatars */
+.call-overlay.mini .call-person { display: none; }
+.call-overlay.mini .call-grid {
+  max-height: 160px; min-height: 90px; padding: 6px; gap: 4px;
+  grid-template-columns: 1fr !important;
+}
+.call-overlay.mini .call-tile { min-height: 80px; aspect-ratio: auto !important; }
+.call-overlay.mini .call-tile .call-state,
+.call-overlay.mini .call-tile .call-name { display: none; }
+.call-overlay.mini .call-controls { padding: 6px; gap: 6px; }
+.call-overlay.mini .call-btn { width: 30px; height: 30px; font-size: 11px; }
+.call-overlay.mini #call-cam, .call-overlay.mini #call-retry { display: none !important; }
+.call-overlay.mini .call-min { display: none; }
+
+@media (max-width: 720px) {
+  .call-overlay.mini .call-panel { width: 150px; margin: 8px; }
+  .call-overlay.mini .call-grid { max-height: 110px; min-height: 70px; }
+}
 
 .call-ring { text-align: center; padding: 6px 0 2px; }
 .call-ring-name { font-size: 15px; font-weight: 700; margin: 8px 0 2px; }

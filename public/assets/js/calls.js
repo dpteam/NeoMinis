@@ -20,6 +20,11 @@ var CallUI = (function () {
   var tickTimer = null;
   var audioCtx = null;         // one AudioContext for every level meter
   var levels = {};             // tileId -> interval id
+  var minimized = false;       // the panel is a small floating window
+  var seenMembers = {};        // ids already shown in the people strip
+  var joinFlash = false;       // somebody joined and has not been noticed yet
+  var joinTimer = null;
+  var seenSeeded = false;      // the first member snapshot is the baseline
 
   function T(k, a, b) { return I18N.t(k, a, b); }
   function byId(id) { return document.getElementById(id); }
@@ -101,7 +106,8 @@ var CallUI = (function () {
       '<div class="call-top">' +
       '<span class="call-title" id="call-title"></span>' +
       '<span class="call-timer" id="call-timer">00:00</span>' +
-      '<span class="call-count tiny" id="call-count"></span>' +
+      '<span class="call-people" id="call-people"></span>' +
+      '<button type="button" class="call-min" id="call-min" title="' + UI.attr(T('calls.minimize')) + '">' + UI.icon('window-minimize') + '</button>' +
       '</div>' +
       '<div class="call-grid" id="call-grid"></div>' +
       '<div class="call-controls">' +
@@ -115,7 +121,35 @@ var CallUI = (function () {
     byId('call-cam').addEventListener('click', toggleCam);
     byId('call-retry').addEventListener('click', retryConnections);
     byId('call-hang').addEventListener('click', hangup);
+    byId('call-min').addEventListener('click', function (e) {
+      e.stopPropagation();
+      setMinimized(!minimized);
+    });
+    // clicking the shrunken window brings the full panel back
+    o.addEventListener('click', function (e) {
+      if (!minimized) return;
+      if (e.target && e.target.closest && e.target.closest('button')) return;
+      setMinimized(false);
+    });
     return o;
+  }
+
+  /// <summary>
+  /// Shrinks the call into a small floating window so the site stays usable while
+  /// talking. The media keeps flowing either way: this is only the panel.
+  /// </summary>
+  function setMinimized(on) {
+    var o = overlay();
+    if (!o) return;
+    minimized = !!on;
+    o.className = 'call-overlay open' + (minimized ? ' mini' : '');
+    var b = byId('call-min');
+    if (b) {
+      b.innerHTML = UI.icon(minimized ? 'window-maximize' : 'window-minimize');
+      b.title = minimized ? T('calls.expand') : T('calls.minimize');
+    }
+    // one remote tile is worth seeing even when shrunken; a grid of many is not
+    syncGridSize(byId('call-grid'));
   }
 
   /// <summary>
@@ -710,18 +744,74 @@ var CallUI = (function () {
     return false;
   }
 
+  /// <summary>
+  /// Avatars of everybody on the line plus a count, drawn like a notification
+  /// badge: a blue dot appears when somebody new joins and stays until the panel
+  /// is looked at, so a join is never silent.
+  /// </summary>
+  function renderPeople() {
+    var box = byId('call-people');
+    if (!box || !call || !call.members) return;
+    var accepted = [];
+    for (var i = 0; i < call.members.length; i++) {
+      if (call.members[i].accepted) accepted.push(call.members[i]);
+    }
+    var html = '';
+    var room = 4;
+    for (var k = 0; k < accepted.length && k < room; k++) {
+      var m = accepted[k];
+      var u = m.user || { id: m.id };
+      var name = m.mine ? T('calls.you') : (u.displayName || u.username || '?');
+      html += '<span class="call-person' + (m.mine ? ' me' : '') + '" title="' + UI.attr(name) + '">' +
+        UI.avatar(u, 20) + '</span>';
+    }
+    if (accepted.length > room) html += '<span class="call-person more">+' + (accepted.length - room) + '</span>';
+    html += '<span class="call-count-badge">' + accepted.length + '</span>';
+    if (joinFlash) html += '<span class="call-dot" title="' + UI.attr(T('calls.someoneJoined')) + '"></span>';
+    box.innerHTML = html;
+  }
+
+  /// <summary>
+  /// A blue dot on the Calls entry while a call is live, so it is obvious from
+  /// any page that somebody is talking. Removed as soon as the call ends.
+  /// </summary>
+  function markNav(live) {
+    var links = document.querySelectorAll('a[href="#/calls"]');
+    for (var i = 0; i < links.length; i++) {
+      var cls = links[i].className.replace(/\s*call-live\b/g, '');
+      links[i].className = live ? cls + ' call-live' : cls;
+    }
+  }
+
   function updateMembers(payload) {
     if (!payload || typeof payload !== 'object') return;
     if (payload.id) call = payload;
     if (!call || !call.members) return;
-    var count = 0;
-    var total = 0;
+
+    // who is new since the last look? a join deserves a dot, a re-render does not
+    var acceptedNow = {};
+    for (var s = 0; s < call.members.length; s++) {
+      var sm = call.members[s];
+      if (sm.accepted) acceptedNow[sm.id] = true;
+    }
+    for (var id in acceptedNow) {
+      if (!acceptedNow.hasOwnProperty(id)) continue;
+      if (seenMembers[id]) continue;
+      // the room as we found it when the call opened is not news
+      if (!seenSeeded) { seenMembers[id] = true; continue; }
+      var m2 = null;
+      for (var q = 0; q < call.members.length; q++) if (String(call.members[q].id) === String(id)) m2 = call.members[q];
+      if (m2 && !m2.mine) flashJoin();
+      seenMembers[id] = true;
+    }
+    seenSeeded = true;
+    for (var gone in seenMembers) {
+      if (!seenMembers.hasOwnProperty(gone)) continue;
+      if (!acceptedNow[gone]) delete seenMembers[gone];
+    }
+
     for (var i = 0; i < call.members.length; i++) {
       var m = call.members[i];
-      // a declined invitee is not "in the call", so it should not pad the total
-      if (m.declined) continue;
-      total++;
-      if (m.accepted) count++;
       if (m.mine) continue;
       var p = peers[m.id];
       if (!p) continue;
@@ -736,8 +826,8 @@ var CallUI = (function () {
         if (offBadge) offBadge.className = 'call-mic-off' + (m.muted ? '' : ' hidden');
       }
     }
-    var el = byId('call-count');
-    if (el) el.textContent = count + ' / ' + Math.max(total, 1);
+    renderPeople();
+    markNav(true);
 
     // a 1:1 call is titled after the person on the other end
     if (!call.room) {
@@ -747,6 +837,17 @@ var CallUI = (function () {
         break;
       }
     }
+  }
+
+  /// Shows the dot for a few seconds, and the same time on the nav entry.
+  function flashJoin() {
+    joinFlash = true;
+    if (joinTimer) clearTimeout(joinTimer);
+    joinTimer = setTimeout(function () {
+      joinFlash = false;
+      renderPeople();
+    }, 6000);
+    renderPeople();
   }
 
   function closePeer(userId) {
@@ -765,6 +866,11 @@ var CallUI = (function () {
     ensureOverlay();
     var o = overlay();
     o.className = 'call-overlay open';
+    minimized = false;
+    seenMembers = {};
+    seenSeeded = false;
+    joinFlash = false;
+    if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
     var t = byId('call-title');
     if (t) t.textContent = title || (kind === 'video' ? T('calls.videoCall') : T('calls.audioCall'));
     var camBtn = byId('call-cam');
@@ -773,6 +879,13 @@ var CallUI = (function () {
     var micBtn = byId('call-mic');
     if (micBtn) micBtn.className = 'call-btn' + (muted ? ' off' : '');
     if (camBtn) camBtn.className = 'call-btn' + (camOff ? ' off' : '');
+    var minBtn = byId('call-min');
+    if (minBtn) {
+      minBtn.innerHTML = UI.icon('window-minimize');
+      minBtn.title = T('calls.minimize');
+    }
+    renderPeople();
+    markNav(true);
     startedAt = Date.now();
     if (tickTimer) clearInterval(tickTimer);
     tickTimer = setInterval(function () {
@@ -791,6 +904,14 @@ var CallUI = (function () {
     stopLocal();
     levels = {};
     if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+    if (joinTimer) { clearTimeout(joinTimer); joinTimer = null; }
+    minimized = false;
+    seenMembers = {};
+    seenSeeded = false;
+    joinFlash = false;
+    markNav(false);
+    var people = byId('call-people');
+    if (people) people.innerHTML = '';
     var o = overlay();
     if (o) {
       o.className = 'call-overlay';

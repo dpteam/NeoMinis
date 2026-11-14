@@ -10,6 +10,9 @@ namespace Social.Core
         public bool Declined;
         public bool Muted;
         public bool Video;
+        // the last time this member's page asked for call events; a member whose
+        // browser vanished stops ticking and can be dropped from a room
+        public DateTime LastSeen = DateTime.UtcNow;
     }
 
     /// <summary>
@@ -65,6 +68,7 @@ namespace Social.Core
     {
         private const int QueueLimit = 200;
         private const int RingSeconds = 45;
+        private const int StaleMemberSeconds = 120;
 
         private static readonly object Sync = new object();
         private static readonly Dictionary<long, LiveCall> Calls = new Dictionary<long, LiveCall>();
@@ -142,6 +146,26 @@ namespace Social.Core
             return list;
         }
 
+        /// <summary>
+        /// Marks every call this user is in as still attended. The client long-polls
+        /// for call events while a page is open, which makes that poll a heartbeat
+        /// for free: a closed tab stops ticking and stops counting as present.
+        /// </summary>
+        public static void Touch(long userId)
+        {
+            DateTime now = DateTime.UtcNow;
+            lock (Sync)
+            {
+                foreach (KeyValuePair<long, LiveCall> pair in Calls)
+                {
+                    LiveCall c = pair.Value;
+                    if (c.IsEnded) continue;
+                    CallMember m = c.Member(userId);
+                    if (m != null) m.LastSeen = now;
+                }
+            }
+        }
+
         public static bool Join(long id, long userId, bool video, out LiveCall call)
         {
             lock (Sync)
@@ -157,6 +181,7 @@ namespace Social.Core
                 }
                 m.Accepted = true;
                 m.Declined = false;
+                m.LastSeen = DateTime.UtcNow;
                 if (video) m.Video = true;
                 return true;
             }
@@ -260,10 +285,25 @@ namespace Social.Core
             {
                 LiveCall c = pair.Value;
                 if (c.IsEnded && (now - c.Ended).TotalSeconds > 60) { deadCalls.Add(pair.Key); continue; }
-                if (!c.IsEnded && (now - c.Created).TotalSeconds > RingSeconds &&
+                // A named room is not a ring: one person waiting in a channel is a
+                // normal state, not an abandoned call. Sweeping it used to kill the
+                // room under the last person, and the next arrival opened a second
+                // call in the same room, so the two never met.
+                if (!c.IsEnded && string.IsNullOrEmpty(c.Room) && (now - c.Created).TotalSeconds > RingSeconds &&
                     c.AcceptedCount <= 1 && c.Members.Count <= 1)
                 {
                     c.Ended = now;
+                }
+                // A room is only alive while somebody still asks for call events.
+                // A tab that was closed without hanging up goes quiet; after two
+                // minutes it stops counting as a person in the channel.
+                if (!c.IsEnded && !string.IsNullOrEmpty(c.Room))
+                {
+                    c.Members.RemoveAll(delegate(CallMember m)
+                    {
+                        return (now - m.LastSeen).TotalSeconds > StaleMemberSeconds;
+                    });
+                    if (c.Members.Count == 0) c.Ended = now;
                 }
             }
             for (int i = 0; i < deadCalls.Count; i++) Calls.Remove(deadCalls[i]);

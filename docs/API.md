@@ -624,6 +624,14 @@ the `maxActiveWaits` budget with the other long polls. Calls live only in memory
 a restart drops them, while the history (`calls.json`, last 500 records) survives
 and is what `#/calls` shows. `limits.maxCallMembers` (default 8) caps a call.
 
+Two rules keep rooms usable. A named room is **not** a ring, so the 45 s sweep
+that drops an unanswered 1:1 call never touches it: one person waiting alone in a
+channel is a normal state, and the next arrival walks into the same call instead
+of opening a second one. And the call long poll doubles as a **heartbeat** — every
+poll marks the caller as still present, and a member whose page stopped polling
+for two minutes is dropped from a room, so a tab closed without hanging up does
+not sit in the channel forever.
+
 ### ICE: why a call does or does not connect
 
 The browsers get their ICE configuration from `handshake.site`, so the server never

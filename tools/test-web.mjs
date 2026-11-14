@@ -568,6 +568,19 @@ async function main() {
     roomJoin2.data.call.members.length === 2, JSON.stringify(roomJoin2.data.call.members.length));
   const badRoom = await alice.call('POST', '/api/call/start', { room: 'x' });
   ok('too short room name rejected', badRoom.status === 400, String(badRoom.status));
+
+  // A named room is not a ring: it must not die under the last person, and the
+  // next arrival has to walk into the same call instead of opening a second one.
+  await bob.call('POST', '/api/call/leave', { id: roomId });
+  const aliceStill = await alice.call('GET', '/api/call/active');
+  ok('a room survives when the other person leaves',
+    (aliceStill.data.calls || []).some(c => c.id === roomId && !c.ended),
+    JSON.stringify((aliceStill.data.calls || []).length));
+  const bobBack = await bob.call('POST', '/api/call/start', { room: 'team_' + stamp, video: false });
+  ok('and the next person walks into the same call',
+    bobBack.status === 200 && bobBack.data.call.id === roomId,
+    JSON.stringify(bobBack.data && bobBack.data.call && bobBack.data.call.id));
+
   await alice.call('POST', '/api/call/leave', { id: roomId });
   await bob.call('POST', '/api/call/leave', { id: roomId });
 
