@@ -12,7 +12,7 @@ Runs on Windows XP SP3 and anything newer, including behind Nginx Proxy Manager
 [![.NET Framework](https://img.shields.io/badge/.NET_Framework-4.0-512bd4)](https://dotnet.microsoft.com/)
 [![C#](https://img.shields.io/badge/C%23-4.0-239120)](https://learn.microsoft.com/dotnet/csharp/)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#why-this-exists)
-[![API tests](https://img.shields.io/badge/API_tests-474_passing-brightgreen)](#testing)
+[![API tests](https://img.shields.io/badge/API_tests-475_passing-brightgreen)](#testing)
 [![License](https://img.shields.io/badge/license-use_it_fork_it-blue)](#license)
 
 [Quick start](#quick-start) · [Screenshots](#screenshots) · [Features](#features) · [Configuration](#configuration) · [API](#api-and-security) · [Docs](#documentation) · [Testing](#testing)
@@ -337,7 +337,7 @@ powershell -ExecutionPolicy Bypass -File tools\ci-test.ps1
 folder, runs the Node suite against **both boards**, restarts the server and
 verifies that data survived.
 
-`tools/test-web.mjs` speaks the same crypto as the browser: **474 checks** covering
+`tools/test-web.mjs` speaks the same crypto as the browser: **475 checks** covering
 registration, login, signature enforcement, replay rejection, encryption
 enforcement, posts, likes, comments, friends, messages, groups, notifications,
 calls, channels, apps, push, transfers, admin actions, recovery and logout.
