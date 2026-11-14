@@ -180,8 +180,20 @@ namespace Social.Core
 
         // voice and video calls
         public int MaxCallMembers = 8;
-        // comma separated ICE servers; empty = LAN only, no external lookups
-        public string CallStun = "stun:stun.l.google.com:19302";
+        // Comma separated ICE servers; empty = LAN only, no external lookups.
+        // Several STUN servers, because one being unreachable is common and a
+        // second opinion costs nothing.
+        public string CallStun = "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302,stun:stun.cloudflare.com:3478";
+        // TURN relay. This is the only thing that works through a symmetric NAT,
+        // which is what "the call never connects" usually means. Empty = no relay,
+        // and the UI says so when a connection fails. A comma separated list is
+        // accepted for turn: and turns: URLs.
+        public string CallTurn = "";
+        public string CallTurnUser = "";
+        public string CallTurnPass = "";
+        // "all" tries direct first and falls back to the relay; "relay" never
+        // leaves the TURN server, which is what a locked-down network needs.
+        public string CallIcePolicy = "all";
 
         // personal media library (music / clips)
         public int MaxAudioKB = 4096;
@@ -505,6 +517,10 @@ namespace Social.Core
                     else if (key == "maxgiftmessage") MaxGiftMessage = Int(val, MaxGiftMessage);
                     else if (key == "maxcallmembers") MaxCallMembers = Int(val, MaxCallMembers);
                     else if (key == "callstun") CallStun = val;
+                    else if (key == "callturn") CallTurn = val;
+                    else if (key == "callturnuser") CallTurnUser = val;
+                    else if (key == "callturnpass") CallTurnPass = val;
+                    else if (key == "callicepolicy") CallIcePolicy = val;
                     else if (key == "maxaudiokb") MaxAudioKB = Int(val, MaxAudioKB);
                     else if (key == "maxvideokb") MaxVideoKB = Int(val, MaxVideoKB);
                     else if (key == "maxaudiofiles") MaxAudioFiles = Int(val, MaxAudioFiles);
@@ -585,6 +601,8 @@ namespace Social.Core
             if (NotifyWaitSec < 1) NotifyWaitSec = 1;
             if (NotifyWaitSec > 25) NotifyWaitSec = 25;
             if (MaxAvatarKB < 16) MaxAvatarKB = 16;
+            if (CallIcePolicy != "relay") CallIcePolicy = "all";
+            if (CallTurn == null) CallTurn = "";
             if (AccountsPerIp < 0) AccountsPerIp = 0;
             if (AccountsPerIp > 100) AccountsPerIp = 100;
             if (MaxPostImageKB < 64) MaxPostImageKB = 64;

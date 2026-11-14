@@ -571,6 +571,12 @@ async function main() {
   await alice.call('POST', '/api/call/leave', { id: roomId });
   await bob.call('POST', '/api/call/leave', { id: roomId });
 
+  // ---- ICE configuration for the browsers
+  ok('handshake carries several STUN servers', String(hs.site.callStun || '').split(',').length >= 2,
+    String(hs.site.callStun));
+  ok('handshake carries the TURN fields', hs.site.callTurn !== undefined &&
+    hs.site.callTurnUser !== undefined && hs.site.callIcePolicy === 'all', String(hs.site.callIcePolicy));
+
   // ---- gifts
   const giftSent = await alice.call('POST', '/api/gifts/send', {
     to: bob.user.id, kind: 'heart', message: 'for the test suite'
@@ -1745,6 +1751,13 @@ async function main() {
     const allowed = await new Client('ip-cap2').register('cap2_' + stamp, 'cap-password-1');
     ok('raising the cap lets registration through again', capOff.status === 200 &&
       allowed.status === 200, String(allowed.status));
+
+    // an unknown ICE policy must not reach the browsers as-is
+    const badPolicy = await admin.call('POST', '/api/admin/settings/save',
+      { limits: { callIcePolicy: 'nonsense' } });
+    const policyNow = await admin.call('GET', '/api/admin/settings');
+    ok('an unknown ICE policy falls back to "all"', badPolicy.status === 200 &&
+      policyNow.data.limits.callIcePolicy === 'all', String(policyNow.data.limits.callIcePolicy));
   }
 
   // ---- guest / kiosk (read-only browsing)

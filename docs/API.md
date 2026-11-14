@@ -449,9 +449,35 @@ so a stranger cannot inject an offer.
 `accepted`, `declined`, `joined`, `left`, `ended`, `media`, `signal`) and shares
 the `maxActiveWaits` budget with the other long polls. Calls live only in memory:
 a restart drops them, while the history (`calls.json`, last 500 records) survives
-and is what `#/calls` shows. `limits.maxCallMembers` (default 8) caps a call, and
-`limits.callStun` holds the comma-separated ICE servers the browsers use (empty =
-LAN only, no external lookups; add your own TURN for strict NATs).
+and is what `#/calls` shows. `limits.maxCallMembers` (default 8) caps a call.
+
+### ICE: why a call does or does not connect
+
+The browsers get their ICE configuration from `handshake.site`, so the server never
+touches the media but decides how hard the browsers try:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `limits.callStun` | three public STUN servers | Comma separated. Empty = LAN only, no external lookups. Several, because one being unreachable is common. |
+| `limits.callTurn` | empty | Comma separated `turn:` / `turns:` URLs. **This is the only thing that works through a symmetric NAT**, which is what "the call never connects" usually means. |
+| `limits.callTurnUser` / `callTurnPass` | empty | Credentials for the TURN server. They are handed to the browser on purpose — that is how WebRTC authenticates — so use a dedicated account with quotas. |
+| `limits.callIcePolicy` | `all` | `all` tries a direct path and falls back to the relay; `relay` never leaves the TURN server. An unknown value falls back to `all`. |
+
+The overlay is built to explain itself rather than sit at "connecting":
+
+* every tile prints the selected candidate pair (`host → srflx`, `relay → relay`),
+  the live bitrate, RTT and packet loss from `pc.getStats()`;
+* a **22-second watchdog** marks a connection failed, because Chromium does not
+  always fire `failed` — with no usable candidates it can stay at `connecting`
+  forever;
+* when a connection fails and no `callTurn` is configured, the tile says so
+  instead of leaving the reader guessing;
+* a **Reconnect** button rebuilds the peer connection without hanging up;
+* simultaneous offers (glare) are resolved by user id — the higher id rolls its
+  own offer back — so two people joining a room together cannot deadlock.
+
+The server side of all that is one rule: `call/signal` relays SDP and candidates
+verbatim, and `ApiRouter.Calls.cs` refuses anything that is not a JSON object.
 
 ### Flash games
 

@@ -72,6 +72,9 @@ namespace Social.Web
                 .Prop("feedbackPerHour", _cfg.FeedbackPerHour)
                 .Prop("maxCallMembers", _cfg.MaxCallMembers)
                 .Prop("callStun", _cfg.CallStun)
+                .Prop("callTurn", _cfg.CallTurn)
+                .Prop("callTurnUser", _cfg.CallTurnUser)
+                .Prop("callIcePolicy", _cfg.CallIcePolicy)
                 .Prop("giftPerHour", _cfg.GiftPerHour)
                 .Prop("maxGiftMessage", _cfg.MaxGiftMessage)
                 .Prop("maxGameKB", _cfg.MaxGameKB)
@@ -371,6 +374,28 @@ namespace Social.Web
                 {
                     _cfg.CallStun = Util.SingleLine(Json.GetString(limits, "callStun", _cfg.CallStun), 400);
                     _cfg.SetIniValue("limits", "callStun", _cfg.CallStun);
+                }
+                if (limits.ContainsKey("callTurn"))
+                {
+                    _cfg.CallTurn = Util.SingleLine(Json.GetString(limits, "callTurn", _cfg.CallTurn), 400);
+                    _cfg.SetIniValue("limits", "callTurn", _cfg.CallTurn);
+                }
+                if (limits.ContainsKey("callTurnUser"))
+                {
+                    _cfg.CallTurnUser = Util.SingleLine(Json.GetString(limits, "callTurnUser", _cfg.CallTurnUser), 120);
+                    _cfg.SetIniValue("limits", "callTurnUser", _cfg.CallTurnUser);
+                }
+                if (limits.ContainsKey("callTurnPass"))
+                {
+                    _cfg.CallTurnPass = Util.SingleLine(Json.GetString(limits, "callTurnPass", _cfg.CallTurnPass), 120);
+                    _cfg.SetIniValue("limits", "callTurnPass", _cfg.CallTurnPass);
+                }
+                if (limits.ContainsKey("callIcePolicy"))
+                {
+                    string policy = Json.GetString(limits, "callIcePolicy", _cfg.CallIcePolicy).Trim().ToLowerInvariant();
+                    if (policy != "relay") policy = "all";
+                    _cfg.CallIcePolicy = policy;
+                    _cfg.SetIniValue("limits", "callIcePolicy", policy);
                 }
                 ApplyLimit(limits, "maxAvatarKB", _cfg.MaxAvatarKB, 16, delegate(int v) { _cfg.MaxAvatarKB = v; });
                 ApplyLimit(limits, "maxPostImageKB", _cfg.MaxPostImageKB, 64, delegate(int v) { _cfg.MaxPostImageKB = v; });

@@ -215,6 +215,13 @@ namespace Social.Web
                 .Prop("feedbackPerHour", _cfg.FeedbackPerHour)
                 .Prop("maxCallMembers", _cfg.MaxCallMembers)
                 .Prop("callStun", _cfg.CallStun)
+                // TURN is what makes a call work through a symmetric NAT, so the
+                // SPA has to know whether a relay exists before it can explain a
+                // failure honestly. The credentials are meant for the browsers.
+                .Prop("callTurn", _cfg.CallTurn)
+                .Prop("callTurnUser", _cfg.CallTurnUser)
+                .Prop("callTurnPass", _cfg.CallTurnPass)
+                .Prop("callIcePolicy", _cfg.CallIcePolicy)
                 .Prop("giftPerHour", _cfg.GiftPerHour)
                 .Prop("maxGiftMessage", _cfg.MaxGiftMessage)
                 .Prop("giftsEnabled", _cfg.GiftsEnabled)

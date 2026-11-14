@@ -3785,6 +3785,14 @@
         field('cfg-storycaption', T('admin.maxStoryCaption'), lim.maxStoryCaption, 'number', ' min="0"') +
         field('cfg-callmembers', T('admin.maxCallMembers'), lim.maxCallMembers, 'number', ' min="2"') +
         field('cfg-callstun', T('admin.callStun'), lim.callStun) +
+        field('cfg-callturn', T('admin.callTurn'), lim.callTurn) +
+        '<div class="inline-fields">' +
+        field('cfg-callturnuser', T('admin.callTurnUser'), lim.callTurnUser) +
+        field('cfg-callturnpass', T('admin.callTurnPass'), lim.callTurnPass) +
+        '</div>' +
+        select('cfg-callice', T('admin.callIcePolicy'),
+          [['all', T('admin.callIceAll')], ['relay', T('admin.callIceRelay')]], lim.callIcePolicy) +
+        '<div class="hint">' + T('admin.callTurnHint') + '</div>' +
         '</div>';
 
       // ui + logging + storage
@@ -3908,7 +3916,11 @@
             storyPerDay: Number(App.val('cfg-storyperday')),
             maxStoryCaption: Number(App.val('cfg-storycaption')),
             maxCallMembers: Number(App.val('cfg-callmembers')),
-            callStun: App.val('cfg-callstun')
+            callStun: App.val('cfg-callstun'),
+            callTurn: App.val('cfg-callturn'),
+            callTurnUser: App.val('cfg-callturnuser'),
+            callTurnPass: App.val('cfg-callturnpass'),
+            callIcePolicy: App.val('cfg-callice')
           },
           ui: {
             refreshMs: Number(App.val('cfg-refresh')),

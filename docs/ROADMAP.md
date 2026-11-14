@@ -69,15 +69,12 @@ poll) but they are the minimum.
 | --- | --- |
 | **Screen sharing** | `getDisplayMedia` plus a second track per peer; `display-capture` is already allowed in `Permissions-Policy`. Needs renegotiation, because adding a track mid-call changes the SDP. |
 | **Calls that survive a reload** | `/api/call/active` exists; the overlay has to restore the peer connections from `sessionStorage` too. |
-| **Fix "connection failed" first** | In testing the peers stayed in ICE state `new` and the call showed "не удалось соединиться". Most likely cause: only a public STUN server is configured (`limits.callStun`), so any symmetric NAT or a hairpin between two machines behind the same router cannot connect. Needs (a) a real TURN server in the config recipe, (b) the overlay printing the ICE state and the candidate pair so the failure is diagnosable, (c) a fallback to the relay when direct fails. This is the first thing to do before any of the fancy call features. |
 | **Discord-style call page** | Replace the single "room name" box with a Discord-like sidebar: a list of channels (text-like names, e.g. `general`, `games`, `afk`) that anybody can create, a "join" button per channel, a list of who is inside each channel right now, and the active call filling the rest of the page. Voice channels get a speaker icon, the number of people inside, and a green ring around avatars of people currently talking (Web Audio level meter per peer). Rooms become persistent channel records (name, created by, order) instead of free-typed names, with an admin-editable list. |
 | **Ringing when the tab is closed** | Web Push with a `call` payload, a ringtone, and an "answer" action in the notification. |
 | **Group layout** | Grid that switches to speaker view, mute-all, "raise hand", per-member volume. |
 | **Noise suppression / echo cancel** | `getUserMedia({ audio: { echoCancellation, noiseSuppression, autoGainControl } })` as toggles. |
 | **Call link** | `#/call/<room>` with a copy button, so a room can be pasted into a chat. |
 | **Recording** | `MediaRecorder` over a mixed stream into the media library, with a visible "recording" badge and consent from every participant. |
-| **TURN server** | Symmetric NATs cannot connect without it. `limits.callStun` already takes a list, so this is a config change plus a documented `coturn` recipe. |
-| **Call quality stats** | `pc.getStats()` → bitrate, packet loss, RTT in the overlay, so "it sounds bad" has a number. |
 
 ### Applications API (the big one)
 
@@ -198,6 +195,11 @@ Kept here so the list above stays honest.
 - Peer file transfer between friends: an 8-digit code, consent before a byte moves,
   SHA-256 checked by the receiver, chunks relayed in memory and dropped the moment
   the transfer ends. 32 MB cap, no extension blocklist, nothing written to disk.
+- Calls that say why they fail: several STUN servers, an optional TURN relay with
+  `callTurn` / `callIcePolicy`, a 22-second watchdog because Chromium does not
+  always fire `failed`, the selected candidate pair and live bitrate/RTT/loss under
+  each tile, a "Reconnect" button that rebuilds the peer connection, and a glare
+  rule so two simultaneous offers cannot deadlock at "connecting".
 - Groups with editable settings, pictures and member management.
 - Communities: owner / editor / member roles, join requests for closed groups and a
   moderation queue ("members post, editors approve").

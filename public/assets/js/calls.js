@@ -22,16 +22,44 @@ var CallUI = (function () {
   function T(k, a, b) { return I18N.t(k, a, b); }
   function byId(id) { return document.getElementById(id); }
 
+  function siteCfg() { return App.state.site || {}; }
+
+  /// <summary>
+  /// Every ICE server the browser should try. STUN answers "what is my public
+  /// address", TURN relays the media when a direct path cannot exist. Without a
+  /// TURN entry two symmetric NATs can never connect, which is the usual reason
+  /// a call sits at "connecting" forever.
+  /// </summary>
   function iceServers() {
-    var s = (App.state.site && App.state.site.callStun) || '';
-    if (!s) return [];
     var list = [];
-    var parts = String(s).split(',');
+    var stun = siteCfg().callStun || '';
+    var parts = String(stun).split(',');
     for (var i = 0; i < parts.length; i++) {
       var u = parts[i].replace(/^\s+|\s+$/g, '');
       if (u) list.push({ urls: u });
     }
+    var turn = siteCfg().callTurn || '';
+    var turns = String(turn).split(',');
+    for (var j = 0; j < turns.length; j++) {
+      var t = turns[j].replace(/^\s+|\s+$/g, '');
+      if (!t) continue;
+      var server = { urls: t };
+      var user = siteCfg().callTurnUser || '';
+      if (user) {
+        server.username = user;
+        server.credential = siteCfg().callTurnPass || '';
+      }
+      list.push(server);
+    }
     return list;
+  }
+
+  function hasRelay() {
+    return !!(siteCfg().callTurn || '');
+  }
+
+  function icePolicy() {
+    return (siteCfg().callIcePolicy === 'relay') ? 'relay' : 'all';
   }
 
   function supported() {
@@ -77,13 +105,53 @@ var CallUI = (function () {
       '<div class="call-controls">' +
       '<button type="button" class="call-btn" id="call-mic" title="' + UI.attr(T('calls.mic')) + '">' + UI.icon('microphone') + '</button>' +
       '<button type="button" class="call-btn" id="call-cam" title="' + UI.attr(T('calls.cam')) + '">' + UI.icon('video') + '</button>' +
+      '<button type="button" class="call-btn hidden" id="call-retry" title="' + UI.attr(T('calls.retry')) + '">' + UI.icon('rotate') + '</button>' +
       '<button type="button" class="call-btn call-hang" id="call-hang" title="' + UI.attr(T('calls.hangup')) + '">' + UI.icon('phone-slash') + '</button>' +
       '</div></div>';
     document.body.appendChild(o);
     byId('call-mic').addEventListener('click', toggleMic);
     byId('call-cam').addEventListener('click', toggleCam);
+    byId('call-retry').addEventListener('click', retryConnections);
     byId('call-hang').addEventListener('click', hangup);
     return o;
+  }
+
+  /// <summary>
+  /// Rebuilds every peer connection from scratch. A failed ICE negotiation does
+  /// not recover on its own, and asking the two people to hang up and call again
+  /// is a poor answer when the media devices are already open.
+  /// </summary>
+  function retryConnections() {
+    var ids = [];
+    for (var k in peers) if (peers.hasOwnProperty(k)) ids.push(k);
+    if (!ids.length) return;
+    for (var i = 0; i < ids.length; i++) dropPeer(ids[i]);
+    UI.toast(T('calls.retrying'), 'info');
+    // the offerer renegotiates; the other side answers the fresh offer
+    for (var j = 0; j < ids.length; j++) {
+      if (call && Number(call.initiator) === Number((App.state.user || {}).id)) {
+        offerTo(Number(ids[j]), (peers[ids[j]] || {}).user);
+      }
+    }
+    setRetryVisible(false);
+  }
+
+  /// Closes one peer connection and forgets it, so the next offer starts clean.
+  function dropPeer(userId) {
+    var p = peers[userId];
+    if (!p) return;
+    if (p.statsTimer) { clearInterval(p.statsTimer); p.statsTimer = null; }
+    if (p.deadline) { clearTimeout(p.deadline); p.deadline = null; }
+    if (p.pc) { try { p.pc.close(); } catch (e) { } }
+    var user = p.user;
+    delete peers[userId];
+    if (user) peers[userId] = { pc: null, stream: null, pending: [], user: user };
+  }
+
+  function setRetryVisible(on) {
+    var b = byId('call-retry');
+    if (!b) return;
+    b.className = on ? 'call-btn' : 'call-btn hidden';
   }
 
   function tile(user, isLocal) {
@@ -108,7 +176,11 @@ var CallUI = (function () {
   function attach(stream, user, isLocal) {
     var t = tile(user, isLocal);
     var v = t.querySelector('video');
-    if (v.srcObject !== stream) { try { v.srcObject = stream; } catch (e) { v.src = URL.createObjectURL(stream); } }
+    // srcObject is the only supported path; the old createObjectURL(stream)
+    // fallback was removed from browsers years ago and only hid the failure.
+    if (v && v.srcObject !== stream) {
+      try { v.srcObject = stream; } catch (e) { }
+    }
     if (!isLocal) paintState(user.id);
   }
 
@@ -119,14 +191,32 @@ var CallUI = (function () {
     if (s) s.textContent = text || '';
   }
 
-  /// <summary>Renders "connected В· muted" style labels from the two halves.</summary>
+  /// <summary>
+  /// Renders the label under a tile: connection state, then the numbers once
+  /// there are any. The numbers are the difference between "it does not work"
+  /// and "the relay is missing" or "the packet loss is 12%".
+  /// </summary>
   function paintState(userId) {
     var p = peers[userId];
     if (!p) return;
     var parts = [];
     if (p.conn) parts.push(p.conn);
     if (p.med) parts.push(p.med);
-    setTileState(userId, parts.join(' В· '));
+
+    if (p.stats && p.conn === T('calls.connected')) {
+      var bits = [];
+      if (p.stats.kbps) bits.push(p.stats.kbps + ' kbps');
+      if (p.stats.rtt) bits.push(p.stats.rtt + ' ms');
+      if (p.stats.loss) bits.push(p.stats.loss + '% loss');
+      if (p.stats.pair) bits.push((p.stats.relay ? '⤳ ' : '⇄ ') + p.stats.pair);
+      if (bits.length) parts.push(bits.join(' · '));
+    }
+
+    // A failure with no relay configured is not a mystery: say what to do.
+    if (p.conn === T('calls.failed') && !hasRelay()) parts.push(T('calls.noRelayHint'));
+    if (p.conn === T('calls.failed') || p.conn === T('calls.disconnected')) setRetryVisible(true);
+
+    setTileState(userId, parts.join(' · '));
   }
 
   // --------------------------------------------------------------- media
@@ -185,9 +275,20 @@ var CallUI = (function () {
   function createPc(userId, user) {
     var p = peerFor(userId, user);
     if (p.pc) return p;
-    var pc = new RTCPeerConnection({ iceServers: iceServers() });
+    var cfg = { iceServers: iceServers() };
+    var policy = icePolicy();
+    if (policy === 'relay') cfg.iceTransportPolicy = 'relay';
+    var pc = new RTCPeerConnection(cfg);
     p.pc = pc;
     p.conn = T('calls.connecting');
+    p.candidates = { host: 0, srflx: 0, relay: 0 };
+
+    // Show the peer's tile straight away. It used to appear only when media
+    // arrived, which meant a connection that failed *before* any track came
+    // through had nowhere to print the reason - the reader saw a Reconnect
+    // button and no explanation of what went wrong.
+    tile(p.user, false);
+    paintState(userId);
 
     if (local) {
       var tracks = local.getTracks ? local.getTracks() : [];
@@ -195,22 +296,112 @@ var CallUI = (function () {
     }
 
     pc.onicecandidate = function (e) {
-      if (e && e.candidate) send(userId, 'candidate', e.candidate);
+      if (!e || !e.candidate) return;
+      send(userId, 'candidate', e.candidate);
+      // Count what we actually gathered: a call with zero "relay" candidates on a
+      // network that blocks direct paths can never work, and saying so is more
+      // useful than "connecting" forever.
+      try {
+        var type = e.candidate.type || 'host';
+        if (p.candidates[type] === undefined) p.candidates[type] = 0;
+        p.candidates[type]++;
+        paintState(userId);
+      } catch (err) { }
     };
     pc.ontrack = function (e) {
       var stream = (e.streams && e.streams[0]) || new MediaStream([e.track]);
       p.stream = stream;
       attach(stream, p.user, false);
     };
+    pc.oniceconnectionstatechange = function () {
+      p.ice = pc.iceConnectionState;
+      if (pc.iceConnectionState === 'failed') p.conn = T('calls.failed');
+      paintState(userId);
+      if (pc.iceConnectionState === 'failed') statsFor(userId);
+    };
     pc.onconnectionstatechange = function () {
       var st = pc.connectionState;
-      if (st === 'connected') p.conn = T('calls.connected');
+      if (st === 'connected') { p.conn = T('calls.connected'); connectedNow(userId); }
       else if (st === 'connecting' || st === 'new') p.conn = T('calls.connecting');
       else if (st === 'disconnected') p.conn = T('calls.disconnected');
-      else if (st === 'failed' || st === 'closed') p.conn = T('calls.failed');
+      else if (st === 'failed' || st === 'closed') { p.conn = T('calls.failed'); statsFor(userId); }
       paintState(userId);
     };
+
+    // Chromium does not always fire "failed": with no usable candidates at all a
+    // connection can sit at "connecting" indefinitely, which is exactly the
+    // "the call never connects and says nothing" complaint. Give it a deadline.
+    p.deadline = setTimeout(function () {
+      if (!p.pc || p.conn === T('calls.connected')) return;
+      p.conn = T('calls.failed');
+      paintState(userId);
+      statsFor(userId);
+    }, 22000);
+
     return p;
+  }
+
+  /// Clears the deadline and starts the quality numbers.
+  function connectedNow(userId) {
+    var p = peers[userId];
+    if (!p) return;
+    if (p.deadline) { clearTimeout(p.deadline); p.deadline = null; }
+    setRetryVisible(false);
+    statsLoop(userId);
+  }
+
+  /// <summary>
+  /// One getStats() snapshot: which candidate pair won, and what the media is
+  /// actually doing. "It sounds bad" becomes a number, and "it never connects"
+  /// becomes a visible reason.
+  /// </summary>
+  function statsFor(userId) {
+    var p = peers[userId];
+    if (!p || !p.pc) return;
+    try {
+      p.pc.getStats(null).then(function (report) {
+        var out = { pair: null, rtt: 0, kbps: 0, loss: 0, relay: false };
+        var byId = {};
+        report.forEach(function (s) { byId[s.id] = s; });
+        report.forEach(function (s) {
+          if (s.type === 'candidate-pair' && (s.selected || s.state === 'succeeded')) {
+            out.rtt = Math.round(s.currentRoundTripTime ? s.currentRoundTripTime * 1000 : 0);
+            var local = byId[s.localCandidateId];
+            var remote = byId[s.remoteCandidateId];
+            if (local) {
+              out.pair = (local.candidateType || '?') + ' → ' + ((remote && remote.candidateType) || '?');
+              if (local.candidateType === 'relay' || (remote && remote.candidateType === 'relay')) out.relay = true;
+            }
+          }
+          if (s.type === 'inbound-rtp' && !s.isRemote) {
+            if (s.bytesReceived !== undefined && p.lastBytes !== undefined && s.timestamp && p.lastTs) {
+              var dBytes = s.bytesReceived - p.lastBytes;
+              var dt = (s.timestamp - p.lastTs) / 1000;
+              if (dt > 0) out.kbps = Math.round((dBytes * 8) / dt / 1000);
+            }
+            if (s.bytesReceived !== undefined) p.lastBytes = s.bytesReceived;
+            if (s.timestamp) p.lastTs = s.timestamp;
+            if (s.packetsLost !== undefined && s.packetsReceived !== undefined) {
+              var total = s.packetsLost + s.packetsReceived;
+              out.loss = total > 0 ? Math.round((s.packetsLost / total) * 1000) / 10 : 0;
+            }
+          }
+        });
+        p.stats = out;
+        paintState(userId);
+      }).catch(function () { });
+    } catch (e) { }
+  }
+
+  function statsLoop(userId) {
+    var p = peers[userId];
+    if (!p) return;
+    if (p.statsTimer) clearInterval(p.statsTimer);
+    statsFor(userId);
+    p.statsTimer = setInterval(function () {
+      if (!peers[userId] || !peers[userId].pc) { clearInterval(p.statsTimer); return; }
+      statsFor(userId);
+    }, 3000);
   }
 
   function offerTo(userId, user) {
@@ -224,6 +415,18 @@ var CallUI = (function () {
     }).catch(function () { p.conn = T('calls.failed'); paintState(userId); });
   }
 
+  /// <summary>
+  /// Glare: both sides offered at the same time, which happens whenever two
+  /// people join a room together. Only one offer may win, otherwise both
+  /// setRemoteDescription calls land on a connection in the wrong state and the
+  /// call sits at "connecting" forever. The higher user id yields, which is
+  /// arbitrary but stable and known to both sides.
+  /// </summary>
+  function shouldYieldOffer(myId, peerId, signalingState) {
+    if (signalingState === 'stable') return false;   // no clash at all
+    return Number(myId) > Number(peerId);
+  }
+
   function onSignal(from, payload) {
     if (!payload || !payload.kind) return;
     var user = null;
@@ -234,6 +437,12 @@ var CallUI = (function () {
 
     if (payload.kind === 'offer') {
       createPc(from, user);
+
+      var me = Number((App.state.user || {}).id) || 0;
+      var yields = shouldYieldOffer(me, from, p.pc.signalingState);
+      if (p.pc.signalingState !== 'stable' && !yields) return;   // our offer stands
+      if (yields) p.pc.setLocalDescription({ type: 'rollback' }).catch(function () { });
+
       p.pc.setRemoteDescription(new RTCSessionDescription(payload.data)).then(function () {
         flushCandidates(p);
         return p.pc.createAnswer();
@@ -247,6 +456,8 @@ var CallUI = (function () {
 
     if (payload.kind === 'answer') {
       if (!p.pc) return;
+      // a late answer to an offer we already rolled back is not an error
+      if (p.pc.signalingState !== 'have-local-offer') return;
       p.pc.setRemoteDescription(new RTCSessionDescription(payload.data)).then(function () {
         flushCandidates(p);
       }).catch(function () { });
@@ -702,6 +913,10 @@ var CallUI = (function () {
     start: startCall,
     joinRoom: joinRoom,
     hangup: hangup,
+    // exposed for the test harness: the glare decision is the one piece of call
+    // logic that can be checked without two browsers and two microphones
+    shouldYieldOffer: shouldYieldOffer,
+    iceServers: iceServers,
     active: function () { return !!call; },
     /// <summary>Peer connection states, handy when a call will not connect.</summary>
     debug: function () {
