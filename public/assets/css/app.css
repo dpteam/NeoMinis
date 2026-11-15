@@ -1443,6 +1443,40 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 }
 .emoji-item:hover { background: var(--hover); }
 
+/* stickers: a tab per pack, then a grid of pictures. Sending is one click. */
+.sticker-pop {
+  margin-top: 7px; padding: 6px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+.sticker-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+.sticker-tab {
+  border: 0; background: transparent; cursor: pointer;
+  padding: 3px 9px; border-radius: 999px; font: inherit; font-size: 11px;
+  color: var(--muted);
+}
+.sticker-tab:hover { background: var(--hover); color: var(--text); }
+.sticker-tab.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.sticker-page {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px;
+  max-height: 190px; overflow: auto;
+}
+.sticker-item {
+  border: 0; background: transparent; cursor: pointer; padding: 4px;
+  border-radius: 8px; line-height: 0;
+}
+.sticker-item:hover { background: var(--hover); }
+.sticker-item img { width: 100%; height: auto; display: block; }
+
+/* a sticker message has no bubble chrome: the picture is the message */
+.bubble.sticker-bubble {
+  background: transparent; border: 0; padding: 0 2px 2px;
+  box-shadow: none; max-width: 148px;
+}
+.msg-sticker { width: 128px; height: 128px; display: block; }
+.bubble-row.mine .bubble.sticker-bubble { background: transparent; color: var(--text); }
+.bubble.sticker-bubble .msg-foot { background: none; padding: 2px 0 0; justify-content: flex-end; }
+
 .typing-dots { display: inline-flex; gap: 2px; align-items: center; }
 .typing-dots i {
   width: 4px; height: 4px; border-radius: 50%; background: var(--accent);

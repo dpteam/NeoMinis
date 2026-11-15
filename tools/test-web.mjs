@@ -465,6 +465,40 @@ async function main() {
   const badAudio = await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: '', audio: PNG });
   ok('non-audio payload rejected', badAudio.status === 400, String(badAudio.status));
 
+  // ---- stickers: an id from the built-in catalogue, never an upload
+  const stickerCat = await alice.call('GET', '/api/stickers');
+  ok('the sticker catalogue is served', stickerCat.status === 200 &&
+    (stickerCat.data.packs || []).length >= 2 &&
+    stickerCat.data.packs.every(p => p.stickers.length > 0 &&
+      p.stickers.every(s => s.id && s.url.indexOf('/assets/stickers/') === 0)),
+    JSON.stringify((stickerCat.data.packs || []).map(p => p.id + ':' + p.stickers.length)));
+  const stickerFile = await fetch(BASE + '/assets/stickers/faces/smile.svg');
+  ok('a sticker file is actually served', stickerFile.status === 200 &&
+    (stickerFile.headers.get('content-type') || '').indexOf('svg') >= 0,
+    String(stickerFile.status) + ' ' + stickerFile.headers.get('content-type'));
+  const stickerMsg = await bob.call('POST', '/api/messages/send',
+    { to: alice.user.id, body: '', sticker: 'faces/smile' });
+  ok('a sticker can be sent', stickerMsg.status === 200 &&
+    stickerMsg.data.message.sticker === 'faces/smile' &&
+    stickerMsg.data.message.stickerUrl === '/assets/stickers/faces/smile.svg',
+    JSON.stringify(stickerMsg.data && stickerMsg.data.message && stickerMsg.data.message.sticker));
+  const stickerSeen = await alice.call('GET', '/api/messages?with=' + bob.user.id);
+  ok('the sticker comes back in the conversation',
+    (stickerSeen.data.messages || []).some(m => m.sticker === 'faces/smile'), '');
+  // a sticker costs nothing on disk: it must not create a media file
+  const stickerNoMedia = (stickerMsg.data.message.image || '') === '' &&
+    (stickerMsg.data.message.file || '') === '';
+  ok('a sticker stores no media file', stickerNoMedia, JSON.stringify(stickerMsg.data.message.image));
+  const stickerBad = await bob.call('POST', '/api/messages/send',
+    { to: alice.user.id, body: '', sticker: '../../etc/passwd' });
+  ok('an unknown sticker id is refused', stickerBad.status === 400, String(stickerBad.status));
+  const stickerTraversal = await bob.call('POST', '/api/messages/send',
+    { to: alice.user.id, body: '', sticker: 'faces/../../secret' });
+  ok('a path in a sticker id is refused', stickerTraversal.status === 400, String(stickerTraversal.status));
+  const stickerEmpty = await bob.call('POST', '/api/messages/send',
+    { to: alice.user.id, body: '', sticker: '' });
+  ok('an empty message is still empty', stickerEmpty.status === 400, String(stickerEmpty.status));
+
   // a clip picked from the gallery
   const MP4 = 'data:video/mp4;base64,' + Buffer.concat([
     Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom'), Buffer.from([0, 0, 2, 0]),

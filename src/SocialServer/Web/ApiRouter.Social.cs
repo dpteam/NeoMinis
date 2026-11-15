@@ -1432,6 +1432,39 @@ namespace Social.Web
 
         // =========================================================== messages
 
+        /// <summary>
+        /// The built-in sticker catalogue. It is static data that ships with the site,
+        /// so this is a plain read: the client asks once and caches it, and the
+        /// server never has to look at the filesystem.
+        /// </summary>
+        private void HandleStickers(ApiCtx ctx)
+        {
+            JsonBuilder b = new JsonBuilder(2048);
+            b.BeginObject();
+            b.Prop("enabled", _cfg.StickersEnabled);
+            b.Name("packs").BeginArray();
+            StickerPack[] packs = Stickers.Packs;
+            for (int i = 0; i < packs.Length; i++)
+            {
+                b.BeginObject();
+                b.Prop("id", packs[i].Id);
+                b.Prop("name", packs[i].Name);
+                b.Name("stickers").BeginArray();
+                for (int k = 0; k < packs[i].Stickers.Length; k++)
+                {
+                    string id = packs[i].Id + "/" + packs[i].Stickers[k];
+                    b.BeginObject();
+                    b.Prop("id", id);
+                    b.Prop("url", Stickers.Url(id));
+                    b.EndObject();
+                }
+                b.EndArray();
+                b.EndObject();
+            }
+            b.EndArray();
+            SendOk(ctx, b);
+        }
+
         private void HandleThreads(ApiCtx ctx)
         {
             List<ThreadInfo> threads = _store.ThreadsFor(ctx.User.Id);
@@ -1517,12 +1550,16 @@ namespace Social.Web
             string audioData = BodyStr(ctx, "audio", "");
             string videoData = BodyStr(ctx, "video", "");
             string fileData = BodyStr(ctx, "file", "");
+            // a sticker is an id from the built-in catalogue, never an upload
+            string sticker = _cfg.StickersEnabled ? Stickers.Normalize(BodyStr(ctx, "sticker", "")) : "";
+            if (!string.IsNullOrEmpty(BodyStr(ctx, "sticker", "")) && sticker.Length == 0)
+                throw new ApiException(400, "bad-sticker", "That sticker does not exist");
             string fileName = Util.SingleLine(BodyStr(ctx, "fileName", ""), 120);
             int audioSec = (int)BodyLong(ctx, "audioSec", 0);
             long replyTo = BodyLong(ctx, "replyTo", 0);
             if (text.Length == 0 && string.IsNullOrEmpty(imageData) && albumData.Count == 0 &&
                 string.IsNullOrEmpty(audioData) && string.IsNullOrEmpty(fileData) &&
-                string.IsNullOrEmpty(videoData))
+                string.IsNullOrEmpty(videoData) && sticker.Length == 0)
                 throw new ApiException(400, "empty", "Write something first");
 
             string image = "";
@@ -1599,7 +1636,7 @@ namespace Social.Web
             }
 
             Message m = _store.CreateMessage(ctx.User.Id, target.Id, text, image, images, audio, audioSec, replyTo, 0,
-                fileUrl, fileUrl.Length == 0 ? "" : fileName, fileSize, video);
+                fileUrl, fileUrl.Length == 0 ? "" : fileName, fileSize, video, sticker);
             TypingRegistry.Clear(ctx.User.Id, target.Id);
             ctx.User.LastMessageAt = DateTime.UtcNow;
             _store.MarkUserDirty(ctx.User);
@@ -1786,7 +1823,7 @@ namespace Social.Web
             long author = original.ForwardedFrom > 0 ? original.ForwardedFrom : original.From;
 
             Message m = _store.CreateMessage(ctx.User.Id, target.Id, original.Body, image, images, audio,
-                original.AudioSec, 0, author, file, original.FileName, original.FileSize);
+                original.AudioSec, 0, author, file, original.FileName, original.FileSize, "", original.Sticker);
             ctx.User.LastMessageAt = DateTime.UtcNow;
             _store.MarkUserDirty(ctx.User);
             _stats.OnMessage();

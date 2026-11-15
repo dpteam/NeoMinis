@@ -361,6 +361,9 @@ namespace Social.Core
         public string FileUrl = "";    // generic attachment, /media/files/...
         public string FileName = "";   // original name, shown in the chat
         public long FileSize;          // bytes, for the download hint
+        // a sticker is just a known id ("faces/smile"), not an upload: the files ship
+        // with the site, so a message costs a few bytes instead of a few kilobytes
+        public string Sticker = "";
         public long ForwardedFrom;     // original author when the message was forwarded, 0 = not forwarded
         public DateTime Created = DateTime.UtcNow;
         public bool Read;

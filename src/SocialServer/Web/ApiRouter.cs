@@ -231,6 +231,7 @@ namespace Social.Web
                 .Prop("maxGiftMessage", _cfg.MaxGiftMessage)
                 .Prop("giftsEnabled", _cfg.GiftsEnabled)
                 .Prop("gamesEnabled", GamesAvailable())
+                .Prop("stickersEnabled", _cfg.StickersEnabled)
                 .Prop("maxGameKB", _cfg.MaxGameKB)
                 .Prop("maxGameFiles", _cfg.MaxGameFiles)
                 .Prop("storiesEnabled", _cfg.StoriesEnabled)
@@ -862,6 +863,7 @@ namespace Social.Web
             if (r == "friends") { RequireMethod(m, "GET"); HandleFriends(ctx); return; }
             if (r == "friend") { RequireMethod(m, "POST"); HandleFriendAction(ctx); return; }
             if (r == "messages/threads") { RequireMethod(m, "GET"); HandleThreads(ctx); return; }
+            if (r == "stickers") { RequireMethod(m, "GET"); HandleStickers(ctx); return; }
             if (r == "messages") { HandleMessages(ctx); return; }
             if (r == "messages/send") { RequireMethod(m, "POST"); HandleMessageSend(ctx); return; }
             if (r == "messages/read") { RequireMethod(m, "POST"); HandleMessageRead(ctx); return; }

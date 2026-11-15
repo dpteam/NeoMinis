@@ -317,7 +317,7 @@ earned (useful after an import or a rule change).
 | --- | --- | --- | --- |
 | GET | `/api/messages/threads` | — | `{ threads[], unread }` |
 | GET | `/api/messages` | `with`, `before`, `limit` | `{ other, messages[], hasMore, next }` |
-| POST | `/api/messages/send` | `to`, `body`, `image`, `images[]`, `video`, `audio`, `audioSec`, `file`, `fileName`, `replyTo` | `{ message }` |
+| POST | `/api/messages/send` | `to`, `body`, `image`, `images[]`, `video`, `audio`, `audioSec`, `file`, `fileName`, `sticker`, `replyTo` | `{ message }` |
 | GET | `/api/messages/wait` | `with`, `after`, `timeout` | `{ messages[], latest, typing, read, unread, live }` |
 | POST | `/api/messages/typing` | `to` | `{ ok }` |
 | POST | `/api/messages/react` | `id`, `emoji` | `{ message }` |
@@ -327,6 +327,13 @@ earned (useful after an import or a rule change).
 | POST | `/api/messages/delete` | `id` | `{ ok }` (per-side delete) |
 | POST | `/api/messages/revoke` | `id` | `{ message }` — delete for everyone |
 | POST | `/api/messages/pin` | `id`, `on` | `{ pinned }` |
+| GET | `/api/stickers` | — | `{ enabled, packs[{ id, name, stickers[{ id, url }] }] }` |
+
+**Stickers** are files that ship with the site, not uploads. A message carries only
+an id (`faces/smile`), so it costs a few bytes and writes nothing to `data/media`.
+The server normalises the id against its own catalogue and refuses anything it does
+not know — a client cannot point a message at an arbitrary path. `ui.stickersEnabled`
+turns the picker off; the catalogue endpoint still answers, with `enabled: false`.
 
 **Delete for me vs. delete for everyone.** `/api/messages/delete` hides the row on
 one side only; the other person keeps their copy and the file stays until both

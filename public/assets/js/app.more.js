@@ -143,9 +143,21 @@
   var IMG_RE = /^(https?:\/\/[^\s]+\.(?:png|jpe?g|gif|webp|avif))(\?\S*)?$/i;
   var VID_RE = /^(https?:\/\/[^\s]+\.(?:mp4|webm|ogv))(\?\S*)?$/i;
 
+  // One document listener closes the sticker picker, registered once here rather
+  // than inside bindChat: a new conversation would otherwise add another copy.
+  document.addEventListener('click', function (e) {
+    var pop = document.getElementById('chat-stickers');
+    if (!pop || pop.className.indexOf('hidden') >= 0) return;
+    var btn = document.getElementById('chat-sticker-btn');
+    if (btn && (btn === e.target || (btn.contains && btn.contains(e.target)))) return;
+    if (pop.contains && pop.contains(e.target)) return;
+    pop.className = 'sticker-pop hidden';
+  });
+
   function msgPreview(m) {
     var body = String((m && m.body) || '').replace(/\s+/g, ' ').trim();
     if (body) return body.substring(0, 60);
+    if (m && m.sticker) return T('messages.sticker');
     if (m.file) return T('messages.file');
     if (m && m.images && m.images.length) return T('messages.album', m.images.length + 1);
     if (m && m.audio) return T('messages.voice');
@@ -260,6 +272,21 @@
     }
     var tick = mine ? '<span class="tick' + (m.read ? ' read' : '') + '" title="' + UI.attr(m.read ? T('messages.read') : T('messages.sent')) + '">' +
       UI.icon(m.read ? 'check-double' : 'check') + '</span>' : '';
+    // a sticker is its own bubble: no background, no padding, just the picture
+    if (m.sticker) {
+      var stUrl = UI.safeUrl(m.stickerUrl || '');
+      return '<div class="bubble-row' + (mine ? ' mine' : '') + '" data-id="' + m.id + '">' + UI.avatar(u, 26) +
+        '<div class="bubble sticker-bubble">' +
+        (stUrl ? '<img class="msg-sticker" src="' + UI.attr(stUrl) + '" alt="' + UI.attr(m.sticker) + '" loading="lazy">' : '') +
+        quote +
+        '<div class="msg-foot"><span class="time">' + UI.formatTime(m.created) + '</span>' + tick +
+        (m.pinned ? '<span class="msg-pin" title="' + UI.attr(T('messages.pinned')) + '">' + UI.icon('thumbtack') + '</span>' : '') +
+        '<button type="button" class="msg-act msg-reply" data-id="' + m.id + '" title="' + UI.attr(T('messages.reply')) + '">' + UI.icon('reply') + '</button>' +
+        '<button type="button" class="msg-act msg-forward" data-id="' + m.id + '" title="' + UI.attr(T('messages.forward')) + '">' + UI.icon('share') + '</button>' +
+        (mine && m.canRevoke ? '<button type="button" class="msg-act msg-revoke" data-id="' + m.id + '" title="' + UI.attr(T('messages.revoke')) + '">' + UI.icon('ban') + '</button>' : '') +
+        (mine ? '<button type="button" class="msg-act msg-del" data-id="' + m.id + '" title="' + UI.attr(T('messages.deleteForMe')) + '">' + UI.icon('xmark') + '</button>' : '') +
+        '</div></div></div>';
+    }
     return '<div class="bubble-row' + (mine ? ' mine' : '') + '" data-id="' + m.id + '">' + UI.avatar(u, 26) +
       '<div class="bubble">' + fwd + quote +
       media +
@@ -408,7 +435,7 @@
     var o = t.other || {};
     var last = t.last || {};
     var preview = t.typing ? T('messages.typingShort') : msgPreview(last);
-    var icon = !last.body && last.image ? UI.icon('image') + ' ' : '';
+    var icon = !last.body && last.sticker ? UI.icon('icons') + ' ' : (!last.body && last.image ? UI.icon('image') + ' ' : '');
     return '<div class="thread' + (Number(activeId) === Number(o.id) ? ' active' : '') + '" data-user="' + o.id + '">' +
       UI.avatar(o, 34) + '<div class="thread-main"><div class="name">' + UI.esc(o.displayName) + '</div>' +
       '<div class="last' + (t.typing ? ' typing' : '') + '">' + icon + UI.esc(preview) + '</div></div>' +
@@ -440,10 +467,14 @@
       '<button type="button" class="chat-btn" id="chat-doc-btn" title="' + UI.attr(T('messages.attachFile')) + '">' + UI.icon('paperclip') + '</button>' +
       '<input type="file" id="chat-doc" class="hidden">' +
       '<button type="button" class="chat-btn" id="chat-emoji-btn" title="' + UI.attr(T('messages.emoji')) + '">' + UI.icon('face-smile') + '</button>' +
+      (state.site.stickersEnabled !== false
+        ? '<button type="button" class="chat-btn" id="chat-sticker-btn" title="' + UI.attr(T('messages.stickers')) + '">' + UI.icon('icons') + '</button>'
+        : '') +
       '<textarea id="chat-text" rows="1" maxlength="' + (state.site.maxMessageLength || 4000) + '" placeholder="' + UI.attr(T('messages.placeholder')) + '"></textarea>' +
       '<button class="chat-send" type="submit" id="chat-send" title="' + UI.attr(T('common.send')) + '">' + UI.icon('paper-plane') + '</button>' +
       '</div>' +
       '<div class="emoji-pop hidden" id="chat-emoji"></div>' +
+      '<div class="sticker-pop hidden" id="chat-stickers"></div>' +
       '</form>';
   }
 
@@ -944,6 +975,79 @@
         appendMessages([data.message], other, true);
         SoundFX.play('message');
         refreshThreads();
+      });
+    }
+
+    // ------------------------------------------------------------- stickers
+    // A sticker is sent on click, not staged: that is the whole point of them.
+    var stickerPop = document.getElementById('chat-stickers');
+    var stickerBtn = document.getElementById('chat-sticker-btn');
+
+    function sendSticker(id) {
+      if (!id) return;
+      Api.request('POST', '/api/messages/send',
+        { to: withId, body: '', sticker: id, replyTo: state.im.replyTo || 0 }, function (err, data) {
+          if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+          clearReply();
+          appendMessages([data.message], other, true);
+          SoundFX.play('message');
+          refreshThreads();
+        });
+    }
+
+    function renderStickers(packs) {
+      var html = '';
+      var tabs = '';
+      for (var p = 0; p < packs.length; p++) {
+        tabs += '<button type="button" class="sticker-tab' + (p === 0 ? ' active' : '') +
+          '" data-pack="' + UI.attr(packs[p].id) + '">' + UI.esc(packs[p].name) + '</button>';
+        html += '<div class="sticker-page' + (p === 0 ? '' : ' hidden') + '" data-pack="' + UI.attr(packs[p].id) + '">';
+        for (var s = 0; s < packs[p].stickers.length; s++) {
+          var st = packs[p].stickers[s];
+          html += '<button type="button" class="sticker-item" data-sticker="' + UI.attr(st.id) + '" title="' +
+            UI.attr(st.id) + '"><img src="' + UI.attr(UI.safeUrl(st.url)) + '" alt="" loading="lazy"></button>';
+        }
+        html += '</div>';
+      }
+      stickerPop.innerHTML = '<div class="sticker-tabs">' + tabs + '</div>' + html;
+      var tabBtns = stickerPop.querySelectorAll('.sticker-tab');
+      for (var t = 0; t < tabBtns.length; t++) {
+        tabBtns[t].addEventListener('click', function () {
+          var pack = this.getAttribute('data-pack');
+          var all = stickerPop.querySelectorAll('.sticker-tab');
+          for (var a = 0; a < all.length; a++)
+            all[a].className = 'sticker-tab' + (all[a].getAttribute('data-pack') === pack ? ' active' : '');
+          var pages = stickerPop.querySelectorAll('.sticker-page');
+          for (var b = 0; b < pages.length; b++)
+            pages[b].className = 'sticker-page' + (pages[b].getAttribute('data-pack') === pack ? '' : ' hidden');
+        });
+      }
+      var items = stickerPop.querySelectorAll('.sticker-item');
+      for (var i = 0; i < items.length; i++) {
+        items[i].addEventListener('click', function () {
+          sendSticker(this.getAttribute('data-sticker'));
+          stickerPop.className = 'sticker-pop hidden';
+        });
+      }
+    }
+
+    var stickersLoaded = false;
+    if (stickerBtn && stickerPop) {
+      stickerBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var open = stickerPop.className.indexOf('hidden') < 0;
+        stickerPop.className = open ? 'sticker-pop hidden' : 'sticker-pop';
+        emojiPop.className = 'emoji-pop hidden';
+        if (open || stickersLoaded) return;
+        stickerPop.innerHTML = '<div class="center" style="padding:14px">' + UI.spinner() + '</div>';
+        Api.request('GET', '/api/stickers', null, function (err, data) {
+          if (err) {
+            stickerPop.innerHTML = '<div class="tiny muted" style="padding:10px">' + UI.esc(Api.errorText(err)) + '</div>';
+            return;
+          }
+          stickersLoaded = true;
+          renderStickers((data && data.packs) || []);
+        });
       });
     }
 
@@ -3957,6 +4061,7 @@
         check('cfg-gifts', T('admin.giftsEnabled'), ui.giftsEnabled) +
         check('cfg-games', T('admin.gamesEnabled'), ui.gamesEnabled) +
         check('cfg-stories', T('admin.storiesEnabled'), ui.storiesEnabled) +
+        check('cfg-stickers', T('admin.stickersEnabled'), ui.stickersEnabled !== false) +
         (ui.gamesReady === false ? '<div class="alert warn" style="margin:6px 0">' + T('admin.gamesNoRuffle') + '</div>' : '') +
         field('cfg-notifywait', T('admin.notifyWait'), ui.notifyWaitSec, 'number', ' min="1" max="25"') +
         '<div style="margin-top:6px"><button class="btn btn-sm" id="cfg-notify-test">' + UI.icon('bell') + ' ' + T('admin.notifyTest') + '</button></div>' +
@@ -4089,6 +4194,7 @@
             giftsEnabled: document.getElementById('cfg-gifts').checked,
             gamesEnabled: document.getElementById('cfg-games').checked,
             storiesEnabled: document.getElementById('cfg-stories').checked,
+            stickersEnabled: document.getElementById('cfg-stickers').checked,
             notifyWaitSec: Number(App.val('cfg-notifywait'))
           },
           logging: {

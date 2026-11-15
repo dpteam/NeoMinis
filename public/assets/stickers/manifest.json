@@ -1,0 +1,36 @@
+{
+  "packs": [
+    {
+      "id": "faces",
+      "name": "Faces",
+      "stickers": [
+        "smile",
+        "laugh",
+        "love",
+        "wow",
+        "sad",
+        "cry",
+        "angry",
+        "sleepy",
+        "cool",
+        "think",
+        "kiss",
+        "wink"
+      ]
+    },
+    {
+      "id": "things",
+      "name": "Things",
+      "stickers": [
+        "heart",
+        "flame",
+        "coffee",
+        "party",
+        "star",
+        "rocket",
+        "book",
+        "moon"
+      ]
+    }
+  ]
+}

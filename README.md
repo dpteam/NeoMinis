@@ -12,7 +12,7 @@ Runs on Windows XP SP3 and anything newer, including behind Nginx Proxy Manager
 [![.NET Framework](https://img.shields.io/badge/.NET_Framework-4.0-512bd4)](https://dotnet.microsoft.com/)
 [![C#](https://img.shields.io/badge/C%23-4.0-239120)](https://learn.microsoft.com/dotnet/csharp/)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#why-this-exists)
-[![API tests](https://img.shields.io/badge/API_tests-475_passing-brightgreen)](#testing)
+[![API tests](https://img.shields.io/badge/API_tests-483_passing-brightgreen)](#testing)
 [![License](https://img.shields.io/badge/license-use_it_fork_it-blue)](#license)
 
 [Quick start](#quick-start) · [Screenshots](#screenshots) · [Features](#features) · [Configuration](#configuration) · [API](#api-and-security) · [Docs](#documentation) · [Testing](#testing)
@@ -119,7 +119,7 @@ All screenshots are rendered from standalone demo pages that use the real
 | **Feed** | home / everything / friends-only tabs, posts with images, video links and polls, likes (with a "who liked" list), emoji reactions, comments, **reposts to your own wall**, edit and pin your own posts, **drafts and scheduled publication**, visibility (`public` / `friends` / `private`), delete with cascade |
 | **Profiles** | avatar and cover, status, bio, city/country, birthday, gender, website, interests, mood, achievements, photo gallery, a **completeness rating**, friends wall, per-area privacy |
 | **Friends** | requests, accept/decline, remove, block, incoming/outgoing lists, "friends online" |
-| **Messages** | live delivery (long poll), typing indicator, read receipts, unread divider, replies with quotes, emoji reactions, forwarding, search, picture/GIF/album attachments, **voice messages**, **file attachments**, video clips, **delete for everyone** with tombstones, **pinned messages**, per-side delete |
+| **Messages** | live delivery (long poll), typing indicator, read receipts, unread divider, replies with quotes, emoji reactions, forwarding, search, picture/GIF/album attachments, **voice messages**, **file attachments**, video clips, **sticker packs**, **delete for everyone** with tombstones, **pinned messages**, per-side delete |
 | **Calls** | 1:1 audio/video over WebRTC, **always-on voice channels**, speaking ring from a real audio level meter, mute badges, camera on mid-call, minimised floating window, avatars of who is on the line with a blue join dot, re-join after reload, call history |
 | **Groups** | public/private groups, membership, group feed, owner role, editable name/description/picture, member management, join requests, a post review queue, per-member roles |
 | **Notifications** | likes, comments, reactions, reposts, friend requests, messages, mentions, badges, broadcasts, reports — delivered **live** over a long poll (instant toast, sound, tab title counter, optional desktop notification), per-type switches, All / Unread / Mentions filters, plus **Web Push** with a VAPID tickle |
@@ -167,6 +167,7 @@ src/SocialServer/
 public/                  SPA: index.html, 404/403, assets/css, assets/js
   assets/js/             crypto, api, app, app.more, calls, apps, games, gifts,
                          stories, transfers, push, i18n, ui, sound, player
+  assets/stickers/       the built-in sticker packs (SVG) + manifest.json
 docs/                    ARCHITECTURE, API, CLI, AI, IMPORT, ROADMAP, img/
 tools/                   firewall, test-web.mjs, ci-test.ps1, rename-user.mjs,
                          make-logo.mjs, make-demo-screens.mjs
@@ -337,7 +338,7 @@ powershell -ExecutionPolicy Bypass -File tools\ci-test.ps1
 folder, runs the Node suite against **both boards**, restarts the server and
 verifies that data survived.
 
-`tools/test-web.mjs` speaks the same crypto as the browser: **475 checks** covering
+`tools/test-web.mjs` speaks the same crypto as the browser: **483 checks** covering
 registration, login, signature enforcement, replay rejection, encryption
 enforcement, posts, likes, comments, friends, messages, groups, notifications,
 calls, channels, apps, push, transfers, admin actions, recovery and logout.

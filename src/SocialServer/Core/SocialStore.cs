@@ -1473,6 +1473,14 @@ namespace Social.Core
                                      int audioSec, long replyTo, long forwardedFrom,
                                      string fileUrl, string fileName, long fileSize, string video)
         {
+            return CreateMessage(from, to, body, image, images, audio, audioSec, replyTo, forwardedFrom,
+                fileUrl, fileName, fileSize, video, "");
+        }
+
+        public Message CreateMessage(long from, long to, string body, string image, string images, string audio,
+                                     int audioSec, long replyTo, long forwardedFrom,
+                                     string fileUrl, string fileName, long fileSize, string video, string sticker)
+        {
             lock (_sync)
             {
                 EnsureWritable();
@@ -1491,6 +1499,7 @@ namespace Social.Core
                 m.FileUrl = fileUrl ?? "";
                 m.FileName = fileName ?? "";
                 m.FileSize = fileSize;
+                m.Sticker = sticker ?? "";
                 m.Created = DateTime.UtcNow;
                 _messages.Insert(0, m);
                 MarkMessages();
@@ -1753,6 +1762,7 @@ namespace Social.Core
                     m.FileUrl = "";
                     m.FileName = "";
                     m.FileSize = 0;
+                    m.Sticker = "";
                     m.Reactions = "";
                     MarkMessages();
                     return "ok";
@@ -5311,6 +5321,7 @@ namespace Social.Core
                 d["reactions"] = m.Reactions;
                 d["forwardedFrom"] = m.ForwardedFrom;
                 d["fileUrl"] = m.FileUrl; d["fileName"] = m.FileName; d["fileSize"] = m.FileSize;
+                if (!string.IsNullOrEmpty(m.Sticker)) d["sticker"] = m.Sticker;
                 d["created"] = m.Created; d["read"] = m.Read;
                 d["deletedByFrom"] = m.DeletedByFrom; d["deletedByTo"] = m.DeletedByTo;
                 if (m.Revoked)
@@ -5348,6 +5359,7 @@ namespace Social.Core
             m.FileUrl = Json.GetString(d, "fileUrl", "");
             m.FileName = Json.GetString(d, "fileName", "");
             m.FileSize = Json.GetLong(d, "fileSize", 0);
+            m.Sticker = Json.GetString(d, "sticker", "");
             m.Created = Json.GetDate(d, "created", DateTime.UtcNow);
             m.Read = Json.GetBool(d, "read", false);
             m.DeletedByFrom = Json.GetBool(d, "deletedByFrom", false);

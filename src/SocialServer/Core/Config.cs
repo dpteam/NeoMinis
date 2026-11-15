@@ -274,6 +274,8 @@ namespace Social.Core
         public bool GamesEnabled = true;
         // stories: the bar of circles above the feed
         public bool StoriesEnabled = true;
+        // the built-in sticker packs in the chat picker
+        public bool StickersEnabled = true;
 
         public bool Degraded;
         public string DegradedReason = "";
@@ -609,6 +611,7 @@ namespace Social.Core
                     else if (key == "giftsenabled") GiftsEnabled = Bool(val, GiftsEnabled);
                     else if (key == "gamesenabled") GamesEnabled = Bool(val, GamesEnabled);
                     else if (key == "storiesenabled") StoriesEnabled = Bool(val, StoriesEnabled);
+                    else if (key == "stickersenabled") StickersEnabled = Bool(val, StickersEnabled);
                     break;
             }
         }

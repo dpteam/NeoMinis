@@ -133,8 +133,9 @@ Small things that would make what already exists noticeably better.
 
 **Messages**
 - Search inside one conversation (the global search already finds them).
-- Sticker packs next to the emoji picker.
 - Scheduled messages ("send at 9:00").
+- Sticker uploads: user-made packs on top of the built-in two, stored like any other
+  media and moderated. The built-in packs are in.
 
 **Communities**
 - Per-community rules shown before joining.
@@ -213,6 +214,10 @@ Kept here so the list above stays honest.
   a PNG rendered from the same geometry) and a README with screenshots. The
   screenshots come from standalone demo pages that use the real `app.css` with
   invented people and posts, so the README never shows a live instance's content.
+- Stickers: two built-in packs (20 SVG files that ship with the site), a tabbed
+  picker next to the emoji one, one-click sending, and a message that stores only
+  the sticker id — so a sticker costs bytes, not a photo, and the server refuses
+  any id it does not know.
 - "Delete for everyone" with a time window, and pinned messages inside a chat.
   A revoke leaves a tombstone and deletes the files; a pin shows in a small bar
   above the conversation for both sides.

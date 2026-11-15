@@ -303,6 +303,12 @@ namespace Social.Web
                 b.Prop("fileName", m.FileName);
                 b.Prop("fileSize", m.FileSize);
             }
+            if (!string.IsNullOrEmpty(m.Sticker))
+            {
+                // the id and the url, so a client never has to know the folder layout
+                b.Prop("sticker", m.Sticker);
+                b.Prop("stickerUrl", Stickers.Url(m.Sticker));
+            }
             b.Prop("created", Util.Iso(m.Created));
             b.Prop("read", m.Read);
             b.Prop("mine", viewer != null && m.From == viewer.Id);
