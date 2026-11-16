@@ -402,6 +402,30 @@ var UI = (function () {
 
   function effectList() { return EFFECTS.slice(); }
 
+  // ------------------------------------------------------------------- font
+  // A third axis, next to template and effect: the typeface set. Only fonts that
+  // ship with Windows XP, so the XP promise still holds.
+
+  var FONTS = ['system', 'serif', 'mono', 'humanist', 'compact', 'classic', 'elegant'];
+
+  function getFont() {
+    try {
+      var f = localStorage.getItem('social.font');
+      if (f && FONTS.indexOf(f) >= 0) return f;
+    } catch (e) { }
+    var fallback = (window.Api && Api.site && Api.site.font) || 'system';
+    return FONTS.indexOf(fallback) >= 0 ? fallback : 'system';
+  }
+
+  function applyFont(name) {
+    if (FONTS.indexOf(name) < 0) name = 'system';
+    document.documentElement.setAttribute('data-font', name);
+    try { localStorage.setItem('social.font', name); } catch (e) { }
+    return name;
+  }
+
+  function fontList() { return FONTS.slice(); }
+
   // ------------------------------------------------------------------ misc
 
   function copy(text) {
@@ -530,6 +554,7 @@ var UI = (function () {
     imageModal: imageModal, getTheme: getTheme, applyTheme: applyTheme, cycleTheme: cycleTheme,
     getSkin: getSkin, applySkin: applySkin, skinList: skinList, skinGroups: skinGroups,
     getEffect: getEffect, applyEffect: applyEffect, effectList: effectList,
+    getFont: getFont, applyFont: applyFont, fontList: fontList,
     mediaBlocked: mediaBlocked, mediaBlockedText: mediaBlockedText, mediaReady: mediaReady,
     themes: THEMES, copy: copy, fileToDataUrl: fileToDataUrl, pastedImage: pastedImage, debounce: debounce,
     throttle: throttle, scrollTop: scrollTop, bytes: bytes, query: query, on: on, pad: pad

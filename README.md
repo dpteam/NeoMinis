@@ -12,7 +12,7 @@ Runs on Windows XP SP3 and anything newer, including behind Nginx Proxy Manager
 [![.NET Framework](https://img.shields.io/badge/.NET_Framework-4.0-512bd4)](https://dotnet.microsoft.com/)
 [![C#](https://img.shields.io/badge/C%23-4.0-239120)](https://learn.microsoft.com/dotnet/csharp/)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#why-this-exists)
-[![API tests](https://img.shields.io/badge/API_tests-483_passing-brightgreen)](#testing)
+[![API tests](https://img.shields.io/badge/API_tests-506_passing-brightgreen)](#testing)
 [![License](https://img.shields.io/badge/license-use_it_fork_it-blue)](#license)
 
 [Quick start](#quick-start) · [Screenshots](#screenshots) · [Features](#features) · [Configuration](#configuration) · [API](#api-and-security) · [Docs](#documentation) · [Testing](#testing)
@@ -148,10 +148,12 @@ effect separately if you want a different one:
 | **Admin** | **a separate board on its own port** — dashboard, users (ban / unban / grant or revoke admin & moderator / warn / mute / reset / badges / delete), reports queue, live log tail, broadcast, backup, storage repair, config reload, AI panel, and a Settings tab that writes straight back to `config.ini` |
 | **Moderation** | a permission matrix for moderators (8 flags, empty means "all", for backwards compatibility), warnings, chat mutes, reports, per-IP account caps |
 | **Themes** | `light` / `dark` / `oled`, instant switch, remembered per user, and a generated `brand.css` from `[branding]` |
+| **Settings** | five tabs — Profile, Appearance, Notifications, Privacy, Account — instead of one long wall, so nothing is squeezed into an unreadable column |
 | **Templates** | **15 interface skins** — Branded, Aero, Metro, Paper, Terminal, Soft, Brutal, Neon, Warm, Slate, Matrix, Cyberpunk, New Year, Autumn, Horror. A skin is a palette plus a shape language on `data-skin` and changes no markup, so layout and behaviour are identical in all of them. Chosen per account, remembered per browser, defaulted by the admin, and lockable so only staff may change it. See [DESIGN.md §12.1](docs/DESIGN.md) |
 | **Effects** | **12 atmosphere layers** on `data-fx` — film grain, CRT scanlines, VHS tape, matrix rain, glitch, snow, falling leaves, aurora, neon glow, glass sheen, print offset. Pure CSS (no canvas, no WebGL), each skin carries its own default, and the user can pick any effect independently or turn it off. See [DESIGN.md §12.2](docs/DESIGN.md) |
 | **Holiday themes** | `ui.skinSchedule` switches the template by date (`horror:10-25:11-02,newyear:12-20:01-10`) with no client release and no restart, and `GET /api/theme` exposes the current look publicly so a launcher or script can follow it |
-| **Sounds** | WebAudio synth (no audio files): click, post, like, comment, message, notification, friend, login, error, success, theme — with per-event toggles and volume. **Each template has its own synth voice**, so switching from Paper to Cyberpunk changes the sound too |
+| **Sounds** | WebAudio synth (no audio files): click, post, like, comment, message, notification, friend, login, error, success, theme — with per-event toggles and volume. **Each template has its own synth voice**, and there are **6 standalone sound sets** (classic, arcade, acoustic, minimal, chiptune, deep) that ignore the look |
+| **Font sets** | **7 typography sets** — system, serif, mono, humanist, compact, classic, elegant. Only fonts that ship with Windows, so nothing is downloaded and nothing shifts while loading |
 | **i18n** | **English and Russian complete**; Ukrainian and Lithuanian cover the shell and fall back to English for the rest. Auto-detect plus a selector |
 | **Guest mode** | a real read-only session (not an auth bypass) with an endpoint whitelist, optional password, and a kiosk mode with idle timeout |
 | **Security** | PBKDF2-HMAC-SHA256 logins, HMAC-signed and encrypted `/api/`, single-use SVG captcha, rate limits, bans, CSP / XFO / nosniff, `Permissions-Policy` for camera and mic |
@@ -358,7 +360,7 @@ powershell -ExecutionPolicy Bypass -File tools\ci-test.ps1
 folder, runs the Node suite against **both boards**, restarts the server and
 verifies that data survived.
 
-`tools/test-web.mjs` speaks the same crypto as the browser: **483 checks** covering
+`tools/test-web.mjs` speaks the same crypto as the browser: **506 checks** covering
 registration, login, signature enforcement, replay rejection, encryption
 enforcement, posts, likes, comments, friends, messages, groups, notifications,
 calls, channels, apps, push, transfers, admin actions, recovery and logout.

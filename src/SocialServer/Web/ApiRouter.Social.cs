@@ -128,6 +128,20 @@ namespace Social.Web
                     throw new ApiException(400, "bad-effect", "Unknown effect");
                 ctx.User.Effect = fx;
             }
+            if (ctx.Body.ContainsKey("font"))
+            {
+                string fnt = BodyStr(ctx, "font", "").Trim().ToLowerInvariant();
+                if (fnt != "" && Config.NormalizeFont(fnt) != fnt)
+                    throw new ApiException(400, "bad-font", "Unknown font set");
+                ctx.User.Font = fnt;
+            }
+            if (ctx.Body.ContainsKey("pack"))
+            {
+                string pk = BodyStr(ctx, "pack", "").Trim().ToLowerInvariant();
+                if (pk != "" && Config.NormalizePack(pk) != pk)
+                    throw new ApiException(400, "bad-pack", "Unknown sound set");
+                ctx.User.Pack = pk;
+            }
             if (ctx.Body.ContainsKey("lang"))
             {
                 string lang = BodyStr(ctx, "lang", "").Trim().ToLowerInvariant();

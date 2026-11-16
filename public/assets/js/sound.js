@@ -59,17 +59,42 @@ var SoundFX = (function () {
     cyberpunk:{ transpose: 5,  filter: 1.45, decay: .8,   gain: .95,  detune: 12,  type: 'sawtooth' },
     newyear:  { transpose: 5,  filter: 1.1,  decay: 1.5,  gain: .95,  detune: 2,   type: 'sine' },
     autumn:   { transpose: -4, filter: .7,   decay: 1.25, gain: 1.2,  detune: 5,   type: 'triangle' },
-    horror:   { transpose: -12, filter: .45, decay: 1.6,  gain: 1.4,  detune: 26,  type: 'sawtooth', wobble: .18 }
+    horror:   { transpose: -12, filter: .45, decay: 1.6,  gain: 1.4,  detune: 26,  type: 'sawtooth', wobble: .18 },
+
+    /* ---------------------------------------------------------- sound packs
+       These are not templates: they are standalone sound sets the user can pick
+       regardless of the look. "theme" (the default) means "follow the template",
+       which is the behaviour above. */
+    classic:  { transpose: 0,  filter: 1,    decay: 1,    gain: 1,    detune: 0,   type: 'sine' },
+    arcade:   { transpose: 12, filter: 1.6,  decay: .35,  gain: .85,  detune: 0,   type: 'square' },
+    acoustic: { transpose: -5, filter: .8,   decay: 1.5,  gain: 1.15, detune: 6,   type: 'triangle' },
+    minimal:  { transpose: 0,  filter: .9,   decay: .32,  gain: .8,   detune: 0,   type: 'sine' },
+    chiptune: { transpose: 7,  filter: 1.7,  decay: .5,   gain: .9,   detune: 0,   type: 'square', wobble: .06 },
+    deep:     { transpose: -12, filter: .5,  decay: 1.4,  gain: 1.3,  detune: 2,   type: 'sine' }
   };
 
+  // "theme" is not a voice, it is the instruction to use the template's voice
+  var PACKS = ['theme', 'classic', 'arcade', 'acoustic', 'minimal', 'chiptune', 'deep'];
+
   var skin = 'branded';
+  var pack = 'theme';
 
   function setSkin(id) {
     skin = VOICES[id] ? id : 'branded';
     return skin;
   }
 
+  function setPack(id) {
+    pack = PACKS.indexOf(id) >= 0 ? id : 'theme';
+    return pack;
+  }
+
+  function getPack() { return pack; }
+
+  function packs() { return PACKS.slice(); }
+
   function voiceOf() {
+    if (pack !== 'theme') return VOICES[pack] || VOICES.branded;
     return VOICES[skin] || VOICES.branded;
   }
 
@@ -270,6 +295,10 @@ var SoundFX = (function () {
     // the template's synth character, so switching a skin changes the sound too
     setSkin: setSkin,
     getSkin: function () { return skin; },
+    // a standalone sound pack, independent of the look
+    setPack: setPack,
+    getPack: getPack,
+    packs: packs,
     voices: VOICES,
     presets: PRESETS
   };

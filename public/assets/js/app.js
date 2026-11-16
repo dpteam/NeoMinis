@@ -60,6 +60,8 @@ var App = (function () {
   function init() {
     UI.applyTheme(UI.getTheme());
     UI.applySkin(UI.getSkin());
+    UI.applyFont(UI.getFont());
+    if (window.SoundFX && SoundFX.setPack) SoundFX.setPack(localStorage.getItem('social.pack') || 'theme');
     // the skin may already have set a default effect; an explicit choice re-applies
     UI.applyEffect(UI.getEffect(), false);
     I18N.setLang(I18N.detect((Api.site && Api.site.defaultLanguage) || 'ru'));
@@ -126,6 +128,16 @@ var App = (function () {
       var localFx = null;
       try { localFx = localStorage.getItem('social.effect'); } catch (e) { }
       if (!localFx) UI.applyEffect(u.effect, false);
+    }
+    if (u.font && UI.fontList().indexOf(u.font) >= 0) {
+      var localFont = null;
+      try { localFont = localStorage.getItem('social.font'); } catch (e) { }
+      if (!localFont) UI.applyFont(u.font);
+    }
+    if (u.pack && window.SoundFX && SoundFX.setPack) {
+      var localPack = null;
+      try { localPack = localStorage.getItem('social.pack'); } catch (e) { }
+      if (!localPack) SoundFX.setPack(u.pack);
     }
     if (u.lang && I18N.langs.indexOf(u.lang) >= 0) I18N.setLang(u.lang);
   }

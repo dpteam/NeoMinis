@@ -5112,6 +5112,8 @@ namespace Social.Core
             d["theme"] = u.Theme; d["lang"] = u.Lang; d["sound"] = u.Sound; d["privacy"] = u.Privacy;
             if (!string.IsNullOrEmpty(u.Skin)) d["skin"] = u.Skin;
             if (!string.IsNullOrEmpty(u.Effect)) d["effect"] = u.Effect;
+            if (!string.IsNullOrEmpty(u.Font)) d["font"] = u.Font;
+            if (!string.IsNullOrEmpty(u.Pack)) d["pack"] = u.Pack;
             d["hideOnline"] = u.HideOnline; d["banned"] = u.Banned; d["banReason"] = u.BanReason;
             d["bannedUntil"] = u.BannedUntil; d["warnings"] = u.Warnings; d["karma"] = u.Karma;
             d["email"] = u.Email; d["ipHash"] = u.IpHash; d["loginCount"] = u.LoginCount;
@@ -5155,6 +5157,8 @@ namespace Social.Core
             u.Theme = Json.GetString(d, "theme", "");
             u.Skin = Json.GetString(d, "skin", "");
             u.Effect = Json.GetString(d, "effect", "");
+            u.Font = Json.GetString(d, "font", "");
+            u.Pack = Json.GetString(d, "pack", "");
             u.Lang = Json.GetString(d, "lang", "");
             u.Sound = Json.GetBool(d, "sound", true);
             u.Privacy = Json.GetString(d, "privacy", "public");

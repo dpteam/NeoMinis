@@ -3018,6 +3018,31 @@
       for (var j = 0; j < langs.length; j++) {
         langHtml += '<option value="' + langs[j] + '"' + (I18N.getLang() === langs[j] ? ' selected' : '') + '>' + T('lang.' + langs[j]) + '</option>';
       }
+      // font sets: a third axis, so the look, the atmosphere and the typeface can
+      // all be chosen independently
+      var fonts = UI.fontList();
+      var currentFont = UI.getFont();
+      var fontHtml = '<div class="font-list" id="font-list" role="listbox" aria-label="' + UI.attr(T('settings.font')) + '">';
+      for (var fj = 0; fj < fonts.length; fj++) {
+        var fid = fonts[fj];
+        var fOn = currentFont === fid;
+        fontHtml += '<button type="button" class="font-row' + (fOn ? ' active' : '') + '"' +
+          ' role="option" aria-selected="' + (fOn ? 'true' : 'false') + '"' +
+          ' data-font="' + fid + '" data-font-pick="' + fid + '">' +
+          '<span class="spec">Ag</span>' +
+          '<span class="txt"><span class="nm">' + UI.esc(T('font.' + fid)) + '</span>' +
+          '<span class="ds">' + UI.esc(T('fontDesc.' + fid)) + '</span></span>' +
+          '<i class="fa-solid fa-check tick"></i></button>';
+      }
+      fontHtml += '</div>';
+      // sound packs: "theme" follows the template, the rest are standalone sets
+      var packs = SoundFX.packs ? SoundFX.packs() : ['theme'];
+      var currentPack = SoundFX.getPack ? SoundFX.getPack() : 'theme';
+      var packHtml = '';
+      for (var pk = 0; pk < packs.length; pk++) {
+        packHtml += '<option value="' + packs[pk] + '"' +
+          (currentPack === packs[pk] ? ' selected' : '') + '>' + T('pack.' + packs[pk]) + '</option>';
+      }
       var ev = SoundFX.getEvents();
       var events = ['click', 'post', 'like', 'comment', 'message', 'notification', 'friend', 'login', 'error', 'success', 'theme'];
       var evHtml = '';
@@ -3046,9 +3071,12 @@
       } catch (e) { }
 
       var html = '<div class="card"><div class="card-h">' + UI.icon('gear') + ' ' + T('settings.title') + '</div><div class="card-b">';
-      html += '<div class="settings-grid">';
+      // Settings are grouped into tabs: five panels of two or three blocks each
+      // is far easier to scan than one long two-column wall, and on a narrow
+      // screen the second column used to be squeezed to nothing.
+      var pProfile = '', pLook = '', pNotify = '', pPrivacy = '', pAccount = '';
 
-      html += '<div class="settings-block"><h3>' + T('settings.profile') + '</h3>' +
+      pProfile += '<div class="settings-block"><h3>' + T('settings.profile') + '</h3>' +
         '<div class="field"><label>' + T('settings.avatar') + '</label><div style="display:flex;gap:10px;align-items:center">' +
         UI.avatar(u, 64, false) + '<div><button type="button" class="btn btn-sm" id="avatar-btn">' + T('settings.uploadAvatar') + '</button>' +
         '<input type="file" id="avatar-file" class="hidden" accept="image/png,image/jpeg,image/gif,image/webp">' +
@@ -3068,7 +3096,7 @@
         '<div class="field"><label>' + T('settings.email') + '</label><input class="input" id="s-email" type="email" value="' + UI.attr(u.email || '') + '"></div>' +
         '<button class="btn btn-primary" id="save-profile">' + UI.icon('floppy-disk') + ' ' + T('settings.save') + '</button></div>';
 
-      html += '<div class="settings-block"><h3>' + T('settings.interests') + '</h3>' +
+      pProfile += '<div class="settings-block"><h3>' + T('settings.interests') + '</h3>' +
         '<div class="hint" style="margin-bottom:8px">' + T('settings.interestsHint') + '</div>' +
         '<div class="field"><label>' + UI.icon('gamepad') + ' ' + T('profile.favGames') + '</label><input class="input" id="s-favgames" maxlength="200" value="' + UI.attr(u.favGames || '') + '"></div>' +
         '<div class="field"><label>' + UI.icon('film') + ' ' + T('profile.favMovies') + '</label><input class="input" id="s-favmovies" maxlength="200" value="' + UI.attr(u.favMovies || '') + '"></div>' +
@@ -3082,7 +3110,7 @@
         '</select></div>' +
         '<button class="btn btn-primary" id="save-interests">' + UI.icon('floppy-disk') + ' ' + T('settings.save') + '</button></div>';
 
-      html += '<div class="settings-block"><h3>' + T('settings.appearance') + '</h3>' +
+      pLook += '<div class="settings-block"><h3>' + T('settings.appearance') + '</h3>' +
         '<div class="field"><label>' + T('settings.theme') + '</label><div class="theme-picker">' + themeHtml + '</div></div>' +
         '<div class="field"><label>' + T('settings.skin') + '</label>' +
         skinHtml +
@@ -3090,19 +3118,34 @@
         '<div class="field"><label>' + T('settings.effect') + '</label>' +
         '<select class="select" id="s-effect"' + (state.site && state.site.effectsEnabled === false ? ' disabled' : '') + '>' + fxHtml + '</select>' +
         '<div class="hint">' + T('settings.effectHint') + '</div></div>' +
+        '<div class="field"><label>' + T('settings.font') + '</label>' +
+        fontHtml +
+        '<div class="hint">' + T('settings.fontHint') + '</div></div>' +
         '<div class="field"><label>' + T('settings.language') + '</label><select class="select" id="s-lang">' + langHtml + '</select></div>' +
-        '<div class="field"><label>' + T('settings.sound') + '</label><label class="check" style="margin-bottom:6px"><input type="checkbox" id="s-sound"' + (SoundFX.isEnabled() ? ' checked' : '') + '> <span>' + T('settings.soundOn') + '</span></label>' +
+        '</div>';
+
+      pLook += '<div class="settings-block"><h3>' + T('settings.sound') + '</h3>' +
+        '<label class="check" style="margin-bottom:6px"><input type="checkbox" id="s-sound"' + (SoundFX.isEnabled() ? ' checked' : '') + '> <span>' + T('settings.soundOn') + '</span></label>' +
         '<input type="range" class="range" id="s-volume" min="0" max="1" step="0.05" value="' + SoundFX.getVolume() + '">' +
-        '<div class="hint">' + T('settings.volume') + '</div></div>' +
-        '<div class="field"><label>' + T('settings.events') + '</label><div class="sound-events">' + evHtml + '</div></div>' +
-        '<div class="field"><label>' + T('settings.privacy') + '</label><select class="select" id="s-privacy">' +
+        '<div class="hint">' + T('settings.volume') + '</div>' +
+        '<div class="field" style="margin-top:10px"><label>' + T('settings.soundPack') + '</label>' +
+        '<select class="select" id="s-pack">' + packHtml + '</select>' +
+        '<div class="hint">' + T('settings.soundPackHint') + '</div></div>' +
+        '<button type="button" class="btn btn-sm" id="sound-test">' + UI.icon('play') + ' ' + T('settings.soundTest') + '</button>' +
+        '<div class="field" style="margin-top:10px"><label>' + T('settings.events') + '</label><div class="sound-events">' + evHtml + '</div></div>' +
+        '</div>';
+
+      // ---- privacy: who may do what, plus the per-area matrix
+      pPrivacy += '<div class="settings-block"><h3>' + T('settings.privacy') + '</h3>' +
+        '<div class="field"><label>' + T('settings.profileVisibility') + '</label><select class="select" id="s-privacy">' +
         '<option value="public"' + (u.privacy === 'public' ? ' selected' : '') + '>' + T('feed.public') + '</option>' +
         '<option value="friends"' + (u.privacy === 'friends' ? ' selected' : '') + '>' + T('feed.friendsOnly') + '</option>' +
         '<option value="private"' + (u.privacy === 'private' ? ' selected' : '') + '>' + T('feed.private') + '</option></select></div>' +
-        '<label class="check"><input type="checkbox" id="s-hide"' + (u.hideOnline ? ' checked' : '') + '> <span>' + T('settings.hideOnline') + '</span></label></div>' +
-        privacyBlock(u);
+        '<label class="check"><input type="checkbox" id="s-hide"' + (u.hideOnline ? ' checked' : '') + '> <span>' + T('settings.hideOnline') + '</span></label>' +
+        '</div>';
+      pPrivacy += privacyBlock(u);
 
-      html += '<div class="settings-block"><h3>' + T('settings.notifications') + '</h3>' +
+      pNotify += '<div class="settings-block"><h3>' + T('settings.notifications') + '</h3>' +
         '<div class="hint" style="margin-bottom:6px">' + T('settings.notificationsHint') + '</div>' +
         '<div class="sound-events">' + notifHtml + '</div>' +
         '<label class="check" style="margin-top:10px"><input type="checkbox" id="s-desktop"' + (desktopOn ? ' checked' : '') + '> <span>' + T('settings.desktopNotify') + '</span></label>' +
@@ -3111,17 +3154,68 @@
         '<label class="check"><input type="checkbox" id="s-push"> <span>' + T('settings.pushNotify') + '</span></label>' +
         '<div class="hint" id="s-push-hint">' + T('settings.pushHint') + '</div></div>';
 
-      html += '<div class="settings-block"><h3>' + T('settings.password') + '</h3>' +
+      pAccount += '<div class="settings-block"><h3>' + T('settings.password') + '</h3>' +
         '<div class="field"><label>' + T('settings.oldPassword') + '</label><input class="input" type="password" id="p-old" autocomplete="current-password"></div>' +
         '<div class="field"><label>' + T('settings.newPassword') + '</label><input class="input" type="password" id="p-new" autocomplete="new-password"></div>' +
         '<button class="btn" id="change-pass">' + UI.icon('key') + ' ' + T('settings.changePassword') + '</button></div>';
 
-      html += '<div class="settings-block"><h3>' + T('settings.account') + '</h3>' +
+      pAccount += '<div class="settings-block"><h3>' + T('settings.account') + '</h3>' +
         '<div class="tiny muted" style="margin-bottom:8px">@' + UI.esc(u.username) + ' · ' + T('profile.joined') + ' ' + UI.formatDate(u.created) + '</div>' +
         '<button class="btn btn-danger" id="logout-2">' + UI.icon('right-from-bracket') + ' ' + T('settings.logout') + '</button></div>';
 
-      html += '</div></div></div>';
+      // ---- assembly: a tab strip, then one panel at a time
+      var tabs = [
+        { id: 'profile', icon: 'id-card', label: T('settings.tabProfile'), body: pProfile },
+        { id: 'look', icon: 'palette', label: T('settings.tabLook'), body: pLook },
+        { id: 'notify', icon: 'bell', label: T('settings.tabNotify'), body: pNotify },
+        { id: 'privacy', icon: 'lock', label: T('settings.tabPrivacy'), body: pPrivacy },
+        { id: 'account', icon: 'user-gear', label: T('settings.tabAccount'), body: pAccount }
+      ];
+      // remember the last tab so a reload does not bounce back to the first one
+      var activeTab = 'profile';
+      try { activeTab = localStorage.getItem('social.settingsTab') || 'profile'; } catch (e) { }
+      var known = false;
+      for (var tb = 0; tb < tabs.length; tb++) if (tabs[tb].id === activeTab) known = true;
+      if (!known) activeTab = 'profile';
+
+      html += '<div class="settings-tabs" role="tablist">';
+      for (var tt = 0; tt < tabs.length; tt++) {
+        html += '<button type="button" class="settings-tab' + (tabs[tt].id === activeTab ? ' active' : '') +
+          '" role="tab" aria-selected="' + (tabs[tt].id === activeTab ? 'true' : 'false') +
+          '" data-settings-tab="' + tabs[tt].id + '">' + UI.icon(tabs[tt].icon) +
+          ' <span>' + UI.esc(tabs[tt].label) + '</span></button>';
+      }
+      html += '</div>';
+
+      for (var tp = 0; tp < tabs.length; tp++) {
+        html += '<div class="settings-panel' + (tabs[tp].id === activeTab ? '' : ' hidden') +
+          '" data-settings-panel="' + tabs[tp].id + '" role="tabpanel">' +
+          '<div class="settings-grid">' + tabs[tp].body + '</div></div>';
+      }
+
+      html += '</div></div>';
       main.innerHTML = html;
+
+      // tab switching: instant, remembered, and it never re-renders the form, so
+      // a half-typed password survives a look at another panel
+      var tabBtns = document.querySelectorAll('[data-settings-tab]');
+      for (var tb2 = 0; tb2 < tabBtns.length; tb2++) {
+        tabBtns[tb2].addEventListener('click', function () {
+          var id = this.getAttribute('data-settings-tab');
+          for (var a = 0; a < tabBtns.length; a++) {
+            var on = tabBtns[a].getAttribute('data-settings-tab') === id;
+            tabBtns[a].className = 'settings-tab' + (on ? ' active' : '');
+            tabBtns[a].setAttribute('aria-selected', on ? 'true' : 'false');
+          }
+          var panels = document.querySelectorAll('[data-settings-panel]');
+          for (var b = 0; b < panels.length; b++) {
+            var show = panels[b].getAttribute('data-settings-panel') === id;
+            panels[b].className = 'settings-panel' + (show ? '' : ' hidden');
+          }
+          try { localStorage.setItem('social.settingsTab', id); } catch (e) { }
+          SoundFX.play('click');
+        });
+      }
 
       // avatar
       var ab = document.getElementById('avatar-btn');
@@ -3218,6 +3312,35 @@
       if (fxSelect) fxSelect.addEventListener('change', function () {
         UI.applyEffect(fxSelect.value, true);
         App.saveSetting({ effect: fxSelect.value });
+      });
+
+      // font sets: applied instantly and remembered on the account
+      var fds = document.querySelectorAll('[data-font-pick]');
+      for (var fd = 0; fd < fds.length; fd++) {
+        fds[fd].addEventListener('click', function () {
+          var id = this.getAttribute('data-font-pick');
+          UI.applyFont(id);
+          SoundFX.play('click');
+          App.saveSetting({ font: id });          for (var z = 0; z < fds.length; z++) {
+            fds[z].className = 'font-row';
+            fds[z].setAttribute('aria-selected', 'false');
+          }
+          this.className = 'font-row active';
+          this.setAttribute('aria-selected', 'true');
+        });
+      }
+
+      // sound packs: "theme" follows the template, the rest are standalone
+      var packSelect = document.getElementById('s-pack');
+      if (packSelect) packSelect.addEventListener('change', function () {
+        SoundFX.setPack(packSelect.value);
+        try { localStorage.setItem('social.pack', packSelect.value); } catch (e) { }
+        App.saveSetting({ pack: packSelect.value });
+        SoundFX.play('message');
+      });
+      var soundTest = document.getElementById('sound-test');
+      if (soundTest) soundTest.addEventListener('click', function () {
+        SoundFX.play('post');
       });
 
       // language

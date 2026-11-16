@@ -126,6 +126,8 @@ namespace Social.Web
                 .Prop("skinLocked", _cfg.SkinLocked)
                 .Prop("skinSchedule", _cfg.SkinSchedule)
                 .Prop("effectsEnabled", _cfg.EffectsEnabled)
+                .Prop("font", _cfg.Font)
+                .Prop("soundPack", _cfg.SoundPack)
                 .EndObject();
 
             b.Name("logging").BeginObject()
@@ -511,6 +513,16 @@ namespace Social.Web
                 {
                     _cfg.EffectsEnabled = Json.GetBool(ui, "effectsEnabled", _cfg.EffectsEnabled);
                     _cfg.SetIniValue("ui", "effectsEnabled", _cfg.EffectsEnabled ? "true" : "false");
+                }
+                if (ui.ContainsKey("font"))
+                {
+                    _cfg.Font = Config.NormalizeFont(Json.GetString(ui, "font", _cfg.Font));
+                    _cfg.SetIniValue("ui", "font", _cfg.Font);
+                }
+                if (ui.ContainsKey("soundPack"))
+                {
+                    _cfg.SoundPack = Config.NormalizePack(Json.GetString(ui, "soundPack", _cfg.SoundPack));
+                    _cfg.SetIniValue("ui", "soundPack", _cfg.SoundPack);
                 }
             }
 

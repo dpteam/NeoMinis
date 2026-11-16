@@ -287,6 +287,10 @@ namespace Social.Core
         public string SkinSchedule = "";
         // the atmosphere layer: on by default, and users may turn it off
         public bool EffectsEnabled = true;
+        // typography set: system | serif | mono | humanist | compact | classic | elegant
+        public string Font = "system";
+        // sound set: theme (follow the template) | classic | arcade | acoustic | minimal | chiptune | deep
+        public string SoundPack = "theme";
 
         public bool Degraded;
         public string DegradedReason = "";
@@ -627,6 +631,8 @@ namespace Social.Core
                     else if (key == "skinlocked") SkinLocked = Bool(val, SkinLocked);
                     else if (key == "skinschedule") SkinSchedule = val;
                     else if (key == "effectsenabled") EffectsEnabled = Bool(val, EffectsEnabled);
+                    else if (key == "font") Font = NormalizeFont(val);
+                    else if (key == "soundpack") SoundPack = NormalizePack(val);
                     break;
             }
         }
@@ -634,6 +640,8 @@ namespace Social.Core
         private void Validate()
         {
             Skin = NormalizeSkin(Skin);
+            Font = NormalizeFont(Font);
+            SoundPack = NormalizePack(SoundPack);
             // an empty schedule is fine, but a typo should be visible rather than silent
             if (!string.IsNullOrEmpty(SkinSchedule) && SkinSchedule.Trim().Length > 0)
             {
@@ -946,8 +954,41 @@ namespace Social.Core
             return true;
         }
 
-        public static string NormalizeSkin(string value)
+        /// <summary>
+        /// Typography sets. Only fonts that ship with Windows XP, so the XP promise
+        /// holds. Must stay in sync with FONTS in public/assets/js/ui.js.
+        /// </summary>
+        public static readonly string[] Fonts = new string[]
         {
+            "system", "serif", "mono", "humanist", "compact", "classic", "elegant"
+        };
+
+        /// <summary>
+        /// Sound sets. "theme" means "follow the template's own voice", which is the
+        /// behaviour before packs existed. Must stay in sync with PACKS in sound.js.
+        /// </summary>
+        public static readonly string[] SoundPacks = new string[]
+        {
+            "theme", "classic", "arcade", "acoustic", "minimal", "chiptune", "deep"
+        };
+
+        public static string NormalizeFont(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "system";
+            string v = value.Trim().ToLowerInvariant();
+            for (int i = 0; i < Fonts.Length; i++) if (Fonts[i] == v) return v;
+            return "system";
+        }
+
+        public static string NormalizePack(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "theme";
+            string v = value.Trim().ToLowerInvariant();
+            for (int i = 0; i < SoundPacks.Length; i++) if (SoundPacks[i] == v) return v;
+            return "theme";
+        }
+
+        public static string NormalizeSkin(string value)        {
             if (string.IsNullOrEmpty(value)) return "branded";
             string v = value.Trim().ToLowerInvariant();
             // the old name is still accepted so an existing config.ini keeps working

@@ -14,6 +14,8 @@ section first; the tables after it are only useful once the intent is clear.
 | **Themes** | `light` (default), `dark`, `oled` — all three are first-class |
 | **Templates** | 15 skins on `data-skin`: `branded`, `aero`, `metro`, `paper`, `terminal`, `soft`, `brutal`, `neon`, `warm`, `slate`, `matrix`, `cyberpunk`, `newyear`, `autumn`, `horror` (see §12.1) |
 | **Effects** | 12 atmosphere layers on `data-fx` — grain, scanlines, VHS, matrix rain, glitch, snow, leaves, aurora, glow, sheen, print offset (see §12.2) |
+| **Font sets** | 7 typography sets on `data-font` — system, serif, mono, humanist, compact, classic, elegant. Only fonts that ship with Windows, so nothing is downloaded and nothing shifts (see §12.5) |
+| **Sound sets** | 6 standalone sound sets plus "follow template" — classic, arcade, acoustic, minimal, chiptune, deep. Independent of the look (see §12.3) |
 | **Icons** | Font Awesome 6.5.2 from a CDN, `<i class="fa-solid fa-name">` |
 | **Fonts** | system stack only — no webfont, no network dependency, no FOUT |
 | **Target** | Windows XP SP3 and up, so: ES5, no CSS grid subgrid, no `:has()`, no container queries |
@@ -759,7 +761,7 @@ Hard rules, because these run on old hardware:
 Neither touches a component, a view or an endpoint — which is the property that makes
 future visual work cheap.
 
-### 12.5 Sound follows the template
+### 12.3 Sound follows the template
 
 Every template has its own **synth voice** (`VOICES` in `sound.js`), applied on top
 of the event presets: `transpose` (semitones), `filter` (a multiplier on the low-pass
@@ -775,13 +777,57 @@ the master switch and the per-event toggles are untouched and stay the user's.
 Adding a template therefore means adding a `VOICES` entry as well, or it falls back
 to the `branded` voice — which is a safe default, not a break.
 
-### 12.6 The template picker
+### 12.4 The template picker
 
 Settings shows the templates as a **grouped, scrollable list**, not a wall of tiles:
 a swatch, the name, a one-line description and a tick on the active one. The groups
 are Classic / Modern / Dark / Seasonal, defined in `SKIN_GROUPS` in `ui.js`, with
 sticky headers so fifteen entries stay scannable while scrolling. Each row is a real
 `<button role="option">` inside a `role="listbox"`, so it is reachable by keyboard.
+
+### 12.5 Font sets (`fonts.css`)
+
+A **third independent axis**, next to template and effect:
+
+```
+<html data-skin="paper" data-fx="grain" data-font="serif">
+```
+
+A template may suggest a typeface (paper and warm are serif, terminal is mono), but
+`fonts.css` loads after `skins.css` and therefore wins — which is the point: keep the
+Paper palette and still choose a monospace face.
+
+| id | Set | Face |
+| --- | --- | --- |
+| `system` | System | Segoe UI, or Tahoma on old Windows |
+| `serif` | Serif | Georgia |
+| `mono` | Monospace | Consolas, or Lucida Console on XP |
+| `humanist` | Humanist | Trebuchet MS |
+| `compact` | Compact | Tahoma, set tight |
+| `classic` | Classic | Verdana |
+| `elegant` | Elegant | Palatino Linotype / Book Antiqua |
+
+Every face ships with Windows, including XP, so the promise that the server runs there
+still holds: no webfont, no network request, no layout shift. Each set also carries a
+small `--font-scale` (0.95–1.03) so a narrower face does not read as smaller text.
+
+The picker is a list of `.font-row`s whose specimen (`Ag`) is set **in the face it
+describes**, which is the only honest way to preview a typeface.
+
+Adding a set is three steps: a token block in `fonts.css`, the id in `Config.Fonts`
+(C#) and `FONTS` (`ui.js`), and a `.font-row[data-font="…"] .spec` rule for the
+specimen.
+
+### 12.6 Settings layout
+
+Settings are **tabbed** — Profile / Appearance / Notifications / Privacy / Account —
+rather than one two-column wall. The old layout squeezed the right column to
+unreadable width below ~1100px, which is exactly the bug the screenshot showed. Tab
+switching does not re-render the form, so a half-typed password survives a look at
+another panel, and the active tab is remembered in `localStorage['social.settingsTab']`.
+
+Each panel is a `.settings-grid` of `.settings-block`s; a block that is alone in its
+panel spans both columns via `:only-child`.
 
 ### 12.7 Holiday themes without a release
 

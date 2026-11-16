@@ -114,6 +114,8 @@ namespace Social.Web
                 b.Prop("theme", u.Theme);
                 if (!string.IsNullOrEmpty(u.Skin)) b.Prop("skin", u.Skin);
                 if (!string.IsNullOrEmpty(u.Effect)) b.Prop("effect", u.Effect);
+                if (!string.IsNullOrEmpty(u.Font)) b.Prop("font", u.Font);
+                if (!string.IsNullOrEmpty(u.Pack)) b.Prop("pack", u.Pack);
                 b.Prop("lang", u.Lang);
                 b.Prop("sound", u.Sound);
                 b.Prop("hideOnline", u.HideOnline);

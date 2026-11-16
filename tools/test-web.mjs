@@ -465,6 +465,26 @@ async function main() {
   ok('an effect can be turned off', fxReset.status === 200 && fxReset.data.user.effect === 'none',
     JSON.stringify(fxReset.data && fxReset.data.user && fxReset.data.user.effect));
 
+  // ---- a font set and a sound set are their own axes
+  const fontSet = await alice.call('POST', '/api/settings', { font: 'serif' });
+  ok('a font set can be chosen', fontSet.status === 200 && fontSet.data.user.font === 'serif',
+    JSON.stringify(fontSet.data && fontSet.data.user && fontSet.data.user.font));
+  const fontBack = await alice.call('GET', '/api/settings');
+  ok('the font set is remembered', fontBack.data.user.font === 'serif',
+    JSON.stringify(fontBack.data.user.font));
+  const fontBad = await alice.call('POST', '/api/settings', { font: 'comic-sans' });
+  ok('an unknown font set is refused', fontBad.status === 400, String(fontBad.status));
+  const packSet = await alice.call('POST', '/api/settings', { pack: 'arcade' });
+  ok('a sound set can be chosen', packSet.status === 200 && packSet.data.user.pack === 'arcade',
+    JSON.stringify(packSet.data && packSet.data.user && packSet.data.user.pack));
+  const packBad = await alice.call('POST', '/api/settings', { pack: '"><script>' });
+  ok('a sound set id cannot carry markup', packBad.status === 400, String(packBad.status));
+  const packBack = await alice.call('POST', '/api/settings', { pack: 'theme' });
+  ok('a sound set can go back to following the template',
+    packBack.status === 200 && packBack.data.user.pack === 'theme', '');
+  const fontReset = await alice.call('POST', '/api/settings', { font: 'system' });
+  ok('a font set can be reset', fontReset.status === 200 && fontReset.data.user.font === 'system', '');
+
   // ---- live notifications and per-type mutes
   const baseNotif = await alice.call('GET', '/api/notifications?limit=1');
   const lastId = baseNotif.data.notifications.length ? baseNotif.data.notifications[0].id : 0;

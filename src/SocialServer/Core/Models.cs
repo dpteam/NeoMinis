@@ -30,6 +30,9 @@ namespace Social.Core
         // atmosphere layer chosen by this account; empty means "the skin's default",
         // "none" means the user turned effects off
         public string Effect = "";
+        // typography and sound sets; empty means "follow the site default"
+        public string Font = "";
+        public string Pack = "";
         public string Lang = "";
         public bool Sound = true;
         public string Privacy = "public";

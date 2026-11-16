@@ -205,6 +205,14 @@ namespace Social.Web
             b.Prop("skinLocked", _cfg.SkinLocked);
             b.Prop("skinSchedule", _cfg.SkinSchedule);
             b.Prop("effectsEnabled", _cfg.EffectsEnabled);
+            b.Prop("font", _cfg.Font);
+            b.Name("fonts").BeginArray();
+            for (int i = 0; i < Config.Fonts.Length; i++) b.Str(Config.Fonts[i]);
+            b.EndArray();
+            b.Prop("soundPack", _cfg.SoundPack);
+            b.Name("soundPacks").BeginArray();
+            for (int i = 0; i < Config.SoundPacks.Length; i++) b.Str(Config.SoundPacks[i]);
+            b.EndArray();
             b.Name("skins").BeginArray();
             for (int i = 0; i < Config.Skins.Length; i++) b.Str(Config.Skins[i]);
             b.EndArray();

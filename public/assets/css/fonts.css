@@ -1,0 +1,187 @@
+/* ==========================================================================
+   fonts.css - the typography layer.
+
+   A third independent axis, alongside the template (colour + shape) and the
+   effect (atmosphere):
+
+       <html data-skin="paper" data-fx="grain" data-font="serif">
+
+   A template may suggest a typeface (paper and warm are serif, terminal is
+   mono), but this file wins because it loads after skins.css. That is the point:
+   the user can keep the Paper palette and still pick a monospace face, which is
+   the kind of "configure everything" the settings screen promises.
+
+   Only fonts that ship with Windows XP are used, so the promise that the site
+   runs there still holds. No webfont, no network request, no layout shift.
+   ========================================================================== */
+
+/* ------------------------------------------------------------- system
+   The default. Segoe UI on anything modern, Tahoma on XP - which is exactly the
+   2008 look the branded template is aiming at. */
+
+html[data-font="system"] {
+  --font: "Segoe UI", Tahoma, Verdana, Arial, sans-serif;
+  --font-display: "Segoe UI Semibold", "Segoe UI", Tahoma, sans-serif;
+  --font-mono: Consolas, "Lucida Console", "Courier New", monospace;
+  --font-scale: 1;
+}
+
+/* ---------------------------------------------------------------- serif
+   Editorial. Georgia is on every Windows since 95 and reads well at 13px, which
+   Times New Roman does not. */
+
+html[data-font="serif"] {
+  --font: Georgia, "Times New Roman", serif;
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-mono: Consolas, "Lucida Console", monospace;
+  --font-scale: 1.02;
+}
+
+/* ----------------------------------------------------------------- mono
+   A terminal face everywhere. Lucida Console is the XP fallback and is narrower
+   than Consolas, so the scale compensates. */
+
+html[data-font="mono"] {
+  --font: Consolas, "Lucida Console", "Courier New", monospace;
+  --font-display: Consolas, "Lucida Console", "Courier New", monospace;
+  --font-mono: Consolas, "Lucida Console", "Courier New", monospace;
+  --font-scale: .97;
+}
+
+/* ------------------------------------------------------------- humanist
+   Trebuchet MS: the friendliest face Microsoft ever shipped, and the one 2008
+   web sites reached for when they wanted to look modern. */
+
+html[data-font="humanist"] {
+  --font: "Trebuchet MS", "Segoe UI", Tahoma, sans-serif;
+  --font-display: "Trebuchet MS", "Segoe UI", Tahoma, sans-serif;
+  --font-mono: Consolas, "Lucida Console", monospace;
+  --font-scale: 1.01;
+}
+
+/* -------------------------------------------------------------- compact
+   Tahoma set tight: the most information per pixel, which is what a dense feed
+   with three columns actually wants on a small laptop. */
+
+html[data-font="compact"] {
+  --font: Tahoma, "Segoe UI", Verdana, sans-serif;
+  --font-display: Tahoma, "Segoe UI", Verdana, sans-serif;
+  --font-mono: "Lucida Console", Consolas, monospace;
+  --font-scale: .95;
+  --letter-tight: -.1px;
+}
+
+/* -------------------------------------------------------------- classic
+   Verdana: wide, open, unmistakably 2008. Costs vertical space, so it is a
+   deliberate choice rather than a default. */
+
+html[data-font="classic"] {
+  --font: Verdana, Geneva, Tahoma, sans-serif;
+  --font-display: Verdana, Geneva, Tahoma, sans-serif;
+  --font-mono: Consolas, "Lucida Console", monospace;
+  --font-scale: .96;
+}
+
+/* --------------------------------------------------------------- elegant
+   Palatino / Book Antiqua: a book face with real calligraphic contrast. The one
+   option that makes a profile look like a printed page. */
+
+html[data-font="elegant"] {
+  --font: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --font-display: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --font-mono: Consolas, "Lucida Console", monospace;
+  --font-scale: 1.03;
+}
+
+/* The scale is applied in one place: the root font size, so every rem-free
+   component that uses px is unaffected and only the base text breathes. */
+
+html[data-font] body {
+  letter-spacing: var(--letter-tight, normal);
+}
+
+html[data-font] .post-body,
+html[data-font] .comment-main .text,
+html[data-font] .msg-text,
+html[data-font] .bubble {
+  font-size: calc(1em * var(--font-scale, 1));
+}
+
+/* Headings follow the display face of the chosen set, which is what makes a
+   font choice read as a *set* rather than as one changed element. */
+
+html[data-font] .landing h1,
+html[data-font] .profile-head h1,
+html[data-font] .auth-head h2,
+html[data-font] .brand-text b,
+html[data-font] .card-h,
+html[data-font] .mini-profile .name {
+  font-family: var(--font-display);
+}
+
+/* ======================================================== picker: the rows
+   Same shape as the template list, so the two pickers feel like one system. */
+
+.font-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-soft);
+  transition: background .15s var(--ease), color .15s var(--ease);
+}
+.font-row:first-child { border-top: 0; }
+.font-row:hover { background: var(--hover); color: var(--text); }
+.font-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.font-row.active { background: var(--accent-soft); color: var(--text); }
+
+/* the specimen is set in the face it describes, which is the whole point */
+.font-row .spec {
+  flex: none;
+  width: 46px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-xs);
+  background: var(--panel-2);
+  font-size: 17px;
+  line-height: 1;
+  color: var(--text);
+  overflow: hidden;
+}
+.font-row .txt { flex: 1; min-width: 0; }
+.font-row .nm { display: block; font-size: 12.5px; font-weight: 700; }
+.font-row .ds { display: block; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.font-row .tick { flex: none; color: var(--accent); font-size: 12px; opacity: 0; }
+.font-row.active .tick { opacity: 1; }
+
+.font-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+/* one specimen rule per set, so the preview cannot drift from the theme */
+.font-row[data-font="system"] .spec { font-family: "Segoe UI", Tahoma, sans-serif; }
+.font-row[data-font="serif"] .spec { font-family: Georgia, "Times New Roman", serif; }
+.font-row[data-font="mono"] .spec { font-family: Consolas, "Lucida Console", monospace; }
+.font-row[data-font="humanist"] .spec { font-family: "Trebuchet MS", Tahoma, sans-serif; }
+.font-row[data-font="compact"] .spec { font-family: Tahoma, sans-serif; }
+.font-row[data-font="classic"] .spec { font-family: Verdana, Geneva, sans-serif; }
+.font-row[data-font="elegant"] .spec { font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif; }
+
+@media (max-width: 560px) {
+  .font-list { max-height: 200px; }
+  .font-row .ds { display: none; }
+}
