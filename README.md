@@ -399,6 +399,8 @@ tools\firewall.cmd -Remove      :: delete the "Social Server" rules
 | | |
 | --- | --- |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the process, storage and HTTP stack fit together |
+| [docs/DESIGN.md](docs/DESIGN.md) | The visual system: every token, component, animation and breakpoint, plus what not to do |
+| [docs/DESIGN-RESEARCH.md](docs/DESIGN-RESEARCH.md) | What to borrow from the current motion references, what to refuse, and the plan for the next visual pass |
 | [docs/API.md](docs/API.md) | Every endpoint, the envelope, errors, long polls |
 | [docs/CLI.md](docs/CLI.md) | The operator console and `--cmd` |
 | [docs/AI.md](docs/AI.md) | AI personas: Markov and OpenAI-compatible providers |

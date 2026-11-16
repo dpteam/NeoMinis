@@ -26,6 +26,92 @@ Needs a new field or a new check in several places, but no new subsystem.
 
 New subsystem or a real chunk of work.
 
+### Native clients: Android and Windows
+
+**Committed, not speculative.** Two first-party clients for NeoMinis, and the point
+of both is the same: a real app is faster than a tab, survives the phone's battery
+optimiser, and can ring when a call arrives. Both must let the user **pick or type an
+instance address**, because the whole project is self-hosted: there is no central
+server to point at.
+
+| | Android | Windows |
+| --- | --- | --- |
+| **Shape** | Native app (Kotlin, single activity + Compose) | Desktop app, tray-resident |
+| **Minimum** | API 24 (Android 7) | Windows 7 SP1 x64, ideally XP-compatible like the server |
+| **Why native** | Push, calls in the background, share-sheet, notifications that actually arrive | Tray, global hotkey, drag-and-drop upload, clipboard paste, multiple accounts |
+| **Why not a WebView** | A WebView shell would inherit every browser limitation we already have and add nothing but an icon | Same |
+
+#### Instance selection (the part that must exist on day one)
+
+The first screen is not a login — it is **"which server?"**.
+
+1. **Add instance** — type `https://social.example.com`, or scan a QR code from
+   Admin → Settings (the server renders one for `site.baseUrl`).
+2. **Discovery** — `GET /api/handshake` is unauthenticated and already returns
+   `site.name`, `shortName`, `version` and `kdfIterations`, so the client can show
+   the instance's real name and logo before a single credential is typed. If that
+   call fails, the address is wrong and we say so immediately.
+3. **A list of saved instances**, each with its name, its avatar/logo and the last
+   account used. Switching does not log you out of the other one.
+4. **Never assume a default.** No hardcoded hostname in the shipped build; a build-time
+   default is allowed for internal builds only.
+
+#### What each client does in the first release
+
+**Both:**
+
+- Login, logout, session persistence, and the same sealed-request protocol
+  (`verifier = PBKDF2(password, "social.login.v1|username")`, HMAC-signed and
+  encrypted envelopes). The crypto is mirrored, not re-invented — the test vectors in
+  `--selftest` are the contract.
+- Feed (read + like + comment), profiles, friends, messages with live delivery,
+  notifications, and a settings screen for theme and language.
+- A server switcher in the settings, and "this instance is unreachable" handled as a
+  first-class state, not a spinner forever.
+
+**Android specifically:**
+
+- **Push** via the existing Web Push surface? No — Android needs FCM, and that means a
+  relay. Decision to make: either a tiny push relay that the instance opts into, or
+  foreground-service polling (worse battery, zero infrastructure). Recorded here so it
+  is not discovered late.
+- **Calls**: WebRTC is native on Android; the signalling is the same `/api/call/*`
+  long poll. Incoming call = a full-screen intent with a ringtone.
+- **Share sheet**: any image or link can be posted without opening the app.
+- **Offline read**: cache the last feed page and open threads.
+
+**Windows specifically:**
+
+- Tray icon with unread count; close to tray, not to taskbar.
+- Native notifications, and the same VAPID push path the browser already uses (the
+  server side exists — `Core/WebPush.cs`).
+- Drag-and-drop a file onto the window to upload it, and `Ctrl+V` for an image.
+- A global hotkey to open the quick composer.
+- Multiple accounts **across multiple instances** in one window — the natural end
+  state of the instance picker.
+
+#### Server work this needs
+
+The API is already close, because the browser uses the same one. Gaps to close:
+
+| Need | Status |
+| --- | --- |
+| `GET /api/handshake` with site name/version | Done |
+| Sealed request protocol | Done, and mirrored in JS — needs a shared test-vector file so the clients cannot drift |
+| `/api/call/*` signalling | Done |
+| Web Push (VAPID) | Done |
+| A stable `client` hint in the user agent / a `X-Client` header, so Admin → Users can say "Android" instead of "unknown browser" | Not done |
+| A QR code for the instance address in Admin → Settings | Not done |
+| A per-instance "app" section in the docs with the exact base URL | Not done |
+
+#### Sequencing
+
+1. Shared protocol test vectors + an `X-Client` header (small, server side).
+2. QR + docs so an instance owner can hand out an address.
+3. Android: instance picker → login → feed → messages. Calls and push after.
+4. Windows: instance picker → login → feed → messages → tray + notifications.
+5. Only then: offline caches, share sheet, global hotkey, multi-account.
+
 ### File transfer in DMs (a Send-Anywhere / TransFerry for our own site)
 
 **Shipped:** the HTTP relay tier. `Core/Transfers.cs` holds chunks in memory,
@@ -68,6 +154,23 @@ poll) but they are the minimum.
 | **Group layout** | Grid that switches to speaker view, mute-all, "raise hand", per-member volume. The people strip (avatars, count, a blue dot when somebody joins) and the minimised call window are in. |
 | **Call link** | `#/call/<room>` with a copy button, so a room can be pasted into a chat. |
 | **Recording** | `MediaRecorder` over a mixed stream into the media library, with a visible "recording" badge and consent from every participant. |
+
+### Visual pass: retro 2008 × modern
+
+The design is documented in [DESIGN.md](DESIGN.md) and the plan is in
+[DESIGN-RESEARCH.md](DESIGN-RESEARCH.md). The short version: keep the 2008 chrome
+(three columns, blue bar, 1px borders, density, tab underline), add modern craft
+(a spacing scale, one motion scale, skeletons, a mobile bottom bar and sheets,
+shared-element image opens), and refuse the things that make an interface look
+generated (glass, gradient text, 3D tilt, scroll animation on the feed).
+
+Shipped in phases so each one can be reviewed on its own:
+
+1. Tokens — spacing, type, motion, `:focus-visible`, `aria-live` toasts. No visual change intended.
+2. Motion primitives — enter/exit/stagger helper, sliding tab indicator, number ticker, origin-aware popovers.
+3. Mobile shell — bottom tab bar, bottom sheets, modals become sheets, pull-to-refresh.
+4. Loading — skeletons for post, thread row and profile; an empty-state pass.
+5. Character — dithered cover fallback, a 1px emboss pass, the music toggle, the call island morph.
 
 ### Applications API (the big one)
 
