@@ -1100,60 +1100,121 @@ html[data-skin="horror"] .post { border-left: 2px solid var(--border-2); }
 .skin-row:disabled { opacity: .55; cursor: default; }
 .skin-row:disabled:hover { background: transparent; color: var(--text-soft); }
 
-/* the swatch: the bar gradient, the page fill and an accent chip, at 34x34 */
-.skin-row .sw {
-  position: relative;
-  flex: none;
-  width: 34px;
-  height: 34px;
-  border-radius: 7px;
-  border: 1px solid var(--border-2);
-  overflow: hidden;
-}
-.skin-row .sw::after {
-  content: "";
-  position: absolute;
-  left: 5px; right: 5px; bottom: 5px;
-  height: 5px;
-  border-radius: 3px;
-}
 .skin-row .txt { flex: 1; min-width: 0; }
 .skin-row .nm { display: block; font-size: 12.5px; font-weight: 700; color: inherit; }
 .skin-row .ds { display: block; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skin-row .tick { flex: none; color: var(--accent); font-size: 12px; opacity: 0; }
 .skin-row.active .tick { opacity: 1; }
 
-/* swatch fills, one rule per template */
-.skin-row[data-skin="branded"] .sw { background: linear-gradient(#6f9bc9, #4a76a8 55%, #3a5f8c); }
-.skin-row[data-skin="branded"] .sw::after { background: #fff; }
-.skin-row[data-skin="aero"] .sw { background: linear-gradient(#89b9e4, #4a86c2 52%, #2d6096); }
-.skin-row[data-skin="aero"] .sw::after { background: #5ea4e8; }
-.skin-row[data-skin="metro"] .sw { background: #1f1f1f; }
-.skin-row[data-skin="metro"] .sw::after { background: #0078d4; border-radius: 0; }
-.skin-row[data-skin="paper"] .sw { background: linear-gradient(#fffdf7, #efe7d8); }
-.skin-row[data-skin="paper"] .sw::after { background: #8c3b2e; }
-.skin-row[data-skin="terminal"] .sw { background: #0a0c0a; }
-.skin-row[data-skin="terminal"] .sw::after { background: #7ad17a; border-radius: 0; }
-.skin-row[data-skin="soft"] .sw { background: linear-gradient(#ffffff, #f1f3f8); }
-.skin-row[data-skin="soft"] .sw::after { background: #5b6ee1; }
-.skin-row[data-skin="brutal"] .sw { background: #fdfcf3; }
-.skin-row[data-skin="brutal"] .sw::after { background: #ff5c00; border-radius: 0; box-shadow: 2px 2px 0 #111; }
-.skin-row[data-skin="neon"] .sw { background: linear-gradient(#170f2e, #07060d); }
-.skin-row[data-skin="neon"] .sw::after { background: #a86bff; box-shadow: 0 0 8px #a86bff; }
-.skin-row[data-skin="warm"] .sw { background: linear-gradient(#b4682c, #8f4a1c 60%, #713a14); }
-.skin-row[data-skin="warm"] .sw::after { background: #f7eddc; }
-.skin-row[data-skin="slate"] .sw { background: linear-gradient(#ffffff, #eceff2); }
-.skin-row[data-skin="slate"] .sw::after { background: #0f766e; }
-.skin-row[data-skin="matrix"] .sw { background: linear-gradient(#0a1a12, #04080a); }
-.skin-row[data-skin="matrix"] .sw::after { background: #4fd76a; box-shadow: 0 0 8px #4fd76a; border-radius: 0; }
-.skin-row[data-skin="cyberpunk"] .sw { background: linear-gradient(#241344, #0b0818); }
-.skin-row[data-skin="cyberpunk"] .sw::after { background: #ff2d8f; box-shadow: 0 0 8px #00f0ff; border-radius: 0; }
-.skin-row[data-skin="newyear"] .sw { background: linear-gradient(#1e3556, #0c1424); }
-.skin-row[data-skin="newyear"] .sw::after { background: #d4af37; }
-.skin-row[data-skin="autumn"] .sw { background: linear-gradient(#b8642a, #6f3612); }
-.skin-row[data-skin="autumn"] .sw::after { background: #f6ecdb; }
-.skin-row[data-skin="horror"] .sw { background: linear-gradient(#1f0d10, #0a0708); }
-.skin-row[data-skin="horror"] .sw::after { background: #b81f2a; box-shadow: 0 0 8px #b81f2a; border-radius: 0; }
+/* ------------------------------------------------------------- the swatch
+   Not a colour chip: a 34x34 miniature of the interface, drawn from four
+   variables per template, so it shows the bar, the panel, the accent and the
+   corner radius all at once. A new template costs five lines here instead of
+   two CSS rules, and the preview cannot drift from the theme it describes.
+
+     --sw-bar      the topbar gradient
+     --sw-panel    the page / card fill
+     --sw-accent   the accent stripe
+     --sw-line     body text lines
+     --sw-radius   the template's own corner radius, so the shape reads too
+
+   Defaults are the branded palette, so a template that forgets to set these
+   still renders a sensible blue tile rather than an empty box. */
+
+.skin-row .sw {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--sw-radius, 4px);
+  border: 1px solid var(--border-2);
+  overflow: hidden;
+  background: var(--sw-panel, #ffffff);
+}
+/* the topbar strip */
+.skin-row .sw::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 9px;
+  background: var(--sw-bar, linear-gradient(#6f9bc9, #4a76a8 55%, #3a5f8c));
+}
+/* an accent rule and two body lines: enough to read as "a page", not a blob */
+.skin-row .sw::after {
+  content: "";
+  position: absolute;
+  left: 4px; right: 4px; top: 13px; bottom: 3px;
+  border-radius: 1px;
+  background-image:
+    linear-gradient(var(--sw-accent, #4a76a8), var(--sw-accent, #4a76a8)),
+    linear-gradient(var(--sw-line, #c9d5e3), var(--sw-line, #c9d5e3)),
+    linear-gradient(var(--sw-line, #c9d5e3), var(--sw-line, #c9d5e3));
+  background-repeat: no-repeat;
+  background-size: 46% 3px, 100% 2px, 68% 2px;
+  background-position: 0 0, 0 7px, 0 12px;
+  opacity: .95;
+}
+
+.skin-row[data-skin="branded"] {
+  --sw-bar: linear-gradient(#6f9bc9, #4a76a8 55%, #3a5f8c);
+  --sw-panel: #ffffff; --sw-accent: #4472a4; --sw-line: #d7e0ea; --sw-radius: 4px;
+}
+.skin-row[data-skin="aero"] {
+  --sw-bar: linear-gradient(#89b9e4, #4a86c2 52%, #2d6096);
+  --sw-panel: #ffffff; --sw-accent: #2f7fd6; --sw-line: #dbe6f2; --sw-radius: 8px;
+}
+.skin-row[data-skin="metro"] {
+  --sw-bar: #1f1f1f;
+  --sw-panel: #ffffff; --sw-accent: #0078d4; --sw-line: #dcdcdc; --sw-radius: 0px;
+}
+.skin-row[data-skin="paper"] {
+  --sw-bar: #2b2620;
+  --sw-panel: #fffdf7; --sw-accent: #8c3b2e; --sw-line: #ddd2bd; --sw-radius: 2px;
+}
+.skin-row[data-skin="terminal"] {
+  --sw-bar: #060806;
+  --sw-panel: #0f120f; --sw-accent: #7ad17a; --sw-line: #2a3a2c; --sw-radius: 0px;
+}
+.skin-row[data-skin="soft"] {
+  --sw-bar: #ffffff;
+  --sw-panel: #f9fafc; --sw-accent: #5b6ee1; --sw-line: #e6e9f2; --sw-radius: 10px;
+}
+.skin-row[data-skin="brutal"] {
+  --sw-bar: #111111;
+  --sw-panel: #ffffff; --sw-accent: #ff5c00; --sw-line: #111111; --sw-radius: 0px;
+}
+.skin-row[data-skin="neon"] {
+  --sw-bar: #0a0713;
+  --sw-panel: #120e1e; --sw-accent: #a86bff; --sw-line: #33224d; --sw-radius: 5px;
+}
+.skin-row[data-skin="warm"] {
+  --sw-bar: linear-gradient(#b4682c, #8f4a1c 60%, #713a14);
+  --sw-panel: #fdf7ec; --sw-accent: #c05621; --sw-line: #e0cfb2; --sw-radius: 6px;
+}
+.skin-row[data-skin="slate"] {
+  --sw-bar: #ffffff;
+  --sw-panel: #ffffff; --sw-accent: #0f766e; --sw-line: #dfe3e8; --sw-radius: 4px;
+}
+.skin-row[data-skin="matrix"] {
+  --sw-bar: #03070a;
+  --sw-panel: #061009; --sw-accent: #4fd76a; --sw-line: #1d4a2c; --sw-radius: 0px;
+}
+.skin-row[data-skin="cyberpunk"] {
+  --sw-bar: #0a0616;
+  --sw-panel: #120d22; --sw-accent: #ff2d8f; --sw-line: #3a2863; --sw-radius: 0px;
+}
+.skin-row[data-skin="newyear"] {
+  --sw-bar: linear-gradient(#1e3556, #142438 60%, #0f1a2b);
+  --sw-panel: #131f33; --sw-accent: #d4af37; --sw-line: #2c3f5c; --sw-radius: 8px;
+}
+.skin-row[data-skin="autumn"] {
+  --sw-bar: linear-gradient(#a85a24, #85431a 60%, #6a3412);
+  --sw-panel: #fdf7ec; --sw-accent: #c25a1e; --sw-line: #ddc9a8; --sw-radius: 5px;
+}
+.skin-row[data-skin="horror"] {
+  --sw-bar: #070405;
+  --sw-panel: #120c0e; --sw-accent: #b81f2a; --sw-line: #3a1a1f; --sw-radius: 2px;
+}
 
 @media (max-width: 560px) {
   .skin-list { max-height: 260px; }
