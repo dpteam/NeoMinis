@@ -3118,13 +3118,21 @@
         '<div class="field"><label>' + T('settings.effect') + '</label>' +
         '<select class="select" id="s-effect"' + (state.site && state.site.effectsEnabled === false ? ' disabled' : '') + '>' + fxHtml + '</select>' +
         '<div class="hint">' + T('settings.effectHint') + '</div></div>' +
-        '<div class="field"><label>' + T('settings.font') + '</label>' +
-        fontHtml +
-        '<div class="hint">' + T('settings.fontHint') + '</div></div>' +
         '<div class="field"><label>' + T('settings.language') + '</label><select class="select" id="s-lang">' + langHtml + '</select></div>' +
         '</div>';
 
-      pLook += '<div class="settings-block"><h3>' + T('settings.sound') + '</h3>' +
+      // the font sets get their own block: two tall lists side by side is the only
+      // way both fit without a scrollbar inside a scrollbar
+      pLook += '<div class="settings-block"><h3>' + T('settings.font') + '</h3>' +
+        fontHtml +
+        '<div class="hint">' + T('settings.fontHint') + '</div>' +
+        '</div>';
+
+      // sounds sit BELOW both, full width: squeezed into a half column the pack
+      // description and the event grid both wrapped into an unreadable stack
+      pLook += '<div class="settings-block wide"><h3>' + T('settings.sound') + '</h3>' +
+        '<div class="sound-cols">' +
+        '<div>' +
         '<label class="check" style="margin-bottom:6px"><input type="checkbox" id="s-sound"' + (SoundFX.isEnabled() ? ' checked' : '') + '> <span>' + T('settings.soundOn') + '</span></label>' +
         '<input type="range" class="range" id="s-volume" min="0" max="1" step="0.05" value="' + SoundFX.getVolume() + '">' +
         '<div class="hint">' + T('settings.volume') + '</div>' +
@@ -3132,7 +3140,10 @@
         '<select class="select" id="s-pack">' + packHtml + '</select>' +
         '<div class="hint">' + T('settings.soundPackHint') + '</div></div>' +
         '<button type="button" class="btn btn-sm" id="sound-test">' + UI.icon('play') + ' ' + T('settings.soundTest') + '</button>' +
-        '<div class="field" style="margin-top:10px"><label>' + T('settings.events') + '</label><div class="sound-events">' + evHtml + '</div></div>' +
+        '</div>' +
+        '<div><label class="tiny muted" style="display:block;margin-bottom:6px">' + T('settings.events') + '</label>' +
+        '<div class="sound-events">' + evHtml + '</div></div>' +
+        '</div>' +
         '</div>';
 
       // ---- privacy: who may do what, plus the per-area matrix
