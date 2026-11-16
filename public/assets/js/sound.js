@@ -30,6 +30,54 @@ var SoundFX = (function () {
     theme:   { type: 'triangle', filter: 2600, notes: [[587.33, 0, .1, .5], [880.00, .06, .2, .45]] }
   };
 
+  /* ------------------------------------------------------------- voices
+     Every template gets its own synth character, so switching from Paper to
+     Cyberpunk changes what the interface *sounds* like as well as what it looks
+     like. Still no audio files: this is a set of parameters applied on top of the
+     event presets above.
+
+       transpose  semitones applied to every note (-12 = an octave down)
+       filter     multiplies the preset's low-pass cutoff (< 1 = duller)
+       type       overrides the waveform for every event in that theme
+       decay      multiplies note length (> 1 = more sustain)
+       gain       multiplies peak level (compensates for duller/darker timbres)
+       detune     cents of detune on the second oscillator (0 = pure)
+       wobble     seconds of slow pitch drift, for the tape-like themes
+  */
+  var VOICES = {
+    branded:  { transpose: 0,  filter: 1,    decay: 1,    gain: 1,    detune: 0 },
+    aero:     { transpose: 2,  filter: 1.25, decay: 1.15, gain: .95,  detune: 4,   type: 'sine' },
+    metro:    { transpose: 0,  filter: .85,  decay: .72,  gain: 1.1,  detune: 0,   type: 'square' },
+    paper:    { transpose: -5, filter: .55,  decay: 1.3,  gain: 1.25, detune: 0,   type: 'triangle' },
+    terminal: { transpose: 0,  filter: 1.5,  decay: .45,  gain: 1.05, detune: 0,   type: 'square' },
+    soft:     { transpose: 3,  filter: .7,   decay: 1.35, gain: 1.1,  detune: 0,   type: 'sine' },
+    brutal:   { transpose: -7, filter: .6,   decay: .6,   gain: 1.35, detune: 18,  type: 'sawtooth' },
+    neon:     { transpose: 7,  filter: 1.4,  decay: 1.1,  gain: .9,   detune: 8,   type: 'triangle' },
+    warm:     { transpose: -3, filter: .65,  decay: 1.2,  gain: 1.2,  detune: 3,   type: 'triangle' },
+    slate:    { transpose: -2, filter: .95,  decay: .9,   gain: 1,    detune: 0,   type: 'sine' },
+    matrix:   { transpose: 0,  filter: 1.3,  decay: .5,   gain: 1,    detune: 0,   type: 'square' },
+    cyberpunk:{ transpose: 5,  filter: 1.45, decay: .8,   gain: .95,  detune: 12,  type: 'sawtooth' },
+    newyear:  { transpose: 5,  filter: 1.1,  decay: 1.5,  gain: .95,  detune: 2,   type: 'sine' },
+    autumn:   { transpose: -4, filter: .7,   decay: 1.25, gain: 1.2,  detune: 5,   type: 'triangle' },
+    horror:   { transpose: -12, filter: .45, decay: 1.6,  gain: 1.4,  detune: 26,  type: 'sawtooth', wobble: .18 }
+  };
+
+  var skin = 'branded';
+
+  function setSkin(id) {
+    skin = VOICES[id] ? id : 'branded';
+    return skin;
+  }
+
+  function voiceOf() {
+    return VOICES[skin] || VOICES.branded;
+  }
+
+  /// The semitone transpose, as a frequency multiplier.
+  function pitch(voice) {
+    return Math.pow(2, (voice.transpose || 0) / 12);
+  }
+
   function ensure() {
     if (ctx) return ctx;
     var AC = window.AudioContext || window.webkitAudioContext;
@@ -58,31 +106,46 @@ var SoundFX = (function () {
   }
 
   function voice(c, preset, freq, delay, dur, mul) {
+    var v = voiceOf();
     var t0 = c.currentTime + 0.012 + delay;
-    var peak = 0.28 * (mul || 1) * 0.9;
+    var peak = 0.28 * (mul || 1) * 0.9 * (v.gain || 1);
+    var len = dur * (v.decay || 1);
+    var f = freq * pitch(v);
     var osc = c.createOscillator();
     var detune = c.createOscillator();
     var filt = c.createBiquadFilter();
     var gain = c.createGain();
     var gain2 = c.createGain();
 
-    osc.type = preset.type || 'sine';
-    osc.frequency.setValueAtTime(freq, t0);
+    osc.type = v.type || preset.type || 'sine';
+    osc.frequency.setValueAtTime(f, t0);
+    // the tape-like themes drift a little, which is what makes a VHS horror
+    // sound like a VHS rather than like a synth
+    if (v.wobble) {
+      try {
+        osc.frequency.setValueAtTime(f * 0.985, t0);
+        osc.frequency.linearRampToValueAtTime(f * 1.015, t0 + v.wobble);
+        osc.frequency.linearRampToValueAtTime(f, t0 + v.wobble * 2);
+      } catch (e) { }
+    }
 
     detune.type = 'sine';
-    detune.frequency.setValueAtTime(freq * 2.002, t0);
+    detune.frequency.setValueAtTime(f * 2.002, t0);
+    if (v.detune) {
+      try { detune.detune.setValueAtTime(v.detune, t0); } catch (e) { }
+    }
 
     filt.type = 'lowpass';
-    filt.frequency.setValueAtTime(Math.min(preset.filter || 3000, 16000), t0);
+    filt.frequency.setValueAtTime(Math.min((preset.filter || 3000) * (v.filter || 1), 16000), t0);
     filt.Q.value = 0.6;
 
     gain.gain.setValueAtTime(0.0001, t0);
     gain.gain.exponentialRampToValueAtTime(peak, t0 + 0.018);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
 
     gain2.gain.setValueAtTime(0.0001, t0);
     gain2.gain.exponentialRampToValueAtTime(peak * 0.22, t0 + 0.03);
-    gain2.gain.exponentialRampToValueAtTime(0.0001, t0 + dur * 0.8);
+    gain2.gain.exponentialRampToValueAtTime(0.0001, t0 + len * 0.8);
 
     osc.connect(filt);
     filt.connect(gain);
@@ -92,8 +155,8 @@ var SoundFX = (function () {
 
     osc.start(t0);
     detune.start(t0);
-    osc.stop(t0 + dur + 0.05);
-    detune.stop(t0 + dur + 0.05);
+    osc.stop(t0 + len + 0.05);
+    detune.stop(t0 + len + 0.05);
   }
 
   function play(name) {
@@ -204,6 +267,10 @@ var SoundFX = (function () {
     isEventEnabled: isEventEnabled,
     setEvents: setEvents,
     getEvents: getEvents,
+    // the template's synth character, so switching a skin changes the sound too
+    setSkin: setSkin,
+    getSkin: function () { return skin; },
+    voices: VOICES,
     presets: PRESETS
   };
 })();

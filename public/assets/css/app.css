@@ -1432,8 +1432,8 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .chat-attach img { max-height: 64px; max-width: 120px; border-radius: 6px; display: block; }
 
 .emoji-pop {
-  display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px;
-  max-height: 190px; overflow: auto; margin-top: 7px;
+  display: block;
+  margin-top: 7px;
   padding: 6px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--panel);
 }
@@ -1442,6 +1442,76 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
   font-size: 19px; line-height: 1; padding: 3px; border-radius: 6px;
 }
 .emoji-item:hover { background: var(--hover); }
+
+/* ------------------------------------------------------- attach + picker
+   The composer row is three controls wide (attach, emoji, send) and everything
+   else lives behind the paperclip. That is what keeps it usable on a phone. */
+
+.attach-menu {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(100% - 2px);
+  z-index: 30;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-hi);
+  max-height: 60vh;
+  overflow-y: auto;
+  animation: attachIn .16s var(--ease);
+}
+@keyframes attachIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.chat-form { position: relative; }
+
+.attach-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.attach-item:hover { background: var(--hover); color: var(--text); }
+.attach-item i { width: 16px; text-align: center; color: var(--accent); font-size: 12px; }
+.attach-sep { height: 1px; margin: 5px 8px; background: var(--border); }
+.attach-xfer .xfer-panel { border: 0; padding: 0; margin: 0; background: transparent; }
+.attach-xfer .xfer-row { padding: 0 4px 4px; }
+
+/* the picker: a tab strip, then one page at a time */
+.picker-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+.picker-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.picker-tab:hover { background: var(--hover); color: var(--text); }
+.picker-tab.active { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.picker-page { max-height: 190px; overflow: auto; }
+.emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+@media (max-width: 560px) { .emoji-grid { grid-template-columns: repeat(6, 1fr); } }
 
 /* stickers: a tab per pack, then a grid of pictures. Sending is one click. */
 .sticker-pop {

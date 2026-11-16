@@ -321,6 +321,18 @@ var UI = (function () {
   var EFFECTS = ['none', 'grain', 'scanlines', 'vhs', 'matrix', 'glitch',
     'snow', 'leaves', 'aurora', 'glow', 'sheen', 'paper-cut'];
 
+  // The picker is a grouped list rather than a grid: fifteen tiles is a wall, and
+  // a list with a one-line description each is scannable. Order here is the order
+  // shown, so adding a skin means adding it to SKINS and to a group.
+  var SKIN_GROUPS = [
+    { key: 'classic', skins: ['branded', 'aero', 'metro', 'paper', 'terminal'] },
+    { key: 'modern', skins: ['soft', 'slate', 'brutal'] },
+    { key: 'dark', skins: ['neon', 'matrix', 'cyberpunk', 'horror'] },
+    { key: 'seasonal', skins: ['newyear', 'autumn', 'warm'] }
+  ];
+
+  function skinGroups() { return SKIN_GROUPS; }
+
   var fxLayer = null;
 
   function getSkin() {
@@ -336,6 +348,9 @@ var UI = (function () {
     if (SKINS.indexOf(name) < 0) name = 'branded';
     document.documentElement.setAttribute('data-skin', name);
     try { localStorage.setItem('social.skin', name); } catch (e) { }
+    // the template also decides what the interface sounds like: each one has its
+    // own synth character (see VOICES in sound.js), still with no audio files
+    if (window.SoundFX && SoundFX.setSkin) SoundFX.setSkin(name);
     // Choosing a template resets the atmosphere to that template's own default:
     // otherwise picking "horror" while a manual "glow" was stored would give a
     // horror palette with a neon glow, which is nobody's intention.
@@ -418,6 +433,49 @@ var UI = (function () {
     reader.readAsDataURL(file);
   }
 
+  /// <summary>
+  /// Pulls an image out of a paste event, or null. Browsers disagree here: Chrome
+  /// and Edge expose the picture as a File in clipboardData.items, Firefox puts it
+  /// in clipboardData.files, and a screenshot from some tools arrives only as an
+  /// HTML fragment with an <img src="data:…">. All three are handled, because
+  /// "paste a screenshot" failing on one browser is exactly the kind of bug nobody
+  /// reports and everybody works around.
+  /// </summary>
+  function pastedImage(e) {
+    var dt = e && (e.clipboardData || e.data);
+    if (!dt) return null;
+
+    var items = dt.items ? dt.items : [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].kind === 'file' && /^image\//i.test(items[i].type || '')) {
+        var f = items[i].getAsFile ? items[i].getAsFile() : null;
+        if (f) return f;
+      }
+    }
+
+    var files = dt.files ? dt.files : [];
+    for (var k = 0; k < files.length; k++) {
+      if (/^image\//i.test(files[k].type || '')) return files[k];
+    }
+
+    var html = dt.getData ? dt.getData('text/html') : '';
+    if (html) {
+      var m = html.match(/<img[^>]+src=["'](data:image\/[^"']+)["']/i);
+      if (m) {
+        // turn the data URL back into a File so the caller has one code path
+        try {
+          var parts = m[1].split(',');
+          var mime = parts[0].match(/data:([^;]+)/)[1];
+          var bin = atob(parts[1]);
+          var arr = new Uint8Array(bin.length);
+          for (var b = 0; b < bin.length; b++) arr[b] = bin.charCodeAt(b);
+          return new File([arr], 'pasted.png', { type: mime });
+        } catch (err) { }
+      }
+    }
+    return null;
+  }
+
   function debounce(fn, wait) {
     var t = null;
     return function () {
@@ -470,10 +528,10 @@ var UI = (function () {
     avatar: avatar, icon: icon, userLink: userLink, roleBadge: roleBadge, vipBadge: vipBadge, presence: presence,
     spinner: spinner, empty: empty, toast: toast, modal: modal, confirm: confirmBox,
     imageModal: imageModal, getTheme: getTheme, applyTheme: applyTheme, cycleTheme: cycleTheme,
-    getSkin: getSkin, applySkin: applySkin, skinList: skinList,
+    getSkin: getSkin, applySkin: applySkin, skinList: skinList, skinGroups: skinGroups,
     getEffect: getEffect, applyEffect: applyEffect, effectList: effectList,
     mediaBlocked: mediaBlocked, mediaBlockedText: mediaBlockedText, mediaReady: mediaReady,
-    themes: THEMES, copy: copy, fileToDataUrl: fileToDataUrl, debounce: debounce,
+    themes: THEMES, copy: copy, fileToDataUrl: fileToDataUrl, pastedImage: pastedImage, debounce: debounce,
     throttle: throttle, scrollTop: scrollTop, bytes: bytes, query: query, on: on, pad: pad
   };
 })();

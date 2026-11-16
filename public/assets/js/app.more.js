@@ -444,6 +444,9 @@
   }
 
   function chatComposerHtml() {
+    // One "attach" button opens a menu with everything that is not a smiley:
+    // photo, file, voice and the peer transfer. The composer row stays three
+    // controls wide, which is what makes it usable on a phone.
     return '<form class="chat-form" id="chat-form">' +
       '<div class="chat-reply hidden" id="chat-reply"><div class="chat-reply-body"><b id="chat-reply-name"></b><span id="chat-reply-text"></span></div>' +
       '<button type="button" class="icon-btn" id="chat-reply-x">' + UI.icon('xmark') + '</button></div>' +
@@ -461,20 +464,31 @@
       '<button type="button" class="btn btn-sm btn-danger" id="chat-rec-stop">' + UI.icon('stop') + ' ' + T('messages.stop') + '</button>' +
       '<button type="button" class="icon-btn" id="chat-rec-cancel">' + UI.icon('xmark') + '</button></div>' +
       '<div class="chat-row">' +
-      '<button type="button" class="chat-btn" id="chat-mic-btn" title="' + UI.attr(T('messages.record')) + '">' + UI.icon('microphone') + '</button>' +
-      '<button type="button" class="chat-btn" id="chat-file-btn" title="' + UI.attr(T('messages.attach')) + '">' + UI.icon('image') + '</button>' +
+      '<button type="button" class="chat-btn" id="chat-attach-btn" title="' + UI.attr(T('messages.attachMenu')) + '" aria-haspopup="true" aria-expanded="false">' + UI.icon('paperclip') + '</button>' +
       '<input type="file" id="chat-file" class="hidden" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime" multiple>' +
-      '<button type="button" class="chat-btn" id="chat-doc-btn" title="' + UI.attr(T('messages.attachFile')) + '">' + UI.icon('paperclip') + '</button>' +
       '<input type="file" id="chat-doc" class="hidden">' +
       '<button type="button" class="chat-btn" id="chat-emoji-btn" title="' + UI.attr(T('messages.emoji')) + '">' + UI.icon('face-smile') + '</button>' +
-      (state.site.stickersEnabled !== false
-        ? '<button type="button" class="chat-btn" id="chat-sticker-btn" title="' + UI.attr(T('messages.stickers')) + '">' + UI.icon('icons') + '</button>'
-        : '') +
       '<textarea id="chat-text" rows="1" maxlength="' + (state.site.maxMessageLength || 4000) + '" placeholder="' + UI.attr(T('messages.placeholder')) + '"></textarea>' +
       '<button class="chat-send" type="submit" id="chat-send" title="' + UI.attr(T('common.send')) + '">' + UI.icon('paper-plane') + '</button>' +
       '</div>' +
-      '<div class="emoji-pop hidden" id="chat-emoji"></div>' +
-      '<div class="sticker-pop hidden" id="chat-stickers"></div>' +
+      '<div class="attach-menu hidden" id="chat-attach-menu">' +
+      '<button type="button" class="attach-item" id="chat-file-btn">' + UI.icon('image') + ' <span>' + T('messages.attachPhoto') + '</span></button>' +
+      '<button type="button" class="attach-item" id="chat-doc-btn">' + UI.icon('paperclip') + ' <span>' + T('messages.attachFile') + '</span></button>' +
+      '<button type="button" class="attach-item" id="chat-mic-btn">' + UI.icon('microphone') + ' <span>' + T('messages.record') + '</span></button>' +
+      '<div class="attach-sep"></div>' +
+      '<div class="attach-xfer" id="xfer-slot">' + (window.TransferUI ? TransferUI.panelHtml() : '') + '</div>' +
+      '</div>' +
+      // one picker, two pages: emoji and stickers behind a single switch
+      '<div class="emoji-pop hidden" id="chat-emoji">' +
+      '<div class="picker-tabs">' +
+      '<button type="button" class="picker-tab active" data-picker="emoji">' + UI.icon('face-smile') + ' ' + T('messages.emoji') + '</button>' +
+      (state.site.stickersEnabled !== false
+        ? '<button type="button" class="picker-tab" data-picker="stickers">' + UI.icon('icons') + ' ' + T('messages.stickers') + '</button>'
+        : '') +
+      '</div>' +
+      '<div class="picker-page" data-page="emoji"></div>' +
+      '<div class="picker-page hidden" data-page="stickers"></div>' +
+      '</div>' +
       '</form>';
   }
 
@@ -549,7 +563,6 @@
         body += bubbleHtml(messages[i], other);
       }
       body += '</div>';
-      body += '<div id="xfer-slot">' + (window.TransferUI ? TransferUI.panelHtml() : '') + '</div>';
       body += chatComposerHtml();
       chat.innerHTML = body;
       chat.setAttribute('data-last', lastId);
@@ -625,6 +638,8 @@
     var replyName = document.getElementById('chat-reply-name');
     var replyText = document.getElementById('chat-reply-text');
     var sendBtn = document.getElementById('chat-send');
+    // the sticker page of the picker is filled once per conversation
+    var stickersLoaded = false;
     state.im.image = '';
     state.im.album = [];
 
@@ -648,17 +663,33 @@
       });
     });
 
-    // emoji picker
+    // ---------------------------------------------------- one picker, two pages
+    var emojiPage = emojiPop.querySelector('[data-page="emoji"]');
+    var stickerPage = emojiPop.querySelector('[data-page="stickers"]');
     var emojiHtml = '';
     for (var i = 0; i < EMOJI.length; i++) {
       emojiHtml += '<button type="button" class="emoji-item" data-emoji="' + EMOJI[i] + '">' + EMOJI[i] + '</button>';
     }
-    emojiPop.innerHTML = emojiHtml;
+    if (emojiPage) emojiPage.innerHTML = '<div class="emoji-grid">' + emojiHtml + '</div>';
+
+    var pickerTabs = emojiPop.querySelectorAll('.picker-tab');
+    for (var pt = 0; pt < pickerTabs.length; pt++) {
+      pickerTabs[pt].addEventListener('click', function (e) {
+        e.stopPropagation();
+        var page = this.getAttribute('data-picker');
+        for (var a = 0; a < pickerTabs.length; a++)
+          pickerTabs[a].className = 'picker-tab' + (pickerTabs[a].getAttribute('data-picker') === page ? ' active' : '');
+        if (emojiPage) emojiPage.className = 'picker-page' + (page === 'emoji' ? '' : ' hidden');
+        if (stickerPage) stickerPage.className = 'picker-page' + (page === 'stickers' ? '' : ' hidden');
+        if (page === 'stickers' && !stickersLoaded) loadStickers();
+      });
+    }
 
     document.getElementById('chat-emoji-btn').addEventListener('click', function (e) {
       e.stopPropagation();
       var open = emojiPop.className.indexOf('hidden') < 0;
       emojiPop.className = open ? 'emoji-pop hidden' : 'emoji-pop';
+      if (!open) closeAttachMenu();
     });
     var items = emojiPop.querySelectorAll('.emoji-item');
     for (var k = 0; k < items.length; k++) {
@@ -669,8 +700,78 @@
       });
     }
 
+    // ------------------------------------------------------- the attach menu
+    var attachBtn = document.getElementById('chat-attach-btn');
+    var attachMenu = document.getElementById('chat-attach-menu');
+
+    function closeAttachMenu() {
+      if (!attachMenu) return;
+      attachMenu.className = 'attach-menu hidden';
+      if (attachBtn) attachBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    function openAttachMenu() {
+      if (!attachMenu) return;
+      attachMenu.className = 'attach-menu';
+      if (attachBtn) attachBtn.setAttribute('aria-expanded', 'true');
+      emojiPop.className = 'emoji-pop hidden';
+    }
+
+    if (attachBtn) attachBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = attachMenu.className.indexOf('hidden') < 0;
+      if (open) closeAttachMenu(); else openAttachMenu();
+    });
+    // a click outside closes the menu; the same listener is added once in the
+    // module scope for the sticker page, this one is bound to the form
+    document.addEventListener('click', function (e) {
+      if (!attachMenu || attachMenu.className.indexOf('hidden') >= 0) return;
+      if (attachBtn && (attachBtn === e.target || (attachBtn.contains && attachBtn.contains(e.target)))) return;
+      if (attachMenu.contains && attachMenu.contains(e.target)) return;
+      closeAttachMenu();
+    });
+
     // attachments: pictures (one or an album of up to 6) or a single short clip
-    document.getElementById('chat-file-btn').addEventListener('click', function () { file.click(); });
+    document.getElementById('chat-file-btn').addEventListener('click', function () {
+      closeAttachMenu();
+      file.click();
+    });
+
+    /// One picture, staged in the composer. Shared by the file picker and by a
+    /// paste, so a screenshot behaves exactly like a chosen file.
+    function stageImage(f) {
+      var limit = (state.site.maxMessageImageKB || 2048) * 1024;
+      if (f.size > limit) {
+        UI.toast(T('messages.imageTooBig', state.site.maxMessageImageKB || 2048), 'err');
+        return;
+      }
+      UI.fileToDataUrl(f, limit, function (err, dataUrl) {
+        if (err) {
+          UI.toast(err === 'bad-type' ? T('messages.imageType') : T('messages.imageTooBig', state.site.maxMessageImageKB || 2048), 'err');
+          return;
+        }
+        state.im.clip = '';
+        state.im.album = [dataUrl];
+        attach.innerHTML = '<img id="chat-attach-img" alt="">' +
+          '<button type="button" class="icon-btn" id="chat-attach-x">' + UI.icon('xmark') + '</button>';
+        attach.className = 'chat-attach';
+        var img = document.getElementById('chat-attach-img');
+        if (img) img.src = dataUrl;
+        var x = document.getElementById('chat-attach-x');
+        if (x) x.addEventListener('click', clearAttachment);
+        ta.focus();
+      });
+    }
+
+    // Paste a screenshot straight into the message. Text pastes normally; only an
+    // image in the clipboard is intercepted, so nothing about typing changes.
+    ta.addEventListener('paste', function (e) {
+      var f = UI.pastedImage(e);
+      if (!f) return;
+      e.preventDefault();
+      stageImage(f);
+    });
+
     file.addEventListener('change', function () {
       var files = file.files ? Array.prototype.slice.call(file.files) : [];
       if (!files.length) return;
@@ -752,7 +853,10 @@
       if (docPreview) docPreview.className = 'chat-file hidden';
     }
     var docBtn = document.getElementById('chat-doc-btn');
-    if (docBtn && doc) docBtn.addEventListener('click', function () { doc.click(); });
+    if (docBtn && doc) docBtn.addEventListener('click', function () {
+      closeAttachMenu();
+      doc.click();
+    });
     if (doc) doc.addEventListener('change', function () {
       var f = doc.files && doc.files[0];
       if (!f) return;
@@ -873,6 +977,7 @@
       if (rec) return;
       if (!recSupported()) { recExplain(); return; }
       if (state.im.voice) clearVoice();
+      closeAttachMenu();
       navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
         var mime = pickMime();
         var recorder;
@@ -980,9 +1085,7 @@
 
     // ------------------------------------------------------------- stickers
     // A sticker is sent on click, not staged: that is the whole point of them.
-    var stickerPop = document.getElementById('chat-stickers');
-    var stickerBtn = document.getElementById('chat-sticker-btn');
-
+    // They live on the second page of the same picker as the emoji.
     function sendSticker(id) {
       if (!id) return;
       Api.request('POST', '/api/messages/send',
@@ -996,6 +1099,7 @@
     }
 
     function renderStickers(packs) {
+      if (!stickerPage) return;
       var html = '';
       var tabs = '';
       for (var p = 0; p < packs.length; p++) {
@@ -1009,45 +1113,38 @@
         }
         html += '</div>';
       }
-      stickerPop.innerHTML = '<div class="sticker-tabs">' + tabs + '</div>' + html;
-      var tabBtns = stickerPop.querySelectorAll('.sticker-tab');
+      stickerPage.innerHTML = '<div class="sticker-tabs">' + tabs + '</div>' + html;
+      var tabBtns = stickerPage.querySelectorAll('.sticker-tab');
       for (var t = 0; t < tabBtns.length; t++) {
         tabBtns[t].addEventListener('click', function () {
           var pack = this.getAttribute('data-pack');
-          var all = stickerPop.querySelectorAll('.sticker-tab');
+          var all = stickerPage.querySelectorAll('.sticker-tab');
           for (var a = 0; a < all.length; a++)
             all[a].className = 'sticker-tab' + (all[a].getAttribute('data-pack') === pack ? ' active' : '');
-          var pages = stickerPop.querySelectorAll('.sticker-page');
+          var pages = stickerPage.querySelectorAll('.sticker-page');
           for (var b = 0; b < pages.length; b++)
             pages[b].className = 'sticker-page' + (pages[b].getAttribute('data-pack') === pack ? '' : ' hidden');
         });
       }
-      var items = stickerPop.querySelectorAll('.sticker-item');
+      var items = stickerPage.querySelectorAll('.sticker-item');
       for (var i = 0; i < items.length; i++) {
         items[i].addEventListener('click', function () {
           sendSticker(this.getAttribute('data-sticker'));
-          stickerPop.className = 'sticker-pop hidden';
+          emojiPop.className = 'emoji-pop hidden';
         });
       }
     }
 
-    var stickersLoaded = false;
-    if (stickerBtn && stickerPop) {
-      stickerBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var open = stickerPop.className.indexOf('hidden') < 0;
-        stickerPop.className = open ? 'sticker-pop hidden' : 'sticker-pop';
-        emojiPop.className = 'emoji-pop hidden';
-        if (open || stickersLoaded) return;
-        stickerPop.innerHTML = '<div class="center" style="padding:14px">' + UI.spinner() + '</div>';
-        Api.request('GET', '/api/stickers', null, function (err, data) {
-          if (err) {
-            stickerPop.innerHTML = '<div class="tiny muted" style="padding:10px">' + UI.esc(Api.errorText(err)) + '</div>';
-            return;
-          }
-          stickersLoaded = true;
-          renderStickers((data && data.packs) || []);
-        });
+    function loadStickers() {
+      if (!stickerPage) return;
+      stickerPage.innerHTML = '<div class="center" style="padding:14px">' + UI.spinner() + '</div>';
+      Api.request('GET', '/api/stickers', null, function (err, data) {
+        if (err) {
+          stickerPage.innerHTML = '<div class="tiny muted" style="padding:10px">' + UI.esc(Api.errorText(err)) + '</div>';
+          return;
+        }
+        stickersLoaded = true;
+        renderStickers((data && data.packs) || []);
       });
     }
 
@@ -2884,18 +2981,31 @@
       for (var i = 0; i < themes.length; i++) {
         themeHtml += '<button type="button" class="theme-dot ' + themes[i] + (UI.getTheme() === themes[i] ? ' active' : '') + '" data-theme-pick="' + themes[i] + '"><span class="sw"></span>' + T('theme.' + themes[i]) + '</button>';
       }
-      // templates: the skin changes palette and shape, never the markup
-      var skins = UI.skinList();
+      // templates: the skin changes palette and shape, never the markup.
+      // Rendered as a grouped, scrollable list - fifteen tiles is a wall.
       var skinLocked = !!(state.site && state.site.skinLocked);
       var canPickSkin = !skinLocked || (state.user && (state.user.role === 'admin' || state.user.role === 'moderator'));
-      var skinHtml = '';
-      for (var si = 0; si < skins.length; si++) {
-        var sid = skins[si];
-        skinHtml += '<button type="button" class="skin-dot' + (UI.getSkin() === sid ? ' active' : '') +
-          (canPickSkin ? '' : ' disabled') +
-          '" data-skin-pick="' + sid + '" title="' + UI.attr(T('skin.' + sid)) + '">' +
-          '<span class="sw"></span><span class="lbl">' + UI.esc(T('skin.' + sid)) + '</span></button>';
+      var currentSkin = UI.getSkin();
+      var skinHtml = '<div class="skin-list" id="skin-list" role="listbox" aria-label="' + UI.attr(T('settings.skin')) + '">';
+      var groups = UI.skinGroups();
+      for (var gi = 0; gi < groups.length; gi++) {
+        var g = groups[gi];
+        skinHtml += '<div class="skin-group-h">' + UI.esc(T('skinGroup.' + g.key)) + '</div>';
+        for (var si = 0; si < g.skins.length; si++) {
+          var sid = g.skins[si];
+          var on = currentSkin === sid;
+          skinHtml += '<button type="button" class="skin-row' + (on ? ' active' : '') + '"' +
+            (canPickSkin ? '' : ' disabled') +
+            ' role="option" aria-selected="' + (on ? 'true' : 'false') + '"' +
+            ' data-skin="' + sid + '" data-skin-pick="' + sid + '">' +
+            '<span class="sw"></span>' +
+            '<span class="txt"><span class="nm">' + UI.esc(T('skin.' + sid)) + '</span>' +
+            '<span class="ds">' + UI.esc(T('skinDesc.' + sid)) + '</span></span>' +
+            '<i class="fa-solid fa-check tick"></i>' +
+            '</button>';
+        }
       }
+      skinHtml += '</div>';
       // the atmosphere layer: one choice, independent of the template
       var effects = UI.effectList();
       var fxHtml = '';
@@ -2975,7 +3085,7 @@
       html += '<div class="settings-block"><h3>' + T('settings.appearance') + '</h3>' +
         '<div class="field"><label>' + T('settings.theme') + '</label><div class="theme-picker">' + themeHtml + '</div></div>' +
         '<div class="field"><label>' + T('settings.skin') + '</label>' +
-        '<div class="skin-grid">' + skinHtml + '</div>' +
+        skinHtml +
         '<div class="hint">' + T(skinLocked && !canPickSkin ? 'settings.skinLocked' : 'settings.skinHint') + '</div></div>' +
         '<div class="field"><label>' + T('settings.effect') + '</label>' +
         '<select class="select" id="s-effect"' + (state.site && state.site.effectsEnabled === false ? ' disabled' : '') + '>' + fxHtml + '</select>' +
@@ -3093,8 +3203,12 @@
           if (fxSel) fxSel.value = UI.getEffect();
           SoundFX.play('theme');
           App.saveSetting({ skin: id });
-          for (var z2 = 0; z2 < sds.length; z2++) sds[z2].className = 'skin-dot';
-          this.className = 'skin-dot active';
+          for (var z2 = 0; z2 < sds.length; z2++) {
+            sds[z2].className = 'skin-row';
+            sds[z2].setAttribute('aria-selected', 'false');
+          }
+          this.className = 'skin-row active';
+          this.setAttribute('aria-selected', 'true');
         });
       }
 

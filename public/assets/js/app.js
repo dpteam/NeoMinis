@@ -1183,6 +1183,24 @@ var App = (function () {
       });
     }
     if (photo && file) photo.addEventListener('click', function () { file.click(); });
+
+    // Paste a picture into the composer. Text still pastes normally; only an
+    // image in the clipboard is taken, so nothing about typing changes.
+    if (text) text.addEventListener('paste', function (e) {
+      var pasted = UI.pastedImage(e);
+      if (!pasted) return;
+      e.preventDefault();
+      var limit = (state.site.maxPostImageKB || 4096) * 1024;
+      if (pasted.size > limit) { UI.toast(T('feed.imageTooBig', state.site.maxPostImageKB || 4096), 'err'); return; }
+      UI.fileToDataUrl(pasted, limit, function (err, dataUrl) {
+        if (err) { UI.toast(T('errors.generic'), 'err'); return; }
+        imageData = dataUrl;
+        if (preview) {
+          preview.innerHTML = '<img src="' + UI.attr(dataUrl) + '" alt="">';
+          preview.className = 'composer-preview';
+        }
+      });
+    });
     if (videoBtn && videoRow) videoBtn.addEventListener('click', function () {
       var open = !/(^|\s)hidden(\s|$)/.test(videoRow.className);
       videoRow.className = open ? 'composer-video-row hidden' : 'composer-video-row';

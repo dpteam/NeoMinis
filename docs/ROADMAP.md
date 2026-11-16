@@ -162,12 +162,14 @@ fifteen skins — Branded, Aero, Metro, Paper, Terminal, Soft, Brutal, Neon, War
 Slate, Matrix, Cyberpunk, New Year, Autumn and Horror — applied by `data-skin` on
 `<html>`. `public/assets/css/effects.css` adds twelve atmosphere layers on `data-fx`
 (grain, scanlines, VHS, matrix rain, glitch, snow, leaves, aurora, glow, sheen, print
-offset), each skin with its own default. A skin overrides tokens plus a little form,
-never markup, so the layout, the features and the behaviour are identical in all
-fifteen. The choice is per account (`user.skin`, `user.effect`), remembered per
-browser, defaulted by the admin (`ui.skin`), lockable so only staff may change it
-(`ui.skinLocked`), and schedulable by date for holidays (`ui.skinSchedule`) with no
-client release. The server validates every id because it lands in a DOM attribute.
+offset), each skin with its own default, and each skin also has its **own synth voice**
+in `sound.js`, so a theme changes what the interface sounds like as well as what it
+looks like. A skin overrides tokens plus a little form, never markup, so the layout,
+the features and the behaviour are identical in all fifteen. The choice is per account
+(`user.skin`, `user.effect`), remembered per browser, defaulted by the admin
+(`ui.skin`), lockable so only staff may change it (`ui.skinLocked`), and schedulable by
+date for holidays (`ui.skinSchedule`) with no client release. The server validates
+every id because it lands in a DOM attribute.
 
 `GET /api/theme` is the public surface for all of it: unauthenticated, plain JSON,
 just template ids and the active schedule, so a launcher, a kiosk or a script can

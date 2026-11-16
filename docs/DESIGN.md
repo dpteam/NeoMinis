@@ -687,8 +687,10 @@ Rules a new skin must follow:
    `ui.js`, and `SKIN_FX` in `ui.js` (its default effect). The server refuses an
    unknown id (it lands in a DOM attribute), so a skin missing from the C# list
    simply cannot be selected.
-6. **Add a `.skin-dot` swatch** at the bottom of `skins.css`, or the picker shows an
-   empty tile.
+6. **Add a `.skin-row[data-skin="name"]` swatch** at the bottom of `skins.css`, or the
+   picker shows an empty tile.
+7. **Add it to a group** in `SKIN_GROUPS` (`ui.js`), and optionally a `VOICES` entry in
+   `sound.js` for its own synth character.
 
 Precedence, highest first: the browser's own choice (`localStorage['social.skin']`) →
 the account's choice (`user.skin`, so it follows the user to another device) → the
@@ -757,7 +759,31 @@ Hard rules, because these run on old hardware:
 Neither touches a component, a view or an endpoint — which is the property that makes
 future visual work cheap.
 
-### 12.3 Holiday themes without a release
+### 12.5 Sound follows the template
+
+Every template has its own **synth voice** (`VOICES` in `sound.js`), applied on top
+of the event presets: `transpose` (semitones), `filter` (a multiplier on the low-pass
+cutoff), `type` (waveform override), `decay` (note length), `gain`, `detune` (cents on
+the second oscillator) and `wobble` (slow pitch drift). So Paper is a dull, low,
+sustained triangle; Cyberpunk is a bright, sharp sawtooth a fourth up; Horror is an
+octave down with 26 cents of detune and a tape wobble; Matrix is short and square.
+Still no audio files — it is the same synth with different parameters.
+
+`UI.applySkin` calls `SoundFX.setSkin`, so the sound changes with the look. Volume,
+the master switch and the per-event toggles are untouched and stay the user's.
+
+Adding a template therefore means adding a `VOICES` entry as well, or it falls back
+to the `branded` voice — which is a safe default, not a break.
+
+### 12.6 The template picker
+
+Settings shows the templates as a **grouped, scrollable list**, not a wall of tiles:
+a swatch, the name, a one-line description and a tick on the active one. The groups
+are Classic / Modern / Dark / Seasonal, defined in `SKIN_GROUPS` in `ui.js`, with
+sticky headers so fifteen entries stay scannable while scrolling. Each row is a real
+`<button role="option">` inside a `role="listbox"`, so it is reachable by keyboard.
+
+### 12.7 Holiday themes without a release
 
 `ui.skinSchedule` takes `skin:MM-DD:MM-DD` entries, comma separated, and a range may
 cross the new year:
@@ -785,7 +811,7 @@ widget, a kiosk or a deployment script can ask what the instance looks like toda
 `active` is empty unless a holiday range is actually in force, which makes it the
 field to check. The endpoint leaks nothing but template ids — no users, no counts.
 
-### 12.4 Locking the look
+### 12.8 Locking the look
 
 `ui.skinLocked=true` makes the template **staff-only**: a regular account gets `403
 skin-locked` from `POST /api/settings`, and the picker in Settings renders disabled
