@@ -3177,7 +3177,7 @@
       // ---- assembly: a tab strip, then one panel at a time
       var tabs = [
         { id: 'profile', icon: 'id-card', label: T('settings.tabProfile'), body: pProfile },
-        { id: 'look', icon: 'palette', label: T('settings.tabLook'), body: pLook },
+        { id: 'look', icon: 'palette', label: T('settings.tabLook'), body: pLook, stack: true },
         { id: 'notify', icon: 'bell', label: T('settings.tabNotify'), body: pNotify },
         { id: 'privacy', icon: 'lock', label: T('settings.tabPrivacy'), body: pPrivacy },
         { id: 'account', icon: 'user-gear', label: T('settings.tabAccount'), body: pAccount }
@@ -3201,7 +3201,7 @@
       for (var tp = 0; tp < tabs.length; tp++) {
         html += '<div class="settings-panel' + (tabs[tp].id === activeTab ? '' : ' hidden') +
           '" data-settings-panel="' + tabs[tp].id + '" role="tabpanel">' +
-          '<div class="settings-grid">' + tabs[tp].body + '</div></div>';
+          '<div class="settings-grid' + (tabs[tp].stack ? ' stack' : '') + '">' + tabs[tp].body + '</div></div>';
       }
 
       html += '</div></div>';
