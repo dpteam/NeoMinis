@@ -10,8 +10,9 @@ section first; the tables after it are only useful once the intent is clear.
 
 | | |
 | --- | --- |
-| **Files** | `public/assets/css/app.css` (~2.1k lines), `public/assets/js/ui.js` (render helpers), `Core/Branding.cs` (generated palette) |
+| **Files** | `public/assets/css/app.css` (~2.1k lines), `public/assets/css/skins.css` (the template layer), `public/assets/js/ui.js` (render helpers), `Core/Branding.cs` (generated palette) |
 | **Themes** | `light` (default), `dark`, `oled` — all three are first-class |
+| **Templates** | 10 skins on `data-skin`: `default`, `aero`, `metro`, `paper`, `terminal`, `soft`, `brutal`, `neon`, `warm`, `slate` (see §12.1) |
 | **Icons** | Font Awesome 6.5.2 from a CDN, `<i class="fa-solid fa-name">` |
 | **Fonts** | system stack only — no webfont, no network dependency, no FOUT |
 | **Target** | Windows XP SP3 and up, so: ES5, no CSS grid subgrid, no `:has()`, no container queries |
@@ -636,12 +637,60 @@ Known gaps (see §14):
 
 - Theme is `data-theme` on `<html>`, set before paint from `localStorage`, falling
   back to `site.defaultTheme`. No flash of the wrong theme.
+- **Template (skin)** is `data-skin` on the same element, and it is the layer that
+  changes *personality*: palette plus shape language. See §12.1.
 - `UI.applyTheme`, `UI.cycleTheme`, `UI.getTheme` in `ui.js`; the picker is a set of
   `.theme-dot` swatches in Settings.
 - `--top-h` is the single source for the sticky offset; the shell and both columns
   derive from it. Change the bar height in one place.
 - `?v=` on every asset in `index.html` is a **manual cache-buster**. Bump the JS
   version and the CSS version on every asset change or browsers serve the old file.
+
+### 12.1 Templates (`skins.css`)
+
+Ten templates ship in `public/assets/css/skins.css`, loaded **after** `brand.css` so a
+skin wins by cascade order. A skin overrides custom properties, plus a small number
+of rules where the *form* differs (metro has no radii, brutal has hard offsets, paper
+uses serif headings). **No markup changes between skins** — that is what makes this a
+template layer rather than ten forks.
+
+| id | Name | Shape | Palette | Designed for |
+| --- | --- | --- | --- | --- |
+| `default` | Stock | stock | stock + `[branding]` | The 2008 chrome, unchanged |
+| `aero` | Aero | 12px, glossy inset | blue glass | Vista-era gloss, tamed |
+| `metro` | Metro | 0px, no shadows | flat blue on white | 2012 tiles, solid header blocks |
+| `paper` | Paper | 2px, no shadows | cream + oxblood, serif | print, the reading skin |
+| `terminal` | Terminal | 0px, mono | amber-green on black | a console, dense by design |
+| `soft` | Soft | 16px, borderless | indigo on near-white | 2026 restraint |
+| `brutal` | Brutal | 0px, 2px borders, hard offset shadows | orange on bone | deliberate non-polish |
+| `neon` | Neon | 6px, 1px glow rings | violet/cyan on black | night mode as a skin |
+| `warm` | Warm | 10px | terracotta + cream, serif | mid-century warmth |
+| `slate` | Slate | 6px, hairlines | teal on cool grey | the professional tool |
+
+Rules a new skin must follow:
+
+1. **Tokens only, plus form overrides.** No new layout, no new markup.
+2. **Both themes must be usable.** Every skin needs a `[data-theme="dark"]` block
+   except the inherently dark ones (`terminal`, `neon`), which still need their
+   light-theme tokens to not be broken if someone switches.
+3. **No animation, no glass, no gradient on a content surface.** The §13 list applies
+   to every skin.
+4. **System fonts only**, and no font that is not on Windows XP.
+5. **The id must be added to both lists**: `Config.Skins` in C# and `SKINS` in
+   `ui.js`. The server refuses an unknown id (it lands in a DOM attribute), so a skin
+   missing from the C# list simply cannot be selected.
+
+Precedence, highest first: the browser's own choice (`localStorage['social.skin']`) →
+the account's choice (`user.skin`, so it follows the user to another device) → the
+site default (`ui.skin` in `config.ini`, with an admin dropdown).
+
+`[branding]` defines an accent for the **stock** template only. A skin brings its own
+accent; layering a brand accent over `neon` would fight it. If a deployment wants a
+branded skin, the honest path is a new skin with those colours, not a global override.
+
+The picker in Settings is a grid of `.skin-dot` swatches — bar gradient, page fill and
+an accent chip — which is enough to tell ten skins apart at 64×40. It degrades to 3-up
+at 820px and 2-up at 560px.
 
 ---
 

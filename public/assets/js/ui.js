@@ -300,6 +300,32 @@ var UI = (function () {
     return next;
   }
 
+  // ------------------------------------------------------------------- skin
+  // A skin is a template: it changes the palette and the shape language, never
+  // the markup. The id goes on <html data-skin="...">, and skins.css does the
+  // rest. "default" is the stock 2008 chrome and defines nothing itself.
+
+  var SKINS = ['default', 'aero', 'metro', 'paper', 'terminal',
+    'soft', 'brutal', 'neon', 'warm', 'slate'];
+
+  function getSkin() {
+    try {
+      var s = localStorage.getItem('social.skin');
+      if (s && SKINS.indexOf(s) >= 0) return s;
+    } catch (e) { }
+    var fallback = (window.Api && Api.site && Api.site.skin) || 'default';
+    return SKINS.indexOf(fallback) >= 0 ? fallback : 'default';
+  }
+
+  function applySkin(name) {
+    if (SKINS.indexOf(name) < 0) name = 'default';
+    document.documentElement.setAttribute('data-skin', name);
+    try { localStorage.setItem('social.skin', name); } catch (e) { }
+    return name;
+  }
+
+  function skinList() { return SKINS.slice(); }
+
   // ------------------------------------------------------------------ misc
 
   function copy(text) {
@@ -383,6 +409,7 @@ var UI = (function () {
     avatar: avatar, icon: icon, userLink: userLink, roleBadge: roleBadge, vipBadge: vipBadge, presence: presence,
     spinner: spinner, empty: empty, toast: toast, modal: modal, confirm: confirmBox,
     imageModal: imageModal, getTheme: getTheme, applyTheme: applyTheme, cycleTheme: cycleTheme,
+    getSkin: getSkin, applySkin: applySkin, skinList: skinList,
     mediaBlocked: mediaBlocked, mediaBlockedText: mediaBlockedText, mediaReady: mediaReady,
     themes: THEMES, copy: copy, fileToDataUrl: fileToDataUrl, debounce: debounce,
     throttle: throttle, scrollTop: scrollTop, bytes: bytes, query: query, on: on, pad: pad

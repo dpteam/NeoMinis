@@ -198,6 +198,10 @@ namespace Social.Web
             b.Prop("adminPort", _cfg.AdminEnabled ? _cfg.AdminPort : 0);
             b.Prop("defaultLanguage", _cfg.DefaultLanguage);
             b.Prop("defaultTheme", _cfg.DefaultTheme);
+            b.Prop("skin", _cfg.Skin);
+            b.Name("skins").BeginArray();
+            for (int i = 0; i < Config.Skins.Length; i++) b.Str(Config.Skins[i]);
+            b.EndArray();
             b.Prop("defaultSound", _cfg.DefaultSound);
             b.Prop("motd", _cfg.Motd);
             b.Prop("footer", _cfg.Footer);

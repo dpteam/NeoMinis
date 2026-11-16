@@ -122,6 +122,7 @@ namespace Social.Web
                 .Prop("gamesReady", RufflePresent())
                 .Prop("storiesEnabled", _cfg.StoriesEnabled)
                 .Prop("stickersEnabled", _cfg.StickersEnabled)
+                .Prop("skin", _cfg.Skin)
                 .EndObject();
 
             b.Name("logging").BeginObject()
@@ -485,6 +486,11 @@ namespace Social.Web
                 {
                     _cfg.StickersEnabled = Json.GetBool(ui, "stickersEnabled", _cfg.StickersEnabled);
                     _cfg.SetIniValue("ui", "stickersEnabled", _cfg.StickersEnabled ? "true" : "false");
+                }
+                if (ui.ContainsKey("skin"))
+                {
+                    _cfg.Skin = Config.NormalizeSkin(Json.GetString(ui, "skin", _cfg.Skin));
+                    _cfg.SetIniValue("ui", "skin", _cfg.Skin);
                 }
             }
 

@@ -109,6 +109,13 @@ namespace Social.Web
                 if (!ok) throw new ApiException(400, "bad-theme", "Unknown theme");
                 ctx.User.Theme = theme;
             }
+            if (ctx.Body.ContainsKey("skin"))
+            {
+                string skin = BodyStr(ctx, "skin", "").Trim().ToLowerInvariant();
+                if (Config.NormalizeSkin(skin) != skin && skin != "")
+                    throw new ApiException(400, "bad-skin", "Unknown template");
+                ctx.User.Skin = skin;
+            }
             if (ctx.Body.ContainsKey("lang"))
             {
                 string lang = BodyStr(ctx, "lang", "").Trim().ToLowerInvariant();

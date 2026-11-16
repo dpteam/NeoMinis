@@ -329,6 +329,14 @@ earned (useful after an import or a rule change).
 | POST | `/api/messages/pin` | `id`, `on` | `{ pinned }` |
 | GET | `/api/stickers` | — | `{ enabled, packs[{ id, name, stickers[{ id, url }] }] }` |
 
+**Templates (skins).** `site.skins` in the handshake lists the ten template ids and
+`site.skin` is the site default; `POST /api/settings` with `{ "skin": "paper" }`
+stores a choice on the account (`user.skin`), and `{ "skin": "default" }` resets it.
+An id is written into a DOM attribute, so the server validates it against
+`Config.Skins` and answers `400 bad-skin` for anything it does not know — a value
+like `"><script>` can never reach the page. The list must stay in sync with `SKINS`
+in `public/assets/js/ui.js`; the C# side is the gate.
+
 **Stickers** are files that ship with the site, not uploads. A message carries only
 an id (`faces/smile`), so it costs a few bytes and writes nothing to `data/media`.
 The server normalises the id against its own catalogue and refuses anything it does

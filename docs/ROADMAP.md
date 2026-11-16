@@ -157,14 +157,22 @@ poll) but they are the minimum.
 
 ### Visual pass: retro 2008 × modern
 
-The design is documented in [DESIGN.md](DESIGN.md) and the plan is in
-[DESIGN-RESEARCH.md](DESIGN-RESEARCH.md). The short version: keep the 2008 chrome
-(three columns, blue bar, 1px borders, density, tab underline), add modern craft
-(a spacing scale, one motion scale, skeletons, a mobile bottom bar and sheets,
-shared-element image opens), and refuse the things that make an interface look
-generated (glass, gradient text, 3D tilt, scroll animation on the feed).
+**Shipped:** the template layer. `public/assets/css/skins.css` carries ten skins —
+Stock, Aero, Metro, Paper, Terminal, Soft, Brutal, Neon, Warm and Slate — applied by
+`data-skin` on `<html>`. A skin overrides tokens plus a little form, never markup, so
+the layout, the features and the behaviour are identical in all ten. The choice is
+per account (`user.skin`), remembered per browser, and defaulted by the admin
+(`ui.skin`); the server validates every id because it lands in a DOM attribute.
+This is the foundation the rest of the visual work stands on: new palettes can be
+tried without touching a single component.
 
-Shipped in phases so each one can be reviewed on its own:
+What is left of the plan is in [DESIGN-RESEARCH.md](DESIGN-RESEARCH.md). The short
+version: keep the 2008 chrome (three columns, blue bar, 1px borders, density, tab
+underline), add modern craft (a spacing scale, one motion scale, skeletons, a mobile
+bottom bar and sheets, shared-element image opens), and refuse the things that make an
+interface look generated (glass, gradient text, 3D tilt, scroll animation on the feed).
+
+Next phases, each shippable and reviewable on its own:
 
 1. Tokens — spacing, type, motion, `:focus-visible`, `aria-live` toasts. No visual change intended.
 2. Motion primitives — enter/exit/stagger helper, sliding tab indicator, number ticker, origin-aware popovers.

@@ -25,6 +25,8 @@ namespace Social.Core
         public string Website = "";
         public string Avatar = "";
         public string Theme = "";
+        // template chosen by this account; empty means "whatever the site default is"
+        public string Skin = "";
         public string Lang = "";
         public bool Sound = true;
         public string Privacy = "public";

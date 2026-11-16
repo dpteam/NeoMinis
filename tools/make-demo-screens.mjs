@@ -239,22 +239,25 @@ function shell(opts) {
 
   return doc(opts.theme || 'dark', `<div id="app">${top}<div class="shell">${left}
     <main class="col-main">${opts.main}</main>
-    ${right}</div></div>`);
+    ${right}</div></div>`, opts.skin);
 }
 
 function onlineUser(u) {
   return `<a class="online-user" href="#">${avatar(u, 24)}<span class="name">${esc(u.name)}</span><span class="presence"></span></a>`;
 }
 
-function doc(theme, body) {
+function doc(theme, body, skin) {
   return `<!DOCTYPE html>
-<html lang="en" data-theme="${theme}">
+<html lang="en" data-theme="${theme}" data-skin="${skin || 'default'}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NeoMinis</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="app.css">
+<!-- root-absolute on purpose: a page under /skins/ would otherwise resolve
+     these against /skins/ and load nothing, which looks like a broken skin -->
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/skins.css">
 <style>body{margin:0}#app{min-height:100vh}</style>
 </head>
 <body>${body}</body></html>`;
@@ -560,19 +563,51 @@ const pages = {
   'screenshot-login.png': loginPage()
 };
 
+// ------------------------------------------------------------- skin gallery
+// One feed page per template. `default` is dark like the README hero; the rest
+// are rendered in whichever theme they were designed for, so each one shows its
+// own palette instead of fighting the theme it was dropped into.
+const SKIN_THEMES = {
+  default: 'dark', aero: 'light', metro: 'light', paper: 'light', terminal: 'dark',
+  soft: 'light', brutal: 'light', neon: 'dark', warm: 'light', slate: 'light'
+};
+const SKIN_LABELS = {
+  default: 'Stock', aero: 'Aero', metro: 'Metro', paper: 'Paper', terminal: 'Terminal',
+  soft: 'Soft', brutal: 'Brutal', neon: 'Neon', warm: 'Warm', slate: 'Slate'
+};
+
+for (const [id, theme] of Object.entries(SKIN_THEMES)) {
+  pages[`skins/${id}.png`] = shell({
+    theme, skin: id, tab: 'feed', side: 'feed', main: feedMain
+  });
+}
+
 fs.mkdirSync(WORK, { recursive: true });
 fs.mkdirSync(OUT, { recursive: true });
 for (const [name, html] of Object.entries(pages)) {
-  fs.writeFileSync(path.join(WORK, name.replace(/\.png$/, '.html')), html, 'utf8');
+  const target = path.join(WORK, name.replace(/\.png$/, '.html'));
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, html, 'utf8');
 }
 console.log('pages written to', WORK);
 
-// a tiny static server: /app.css from the repo, everything else from WORK
+// a tiny static server: /app.css and /skins.css from the repo, the rest from WORK
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
-  if (url === '/app.css') {
+  if (url === '/app.css' || url === '/skins.css') {
     res.writeHead(200, { 'content-type': 'text/css; charset=utf-8' });
-    res.end(fs.readFileSync(path.join(ROOT, 'public', 'assets', 'css', 'app.css')));
+    res.end(fs.readFileSync(path.join(ROOT, 'public', 'assets', 'css', url.slice(1))));
+    return;
+  }
+  // a stylesheet request that falls through here means a 404 and an unstyled page,
+  // which is easy to mistake for a broken skin: fail loudly instead
+  if (/\.css$/.test(url)) { res.writeHead(404); res.end('missing stylesheet ' + url); return; }
+  // the contact sheet lives in WORK but shows PNGs that were already written to docs
+  if (url.indexOf('/shot/') === 0) {
+    const png = path.join(OUT, url.slice('/shot/'.length));
+    if (!png.startsWith(OUT) || !fs.existsSync(png)) { res.writeHead(404); res.end('no shot'); return; }
+    res.writeHead(200, { 'content-type': 'image/png' });
+    res.end(fs.readFileSync(png));
     return;
   }
   const file = path.join(WORK, url === '/' ? 'screenshot-feed.html' : url.replace(/^\//, ''));
@@ -634,9 +669,34 @@ for (const [name, html] of Object.entries(pages)) {
   // fonts and icons come from a CDN, so give them a moment
   await sleep(1800);
   const shot = await send('Page.captureScreenshot', { format: 'png' });
-  fs.writeFileSync(path.join(OUT, name), Buffer.from(shot.data, 'base64'));
-  console.log(name, Math.round(fs.statSync(path.join(OUT, name)).size / 1024) + ' KB');
+  const target = path.join(OUT, name);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, Buffer.from(shot.data, 'base64'));
+  console.log(name, Math.round(fs.statSync(target).size / 1024) + ' KB');
 }
+
+// ---- one contact sheet so all ten can be compared in a single look ----
+const sheet = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+  body { margin: 0; background: #0b0f16; font: 13px "Segoe UI", Tahoma, sans-serif; padding: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .cell { background: #141a24; border: 1px solid #26313f; border-radius: 10px; overflow: hidden; }
+  .cell img { width: 100%; display: block; }
+  .cell b { display: block; padding: 7px 9px; color: #dfe8f4; font-size: 12.5px; letter-spacing: .2px; }
+  .cell span { display: block; padding: 0 9px 8px; color: #7f8fa4; font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; }
+</style></head><body><div class="grid">
+${Object.keys(SKIN_THEMES).map(id => `<div class="cell">
+  <img src="/shot/skins/${id}.png" alt="">
+  <b>${SKIN_LABELS[id]}</b><span>${id}</span></div>`).join('')}
+</div></body></html>`;
+fs.writeFileSync(path.join(WORK, 'contact.html'), sheet, 'utf8');
+
+await send('Emulation.setDeviceMetricsOverride',
+  { width: 1900, height: 1180, deviceScaleFactor: 1, mobile: false });
+await send('Page.navigate', { url: `http://127.0.0.1:${port}/contact.html` });
+await sleep(2200);
+const contact = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+fs.writeFileSync(path.join(OUT, 'skins', 'contact.png'), Buffer.from(contact.data, 'base64'));
+console.log('skins/contact.png', Math.round(fs.statSync(path.join(OUT, 'skins', 'contact.png')).size / 1024) + ' KB');
 
 try { ws.close(); } catch (e) { }
 try { proc.kill(); } catch (e) { }

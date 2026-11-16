@@ -402,6 +402,32 @@ async function main() {
   ok('feedback is not readable anonymously', feedbackGet.status === 401 || feedbackGet.status === 405,
     String(feedbackGet.status));
 
+  // ---- templates (skins): a palette + shape layer, validated by the server
+  const siteSkins = await alice.call('GET', '/api/settings');
+  ok('the template list is served', siteSkins.status === 200 &&
+    Array.isArray(siteSkins.data.site.skins) && siteSkins.data.site.skins.length >= 10 &&
+    siteSkins.data.site.skins.indexOf('default') >= 0 &&
+    siteSkins.data.site.skins.indexOf('neon') >= 0,
+    JSON.stringify(siteSkins.data && siteSkins.data.site && siteSkins.data.site.skins));
+  ok('the site has a default template', siteSkins.data.site.skin === 'default',
+    JSON.stringify(siteSkins.data.site.skin));
+  const skinSet = await alice.call('POST', '/api/settings', { skin: 'paper' });
+  ok('a template can be chosen per account',
+    skinSet.status === 200 && skinSet.data.user.skin === 'paper',
+    JSON.stringify(skinSet.data && skinSet.data.user && skinSet.data.user.skin));
+  const skinBack = await alice.call('GET', '/api/settings');
+  ok('the template is remembered on the account', skinBack.data.user.skin === 'paper',
+    JSON.stringify(skinBack.data.user.skin));
+  const skinBad = await alice.call('POST', '/api/settings', { skin: 'not-a-template' });
+  ok('an unknown template is refused', skinBad.status === 400, String(skinBad.status));
+  // an id is used as a DOM attribute, so it must never carry anything but a known name
+  const skinInject = await alice.call('POST', '/api/settings', { skin: '"><script>alert(1)</script>' });
+  ok('a template id cannot carry markup', skinInject.status === 400, String(skinInject.status));
+  const skinReset = await alice.call('POST', '/api/settings', { skin: 'default' });
+  ok('a template can be reset to stock',
+    skinReset.status === 200 && skinReset.data.user.skin === 'default',
+    JSON.stringify(skinReset.data && skinReset.data.user && skinReset.data.user.skin));
+
   // ---- live notifications and per-type mutes
   const baseNotif = await alice.call('GET', '/api/notifications?limit=1');
   const lastId = baseNotif.data.notifications.length ? baseNotif.data.notifications[0].id : 0;

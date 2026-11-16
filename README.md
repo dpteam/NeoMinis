@@ -95,6 +95,18 @@ fallback lists), and the admin board can be switched off entirely with
 All screenshots are rendered from standalone demo pages that use the real
 `app.css` with invented people and posts — no real instance data is shown.
 
+**Ten templates ship with the interface.** Same markup, same features, ten
+personalities — pick one in Settings:
+
+<img src="docs/img/skins/contact.png" alt="Ten interface templates side by side">
+
+| | | |
+| --- | --- | --- |
+| **Stock** — the 2008 chrome, unchanged | **Aero** — Vista gloss, tamed | **Metro** — 2012 flat tiles |
+| **Paper** — cream and oxblood, serif | **Terminal** — a console, monospace | **Soft** — 2026 restraint |
+| **Brutal** — thick rules, hard offsets | **Neon** — violet on black | **Warm** — terracotta and cream |
+| **Slate** — teal on cool grey | | |
+
 <table>
 <tr>
 <td width="50%"><img src="docs/img/screenshot-profile.png" alt="Profile: cover strip, rating, photos"><br><sub><b>Profile</b> — cover strip, completeness rating, achievements, photo grid</sub></td>
@@ -134,6 +146,7 @@ All screenshots are rendered from standalone demo pages that use the real
 | **Admin** | **a separate board on its own port** — dashboard, users (ban / unban / grant or revoke admin & moderator / warn / mute / reset / badges / delete), reports queue, live log tail, broadcast, backup, storage repair, config reload, AI panel, and a Settings tab that writes straight back to `config.ini` |
 | **Moderation** | a permission matrix for moderators (8 flags, empty means "all", for backwards compatibility), warnings, chat mutes, reports, per-IP account caps |
 | **Themes** | `light` / `dark` / `oled`, instant switch, remembered per user, and a generated `brand.css` from `[branding]` |
+| **Templates** | **10 interface skins** — Stock, Aero, Metro, Paper, Terminal, Soft, Brutal, Neon, Warm, Slate. A skin is a palette plus a shape language on `data-skin` and changes no markup, so layout and behaviour are identical in all ten. Chosen per account, remembered per browser, defaulted by the admin. See [DESIGN.md §12.1](docs/DESIGN.md) |
 | **Sounds** | WebAudio synth (no audio files): click, post, like, comment, message, notification, friend, login, error, success, theme — with per-event toggles and volume |
 | **i18n** | **English and Russian complete**; Ukrainian and Lithuanian cover the shell and fall back to English for the rest. Auto-detect plus a selector |
 | **Guest mode** | a real read-only session (not an auth bypass) with an endpoint whitelist, optional password, and a kiosk mode with idle timeout |
@@ -275,6 +288,10 @@ The server generates `/brand.css` from this section and the SPA links it after
 stock palette. Hover, link, top-bar and cover colours are all derived by mixing,
 so you only give the handful of base colours.
 
+`[branding]` applies to the **Stock** template. A skin brings its own accent, so
+layering a brand accent over `neon` would fight it — if you want a branded skin, copy
+one in `public/assets/css/skins.css` and change its colours.
+
 ### Adding a language
 
 A language is one object in `public/assets/js/i18n.js`, plus one entry in the
@@ -399,7 +416,7 @@ tools\firewall.cmd -Remove      :: delete the "Social Server" rules
 | | |
 | --- | --- |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the process, storage and HTTP stack fit together |
-| [docs/DESIGN.md](docs/DESIGN.md) | The visual system: every token, component, animation and breakpoint, plus what not to do |
+| [docs/DESIGN.md](docs/DESIGN.md) | The visual system: every token, component, animation and breakpoint, plus the ten templates and what not to do |
 | [docs/DESIGN-RESEARCH.md](docs/DESIGN-RESEARCH.md) | What to borrow from the current motion references, what to refuse, and the plan for the next visual pass |
 | [docs/API.md](docs/API.md) | Every endpoint, the envelope, errors, long polls |
 | [docs/CLI.md](docs/CLI.md) | The operator console and `--cmd` |

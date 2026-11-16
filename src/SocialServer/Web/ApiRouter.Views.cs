@@ -112,6 +112,7 @@ namespace Social.Web
                 b.Prop("karma", u.Karma);
                 b.Prop("likes", _store.CountLikesGiven(u.Id));
                 b.Prop("theme", u.Theme);
+                if (!string.IsNullOrEmpty(u.Skin)) b.Prop("skin", u.Skin);
                 b.Prop("lang", u.Lang);
                 b.Prop("sound", u.Sound);
                 b.Prop("hideOnline", u.HideOnline);

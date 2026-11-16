@@ -59,6 +59,7 @@ var App = (function () {
 
   function init() {
     UI.applyTheme(UI.getTheme());
+    UI.applySkin(UI.getSkin());
     I18N.setLang(I18N.detect((Api.site && Api.site.defaultLanguage) || 'ru'));
     bindGlobal();
     var bootText = document.getElementById('boot-text');
@@ -72,6 +73,8 @@ var App = (function () {
         try { savedTheme = localStorage.getItem('social.theme'); savedLang = localStorage.getItem('social.lang'); } catch (e) { }
         if (!savedTheme && Api.site.defaultTheme) UI.applyTheme(Api.site.defaultTheme);
         if (!savedLang && Api.site.defaultLanguage) I18N.setLang(Api.site.defaultLanguage);
+        // the skin falls back to the site default only when this browser has none
+        if (Api.site.skin && !localStorage.getItem('social.skin')) UI.applySkin(Api.site.skin);
       }
       if (authed) {
         state.me = Api.me;
@@ -109,6 +112,13 @@ var App = (function () {
     var u = state.user;
     if (!u) return;
     if (u.theme && UI.themes.indexOf(u.theme) >= 0) UI.applyTheme(u.theme);
+    // the account's template wins over the site default, but a local choice in this
+    // browser wins over the account: someone may be trying one on
+    if (u.skin && UI.skinList().indexOf(u.skin) >= 0) {
+      var local = null;
+      try { local = localStorage.getItem('social.skin'); } catch (e) { }
+      if (!local) UI.applySkin(u.skin);
+    }
     if (u.lang && I18N.langs.indexOf(u.lang) >= 0) I18N.setLang(u.lang);
   }
 

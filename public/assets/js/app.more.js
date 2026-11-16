@@ -2884,6 +2884,15 @@
       for (var i = 0; i < themes.length; i++) {
         themeHtml += '<button type="button" class="theme-dot ' + themes[i] + (UI.getTheme() === themes[i] ? ' active' : '') + '" data-theme-pick="' + themes[i] + '"><span class="sw"></span>' + T('theme.' + themes[i]) + '</button>';
       }
+      // templates: the skin changes palette and shape, never the markup
+      var skins = UI.skinList();
+      var skinHtml = '';
+      for (var si = 0; si < skins.length; si++) {
+        var sid = skins[si];
+        skinHtml += '<button type="button" class="skin-dot' + (UI.getSkin() === sid ? ' active' : '') +
+          '" data-skin-pick="' + sid + '" title="' + UI.attr(T('skin.' + sid)) + '">' +
+          '<span class="sw"></span><span class="lbl">' + UI.esc(T('skin.' + sid)) + '</span></button>';
+      }
       var langHtml = '';
       for (var j = 0; j < langs.length; j++) {
         langHtml += '<option value="' + langs[j] + '"' + (I18N.getLang() === langs[j] ? ' selected' : '') + '>' + T('lang.' + langs[j]) + '</option>';
@@ -2954,6 +2963,9 @@
 
       html += '<div class="settings-block"><h3>' + T('settings.appearance') + '</h3>' +
         '<div class="field"><label>' + T('settings.theme') + '</label><div class="theme-picker">' + themeHtml + '</div></div>' +
+        '<div class="field"><label>' + T('settings.skin') + '</label>' +
+        '<div class="skin-grid">' + skinHtml + '</div>' +
+        '<div class="hint">' + T('settings.skinHint') + '</div></div>' +
         '<div class="field"><label>' + T('settings.language') + '</label><select class="select" id="s-lang">' + langHtml + '</select></div>' +
         '<div class="field"><label>' + T('settings.sound') + '</label><label class="check" style="margin-bottom:6px"><input type="checkbox" id="s-sound"' + (SoundFX.isEnabled() ? ' checked' : '') + '> <span>' + T('settings.soundOn') + '</span></label>' +
         '<input type="range" class="range" id="s-volume" min="0" max="1" step="0.05" value="' + SoundFX.getVolume() + '">' +
@@ -3051,6 +3063,20 @@
           App.saveSetting({ theme: name });
           for (var z = 0; z < tds.length; z++) tds[z].className = 'theme-dot ' + tds[z].getAttribute('data-theme-pick');
           this.className += ' active';
+        });
+      }
+
+      // templates: applied instantly, remembered per browser, and stored on the
+      // account too so the choice follows the user to another device
+      var sds = document.querySelectorAll('[data-skin-pick]');
+      for (var si2 = 0; si2 < sds.length; si2++) {
+        sds[si2].addEventListener('click', function () {
+          var id = this.getAttribute('data-skin-pick');
+          UI.applySkin(id);
+          SoundFX.play('theme');
+          App.saveSetting({ skin: id });
+          for (var z2 = 0; z2 < sds.length; z2++) sds[z2].className = 'skin-dot';
+          this.className = 'skin-dot active';
         });
       }
 
@@ -4062,6 +4088,12 @@
         check('cfg-games', T('admin.gamesEnabled'), ui.gamesEnabled) +
         check('cfg-stories', T('admin.storiesEnabled'), ui.storiesEnabled) +
         check('cfg-stickers', T('admin.stickersEnabled'), ui.stickersEnabled !== false) +
+        select('cfg-skin', T('admin.skin'), (function () {
+          var list = UI.skinList(), opts = [];
+          for (var q = 0; q < list.length; q++) opts.push([list[q], T('skin.' + list[q])]);
+          return opts;
+        })(), ui.skin || 'default') +
+        '<div class="hint" style="margin:-4px 0 8px">' + T('admin.skinHint') + '</div>' +
         (ui.gamesReady === false ? '<div class="alert warn" style="margin:6px 0">' + T('admin.gamesNoRuffle') + '</div>' : '') +
         field('cfg-notifywait', T('admin.notifyWait'), ui.notifyWaitSec, 'number', ' min="1" max="25"') +
         '<div style="margin-top:6px"><button class="btn btn-sm" id="cfg-notify-test">' + UI.icon('bell') + ' ' + T('admin.notifyTest') + '</button></div>' +
@@ -4195,6 +4227,7 @@
             gamesEnabled: document.getElementById('cfg-games').checked,
             storiesEnabled: document.getElementById('cfg-stories').checked,
             stickersEnabled: document.getElementById('cfg-stickers').checked,
+            skin: App.val('cfg-skin'),
             notifyWaitSec: Number(App.val('cfg-notifywait'))
           },
           logging: {

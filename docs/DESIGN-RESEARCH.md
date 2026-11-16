@@ -29,7 +29,7 @@ And the constraint that matters more than any single technique:
 | [designeer.xyz](https://designeer.xyz) | Hand-reviewed catalogue of finds | Signal on what is currently considered *craft* vs. *effect*: embossed paper, dither, pixel work, tactile switches |
 | [recent.design](https://recent.design) | Feed of current design work | Confirming the anti-trend: the interesting work is tactile and restrained, not gradient-and-glass |
 | [ui.gradientdeck.com](https://ui.gradientdeck.com) | 1,295 `DESIGN.md` files from real sites | The **document format** for `DESIGN.md`, and one directly relevant case (Poolsuite) |
-| [getdesign.md](https://getdesign.md) | 550+ `DESIGN.md` analyses | Era-specific references: Dell 1996 and Nintendo 2001 — both are literally our target era |
+| [getdesign.md](https://getdesign.md) | 550+ `DESIGN.md` analyses | Era-specific references: Dell 1996 and Nintendo 2001 — useful as a **vocabulary**, rejected as a template (see §2.1) |
 | [originkit.dev](https://originkit.dev) | Component kit | Did not load (no output). Not used |
 
 Two references did the heavy lifting:
@@ -44,8 +44,34 @@ the same discipline our buttons already half-follow.
 **Dell 1996 / Nintendo 2001** (via getdesign.md) are the era in its original form:
 flat colour-block ribbon cards, chunky Helvetica Black over Times, beveled metal
 plates, halftone-dotted carbon bars. Useful as a **palette of moves**, not as a
-template — a literal reproduction would be a costume, and a costume is the other
-kind of failure.
+template — see §2.1.
+
+### 2.1 Why the literal 1996/2001 look was rejected
+
+The first draft of this plan pointed at Dell 1996 and Nintendo 2001 as the target.
+That was wrong, and the reason is worth writing down so it does not come back:
+
+> They are too far back. 1996 and 2001 are not "retro", they are **archaeology**.
+> A reproduction reads as a costume, and a costume is the other kind of failure —
+> just as bad as looking generated.
+
+What we actually want is a **hybrid**: the density and the chrome vocabulary of
+2006–2008, built with 2026 craft. The era is the *reference for structure*, not a
+skin to copy:
+
+| Take from the era | Leave in the era |
+| --- | --- |
+| Three-column density, small type | Bitmap fonts held at 16px |
+| 1px borders, card header strips | 3–4 stop 3D bevels |
+| Blue gradient bar, tab underline | Table layouts, spacer GIFs |
+| File-folder tabs | Word-art, animated GIF stickers |
+| Flat colour-block accents | Metal plates and chrome textures |
+
+The practical conclusion was **not** to pick one look, but to make the look a
+**template**: `public/assets/css/skins.css` now carries ten skins on `data-skin`,
+Stock among them, so the choice is a setting rather than a rewrite. That is the same
+move a CMS makes, and it is why the rest of this document is about *craft that works
+in any skin* — motion, loading, mobile — instead of about one palette.
 
 ---
 
@@ -212,6 +238,13 @@ Not "we didn't get to it" — deliberately rejected.
 Where the two halves actually meet. These are the details that make it read as *a
 2008 site, done well* rather than *a modern site wearing a costume*:
 
+**Shipped already, in `skins.css`:** the ten templates are exactly this bridge made
+concrete — `aero` is the gloss tamed to one inset highlight, `metro` is flat tiles
+with one solid header block, `paper` is print, `terminal` is density as a console,
+`soft` is 2026 restraint, `brutal` is deliberate non-polish. Same markup in all ten,
+which is the proof that the *structure* is the 2008 part and the *personality* is a
+setting.
+
 1. **One-pixel bevel, not three.** The 2008 button had a 3–4 stop bevel. Ours keeps a
    single `inset 0 1px 0 rgba(255,255,255,.3)` plus a 1px darker border. Same read,
    none of the mush.
@@ -237,6 +270,7 @@ Each phase is independently shippable and independently testable.
 
 | Phase | Scope | Risk | Touches |
 | --- | --- | --- | --- |
+| **0. Templates** ✅ | Ten skins on `data-skin`, per-account choice, admin default, server validation, picker in Settings | done | `skins.css`, `ui.js`, `Config.cs`, `ApiRouter*` |
 | **1. Tokens** | Spacing scale, type scale, motion scale, `:focus-visible`, `aria-live` toasts. **Zero visual change intended** — values are chosen from what is already there | Low | `app.css` root + a handful of rules |
 | **2. Motion primitives** | `UI.motion()` helper (enter/exit/stagger), sliding tab indicator, number ticker, origin-aware popover, icon swap, shake/check | Low | `ui.js`, `app.css` |
 | **3. Mobile shell** | Bottom tab bar, bottom sheet, modals → sheets, pull-to-refresh | Medium — new layout | `app.js`, `app.more.js`, `app.css` |
@@ -303,9 +337,13 @@ Decisions that need the owner, not the implementer:
 
 1. **Split `app.css`?** It is 2.1k lines in one file. Splitting needs `@import`
    (extra requests) or a build step (against the "no tooling" rule). Current lean:
-   keep one file, but group it strictly by the section order in `DESIGN.md`.
+   keep one file, but group it strictly by the section order in `DESIGN.md`. Note
+   that `skins.css` is now a second file and that is deliberate: it is a *layer*, not
+   a fragment, and it has to load after `brand.css`.
 2. **A second accent for "social" moments** (reactions, gifts) or keep rationing to
-   blue + red + gold? Current lean: ration. Gold already covers celebration.
+   blue + red + gold? Current lean: ration. Gold already covers celebration. Note the
+   skins each define their own accent, so this question is now *per skin* rather
+   than global.
 3. **Dither covers everywhere, or only as the fallback** when no image is uploaded?
    Current lean: fallback only — it should be a surprise, not a texture.
 4. **Bottom bar destinations.** Feed / People / Messages / Notifications / More is the

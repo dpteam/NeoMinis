@@ -276,6 +276,8 @@ namespace Social.Core
         public bool StoriesEnabled = true;
         // the built-in sticker packs in the chat picker
         public bool StickersEnabled = true;
+        // template: default | aero | metro | paper | terminal | soft | brutal | neon | warm | slate
+        public string Skin = "default";
 
         public bool Degraded;
         public string DegradedReason = "";
@@ -612,12 +614,14 @@ namespace Social.Core
                     else if (key == "gamesenabled") GamesEnabled = Bool(val, GamesEnabled);
                     else if (key == "storiesenabled") StoriesEnabled = Bool(val, StoriesEnabled);
                     else if (key == "stickersenabled") StickersEnabled = Bool(val, StickersEnabled);
+                    else if (key == "skin") Skin = NormalizeSkin(val);
                     break;
             }
         }
 
         private void Validate()
         {
+            Skin = NormalizeSkin(Skin);
             if (Port < 1 || Port > 65535) { Warnings.Add("server.port out of range, using 8080"); Port = 8080; }
             if (PortFallbacks == null) PortFallbacks = new int[0];
             if (Bind == null || Bind.Length == 0) Bind = "0.0.0.0";
@@ -868,6 +872,25 @@ namespace Social.Core
         }
 
         /// <summary>Accepts #rgb / #rrggbb and returns #rrggbb, or "" when invalid/empty.</summary>
+        /// <summary>
+        /// The template list, kept in one place because the server has to reject an
+        /// unknown skin id: an arbitrary value would land in a DOM attribute and in
+        /// the settings UI. Must stay in sync with SKINS in public/assets/js/ui.js.
+        /// </summary>
+        public static readonly string[] Skins = new string[]
+        {
+            "default", "aero", "metro", "paper", "terminal",
+            "soft", "brutal", "neon", "warm", "slate"
+        };
+
+        public static string NormalizeSkin(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "default";
+            string v = value.Trim().ToLowerInvariant();
+            for (int i = 0; i < Skins.Length; i++) if (Skins[i] == v) return v;
+            return "default";
+        }
+
         public static string NormalizeColor(string value)
         {
             if (value == null) return "";
