@@ -238,12 +238,12 @@ Not "we didn't get to it" — deliberately rejected.
 Where the two halves actually meet. These are the details that make it read as *a
 2008 site, done well* rather than *a modern site wearing a costume*:
 
-**Shipped already, in `skins.css`:** the ten templates are exactly this bridge made
-concrete — `aero` is the gloss tamed to one inset highlight, `metro` is flat tiles
-with one solid header block, `paper` is print, `terminal` is density as a console,
-`soft` is 2026 restraint, `brutal` is deliberate non-polish. Same markup in all ten,
-which is the proof that the *structure* is the 2008 part and the *personality* is a
-setting.
+**Shipped already, in `skins.css`:** the fifteen templates are exactly this bridge
+made concrete — `aero` is the gloss tamed to one inset highlight, `metro` is flat
+tiles with one solid header block, `paper` is print, `terminal` is density as a
+console, `soft` is 2026 restraint, `brutal` is deliberate non-polish, `horror` is
+black and blood with a VHS layer on top. Same markup in all fifteen, which is the
+proof that the *structure* is the 2008 part and the *personality* is a setting.
 
 1. **One-pixel bevel, not three.** The 2008 button had a 3–4 stop bevel. Ours keeps a
    single `inset 0 1px 0 rgba(255,255,255,.3)` plus a 1px darker border. Same read,
@@ -270,7 +270,8 @@ Each phase is independently shippable and independently testable.
 
 | Phase | Scope | Risk | Touches |
 | --- | --- | --- | --- |
-| **0. Templates** ✅ | Ten skins on `data-skin`, per-account choice, admin default, server validation, picker in Settings | done | `skins.css`, `ui.js`, `Config.cs`, `ApiRouter*` |
+| **0. Templates** ✅ | Fifteen skins on `data-skin`, per-account choice, admin default, lock, date schedule, server validation, picker in Settings | done | `skins.css`, `ui.js`, `Config.cs`, `ApiRouter*` |
+| **0b. Effects** ✅ | Twelve atmosphere layers on `data-fx`, one per template by default, user-overridable, `prefers-reduced-motion` off-switch, pure CSS | done | `effects.css`, `ui.js`, `Config.cs` |
 | **1. Tokens** | Spacing scale, type scale, motion scale, `:focus-visible`, `aria-live` toasts. **Zero visual change intended** — values are chosen from what is already there | Low | `app.css` root + a handful of rules |
 | **2. Motion primitives** | `UI.motion()` helper (enter/exit/stagger), sliding tab indicator, number ticker, origin-aware popover, icon swap, shake/check | Low | `ui.js`, `app.css` |
 | **3. Mobile shell** | Bottom tab bar, bottom sheet, modals → sheets, pull-to-refresh | Medium — new layout | `app.js`, `app.more.js`, `app.css` |

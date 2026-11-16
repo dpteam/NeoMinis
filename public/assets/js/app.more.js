@@ -2886,12 +2886,23 @@
       }
       // templates: the skin changes palette and shape, never the markup
       var skins = UI.skinList();
+      var skinLocked = !!(state.site && state.site.skinLocked);
+      var canPickSkin = !skinLocked || (state.user && (state.user.role === 'admin' || state.user.role === 'moderator'));
       var skinHtml = '';
       for (var si = 0; si < skins.length; si++) {
         var sid = skins[si];
         skinHtml += '<button type="button" class="skin-dot' + (UI.getSkin() === sid ? ' active' : '') +
+          (canPickSkin ? '' : ' disabled') +
           '" data-skin-pick="' + sid + '" title="' + UI.attr(T('skin.' + sid)) + '">' +
           '<span class="sw"></span><span class="lbl">' + UI.esc(T('skin.' + sid)) + '</span></button>';
+      }
+      // the atmosphere layer: one choice, independent of the template
+      var effects = UI.effectList();
+      var fxHtml = '';
+      for (var fi = 0; fi < effects.length; fi++) {
+        fxHtml += '<option value="' + effects[fi] + '"' +
+          (UI.getEffect() === effects[fi] ? ' selected' : '') + '>' +
+          T('fx.' + effects[fi]) + '</option>';
       }
       var langHtml = '';
       for (var j = 0; j < langs.length; j++) {
@@ -2965,7 +2976,10 @@
         '<div class="field"><label>' + T('settings.theme') + '</label><div class="theme-picker">' + themeHtml + '</div></div>' +
         '<div class="field"><label>' + T('settings.skin') + '</label>' +
         '<div class="skin-grid">' + skinHtml + '</div>' +
-        '<div class="hint">' + T('settings.skinHint') + '</div></div>' +
+        '<div class="hint">' + T(skinLocked && !canPickSkin ? 'settings.skinLocked' : 'settings.skinHint') + '</div></div>' +
+        '<div class="field"><label>' + T('settings.effect') + '</label>' +
+        '<select class="select" id="s-effect"' + (state.site && state.site.effectsEnabled === false ? ' disabled' : '') + '>' + fxHtml + '</select>' +
+        '<div class="hint">' + T('settings.effectHint') + '</div></div>' +
         '<div class="field"><label>' + T('settings.language') + '</label><select class="select" id="s-lang">' + langHtml + '</select></div>' +
         '<div class="field"><label>' + T('settings.sound') + '</label><label class="check" style="margin-bottom:6px"><input type="checkbox" id="s-sound"' + (SoundFX.isEnabled() ? ' checked' : '') + '> <span>' + T('settings.soundOn') + '</span></label>' +
         '<input type="range" class="range" id="s-volume" min="0" max="1" step="0.05" value="' + SoundFX.getVolume() + '">' +
@@ -3071,14 +3085,26 @@
       var sds = document.querySelectorAll('[data-skin-pick]');
       for (var si2 = 0; si2 < sds.length; si2++) {
         sds[si2].addEventListener('click', function () {
+          if (this.disabled) return;
           var id = this.getAttribute('data-skin-pick');
           UI.applySkin(id);
+          // a new template may carry its own atmosphere; the picker reflects that
+          var fxSel = document.getElementById('s-effect');
+          if (fxSel) fxSel.value = UI.getEffect();
           SoundFX.play('theme');
           App.saveSetting({ skin: id });
           for (var z2 = 0; z2 < sds.length; z2++) sds[z2].className = 'skin-dot';
           this.className = 'skin-dot active';
         });
       }
+
+      // effects: independent of the template, so a user can keep a skin and
+      // turn the atmosphere off (or put horror's VHS on top of anything)
+      var fxSelect = document.getElementById('s-effect');
+      if (fxSelect) fxSelect.addEventListener('change', function () {
+        UI.applyEffect(fxSelect.value, true);
+        App.saveSetting({ effect: fxSelect.value });
+      });
 
       // language
       var sl = document.getElementById('s-lang');
@@ -4092,8 +4118,13 @@
           var list = UI.skinList(), opts = [];
           for (var q = 0; q < list.length; q++) opts.push([list[q], T('skin.' + list[q])]);
           return opts;
-        })(), ui.skin || 'default') +
+        })(), ui.skin || 'branded') +
         '<div class="hint" style="margin:-4px 0 8px">' + T('admin.skinHint') + '</div>' +
+        check('cfg-skinlock', T('admin.skinLocked'), ui.skinLocked) +
+        field('cfg-skinschedule', T('admin.skinSchedule'), ui.skinSchedule || '') +
+        '<div class="hint" style="margin:-4px 0 8px">' + T('admin.skinScheduleHint') + '</div>' +
+        check('cfg-effects', T('admin.effectsEnabled'), ui.effectsEnabled !== false) +
+        '<div class="hint" style="margin:-4px 0 8px">' + T('admin.effectsHint') + '</div>' +
         (ui.gamesReady === false ? '<div class="alert warn" style="margin:6px 0">' + T('admin.gamesNoRuffle') + '</div>' : '') +
         field('cfg-notifywait', T('admin.notifyWait'), ui.notifyWaitSec, 'number', ' min="1" max="25"') +
         '<div style="margin-top:6px"><button class="btn btn-sm" id="cfg-notify-test">' + UI.icon('bell') + ' ' + T('admin.notifyTest') + '</button></div>' +
@@ -4228,6 +4259,9 @@
             storiesEnabled: document.getElementById('cfg-stories').checked,
             stickersEnabled: document.getElementById('cfg-stickers').checked,
             skin: App.val('cfg-skin'),
+            skinLocked: document.getElementById('cfg-skinlock').checked,
+            skinSchedule: App.val('cfg-skinschedule'),
+            effectsEnabled: document.getElementById('cfg-effects').checked,
             notifyWaitSec: Number(App.val('cfg-notifywait'))
           },
           logging: {

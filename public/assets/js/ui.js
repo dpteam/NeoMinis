@@ -303,28 +303,89 @@ var UI = (function () {
   // ------------------------------------------------------------------- skin
   // A skin is a template: it changes the palette and the shape language, never
   // the markup. The id goes on <html data-skin="...">, and skins.css does the
-  // rest. "default" is the stock 2008 chrome and defines nothing itself.
+  // rest. "branded" is the stock 2008 chrome that [branding] styles.
 
-  var SKINS = ['default', 'aero', 'metro', 'paper', 'terminal',
-    'soft', 'brutal', 'neon', 'warm', 'slate'];
+  var SKINS = ['branded', 'aero', 'metro', 'paper', 'terminal',
+    'soft', 'brutal', 'neon', 'warm', 'slate',
+    'matrix', 'cyberpunk', 'newyear', 'autumn', 'horror'];
+
+  // The effect each template ships with. Mirrors Config.DefaultEffect on the
+  // server; the handshake also carries this map, so a mismatch is harmless.
+  var SKIN_FX = {
+    branded: 'none', aero: 'sheen', metro: 'none', paper: 'grain',
+    terminal: 'scanlines', soft: 'aurora', brutal: 'paper-cut', neon: 'glow',
+    warm: 'grain', slate: 'none', matrix: 'matrix', cyberpunk: 'glitch',
+    newyear: 'snow', autumn: 'leaves', horror: 'vhs'
+  };
+
+  var EFFECTS = ['none', 'grain', 'scanlines', 'vhs', 'matrix', 'glitch',
+    'snow', 'leaves', 'aurora', 'glow', 'sheen', 'paper-cut'];
+
+  var fxLayer = null;
 
   function getSkin() {
     try {
       var s = localStorage.getItem('social.skin');
       if (s && SKINS.indexOf(s) >= 0) return s;
     } catch (e) { }
-    var fallback = (window.Api && Api.site && Api.site.skin) || 'default';
-    return SKINS.indexOf(fallback) >= 0 ? fallback : 'default';
+    var fallback = (window.Api && Api.site && Api.site.skin) || 'branded';
+    return SKINS.indexOf(fallback) >= 0 ? fallback : 'branded';
   }
 
   function applySkin(name) {
-    if (SKINS.indexOf(name) < 0) name = 'default';
+    if (SKINS.indexOf(name) < 0) name = 'branded';
     document.documentElement.setAttribute('data-skin', name);
     try { localStorage.setItem('social.skin', name); } catch (e) { }
+    // Choosing a template resets the atmosphere to that template's own default:
+    // otherwise picking "horror" while a manual "glow" was stored would give a
+    // horror palette with a neon glow, which is nobody's intention.
+    try { localStorage.removeItem('social.effect'); } catch (e) { }
+    applyEffect(SKIN_FX[name] || 'none', false);
     return name;
   }
 
   function skinList() { return SKINS.slice(); }
+
+  // ----------------------------------------------------------------- effect
+  // The atmosphere layer. One fixed overlay, created only when an effect is on,
+  // and the whole thing is CSS: no canvas, no per-frame JavaScript.
+
+  function getEffectChosen() {
+    try { return localStorage.getItem('social.effect') || ''; } catch (e) { return ''; }
+  }
+
+  function getEffect() {
+    var chosen = getEffectChosen();
+    if (chosen && EFFECTS.indexOf(chosen) >= 0) return chosen;
+    var skin = getSkin();
+    var fallback = (window.Api && Api.site && Api.site.skinEffects &&
+      Api.site.skinEffects[skin]) || SKIN_FX[skin] || 'none';
+    return EFFECTS.indexOf(fallback) >= 0 ? fallback : 'none';
+  }
+
+  function applyEffect(name, remember) {
+    if (EFFECTS.indexOf(name) < 0) name = 'none';
+    // the site can switch the whole layer off; a user choice cannot override that
+    if (window.Api && Api.site && Api.site.effectsEnabled === false) name = 'none';
+    document.documentElement.setAttribute('data-fx', name);
+    if (remember) {
+      try { localStorage.setItem('social.effect', name); } catch (e) { }
+    }
+    if (name === 'none') {
+      if (fxLayer && fxLayer.parentNode) fxLayer.parentNode.removeChild(fxLayer);
+      fxLayer = null;
+      return name;
+    }
+    if (!fxLayer) {
+      fxLayer = document.createElement('div');
+      fxLayer.className = 'fx-layer';
+      fxLayer.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(fxLayer);
+    }
+    return name;
+  }
+
+  function effectList() { return EFFECTS.slice(); }
 
   // ------------------------------------------------------------------ misc
 
@@ -410,6 +471,7 @@ var UI = (function () {
     spinner: spinner, empty: empty, toast: toast, modal: modal, confirm: confirmBox,
     imageModal: imageModal, getTheme: getTheme, applyTheme: applyTheme, cycleTheme: cycleTheme,
     getSkin: getSkin, applySkin: applySkin, skinList: skinList,
+    getEffect: getEffect, applyEffect: applyEffect, effectList: effectList,
     mediaBlocked: mediaBlocked, mediaBlockedText: mediaBlockedText, mediaReady: mediaReady,
     themes: THEMES, copy: copy, fileToDataUrl: fileToDataUrl, debounce: debounce,
     throttle: throttle, scrollTop: scrollTop, bytes: bytes, query: query, on: on, pad: pad

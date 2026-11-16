@@ -108,6 +108,9 @@ namespace Social.Web
             {
                 if (route == "handshake") { HandleHandshake(req, resp); return true; }
                 if (route == "health") { HandleHealth(req, resp); return true; }
+                // public on purpose: a launcher, a kiosk or a holiday script has no
+                // session, and this leaks nothing but the template ids
+                if (route == "theme") { HandleTheme(req, resp); return true; }
                 if (route == "register") { HandleRegister(req, resp, ip); return true; }
                 if (route == "login") { HandleLogin(req, resp, ip); return true; }
                 if (route == "guest") { HandleGuest(req, resp, ip); return true; }
@@ -198,10 +201,19 @@ namespace Social.Web
             b.Prop("adminPort", _cfg.AdminEnabled ? _cfg.AdminPort : 0);
             b.Prop("defaultLanguage", _cfg.DefaultLanguage);
             b.Prop("defaultTheme", _cfg.DefaultTheme);
-            b.Prop("skin", _cfg.Skin);
+            b.Prop("skin", _cfg.EffectiveSkin());
+            b.Prop("skinLocked", _cfg.SkinLocked);
+            b.Prop("skinSchedule", _cfg.SkinSchedule);
+            b.Prop("effectsEnabled", _cfg.EffectsEnabled);
             b.Name("skins").BeginArray();
             for (int i = 0; i < Config.Skins.Length; i++) b.Str(Config.Skins[i]);
             b.EndArray();
+            // the effect each template ships with, so the client can apply one
+            // without hardcoding the pairing in two places
+            b.Name("skinEffects").BeginObject();
+            for (int i = 0; i < Config.Skins.Length; i++)
+                b.Prop(Config.Skins[i], Config.DefaultEffect(Config.Skins[i]));
+            b.EndObject();
             b.Prop("defaultSound", _cfg.DefaultSound);
             b.Prop("motd", _cfg.Motd);
             b.Prop("footer", _cfg.Footer);

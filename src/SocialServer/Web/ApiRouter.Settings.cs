@@ -123,6 +123,9 @@ namespace Social.Web
                 .Prop("storiesEnabled", _cfg.StoriesEnabled)
                 .Prop("stickersEnabled", _cfg.StickersEnabled)
                 .Prop("skin", _cfg.Skin)
+                .Prop("skinLocked", _cfg.SkinLocked)
+                .Prop("skinSchedule", _cfg.SkinSchedule)
+                .Prop("effectsEnabled", _cfg.EffectsEnabled)
                 .EndObject();
 
             b.Name("logging").BeginObject()
@@ -491,6 +494,23 @@ namespace Social.Web
                 {
                     _cfg.Skin = Config.NormalizeSkin(Json.GetString(ui, "skin", _cfg.Skin));
                     _cfg.SetIniValue("ui", "skin", _cfg.Skin);
+                }
+                if (ui.ContainsKey("skinLocked"))
+                {
+                    _cfg.SkinLocked = Json.GetBool(ui, "skinLocked", _cfg.SkinLocked);
+                    _cfg.SetIniValue("ui", "skinLocked", _cfg.SkinLocked ? "true" : "false");
+                }
+                if (ui.ContainsKey("skinSchedule"))
+                {
+                    // the value is parsed, never trusted: a bad range is stored but
+                    // simply never matches, and Validate() warns about a broken one
+                    _cfg.SkinSchedule = Util.SingleLine(Json.GetString(ui, "skinSchedule", ""), 400);
+                    _cfg.SetIniValue("ui", "skinSchedule", _cfg.SkinSchedule);
+                }
+                if (ui.ContainsKey("effectsEnabled"))
+                {
+                    _cfg.EffectsEnabled = Json.GetBool(ui, "effectsEnabled", _cfg.EffectsEnabled);
+                    _cfg.SetIniValue("ui", "effectsEnabled", _cfg.EffectsEnabled ? "true" : "false");
                 }
             }
 

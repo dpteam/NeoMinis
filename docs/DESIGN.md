@@ -10,9 +10,10 @@ section first; the tables after it are only useful once the intent is clear.
 
 | | |
 | --- | --- |
-| **Files** | `public/assets/css/app.css` (~2.1k lines), `public/assets/css/skins.css` (the template layer), `public/assets/js/ui.js` (render helpers), `Core/Branding.cs` (generated palette) |
+| **Files** | `public/assets/css/app.css` (~2.1k lines), `skins.css` (the template layer), `effects.css` (the atmosphere layer), `public/assets/js/ui.js` (render helpers), `Core/Branding.cs` (generated palette) |
 | **Themes** | `light` (default), `dark`, `oled` — all three are first-class |
-| **Templates** | 10 skins on `data-skin`: `default`, `aero`, `metro`, `paper`, `terminal`, `soft`, `brutal`, `neon`, `warm`, `slate` (see §12.1) |
+| **Templates** | 15 skins on `data-skin`: `branded`, `aero`, `metro`, `paper`, `terminal`, `soft`, `brutal`, `neon`, `warm`, `slate`, `matrix`, `cyberpunk`, `newyear`, `autumn`, `horror` (see §12.1) |
+| **Effects** | 12 atmosphere layers on `data-fx` — grain, scanlines, VHS, matrix rain, glitch, snow, leaves, aurora, glow, sheen, print offset (see §12.2) |
 | **Icons** | Font Awesome 6.5.2 from a CDN, `<i class="fa-solid fa-name">` |
 | **Fonts** | system stack only — no webfont, no network dependency, no FOUT |
 | **Target** | Windows XP SP3 and up, so: ES5, no CSS grid subgrid, no `:has()`, no container queries |
@@ -648,15 +649,15 @@ Known gaps (see §14):
 
 ### 12.1 Templates (`skins.css`)
 
-Ten templates ship in `public/assets/css/skins.css`, loaded **after** `brand.css` so a
-skin wins by cascade order. A skin overrides custom properties, plus a small number
-of rules where the *form* differs (metro has no radii, brutal has hard offsets, paper
-uses serif headings). **No markup changes between skins** — that is what makes this a
-template layer rather than ten forks.
+Fifteen templates ship in `public/assets/css/skins.css`, loaded **after** `brand.css`
+so a skin wins by cascade order. A skin overrides custom properties, plus a small
+number of rules where the *form* differs (metro has no radii, brutal has hard offsets,
+paper uses serif headings). **No markup changes between skins** — that is what makes
+this a template layer rather than fifteen forks.
 
 | id | Name | Shape | Palette | Designed for |
 | --- | --- | --- | --- | --- |
-| `default` | Stock | stock | stock + `[branding]` | The 2008 chrome, unchanged |
+| `branded` | Branded | stock | stock + `[branding]` | The 2008 chrome. **The only skin `[branding]` styles.** |
 | `aero` | Aero | 12px, glossy inset | blue glass | Vista-era gloss, tamed |
 | `metro` | Metro | 0px, no shadows | flat blue on white | 2012 tiles, solid header blocks |
 | `paper` | Paper | 2px, no shadows | cream + oxblood, serif | print, the reading skin |
@@ -666,31 +667,131 @@ template layer rather than ten forks.
 | `neon` | Neon | 6px, 1px glow rings | violet/cyan on black | night mode as a skin |
 | `warm` | Warm | 10px | terracotta + cream, serif | mid-century warmth |
 | `slate` | Slate | 6px, hairlines | teal on cool grey | the professional tool |
+| `matrix` | Matrix | 2px, mono | phosphor green on black | the terminal taken seriously |
+| `cyberpunk` | Cyberpunk | 2px, hard neon rules | magenta + cyan on indigo | the three-way neon split |
+| `newyear` | New Year | 12px | gold on midnight blue | festive without tinsel |
+| `autumn` | Autumn | 8px, serif | burnt orange + parchment | October evening |
+| `horror` | Horror | 3px, serif | blood on black | the VHS skin |
 
 Rules a new skin must follow:
 
 1. **Tokens only, plus form overrides.** No new layout, no new markup.
 2. **Both themes must be usable.** Every skin needs a `[data-theme="dark"]` block
-   except the inherently dark ones (`terminal`, `neon`), which still need their
-   light-theme tokens to not be broken if someone switches.
+   except the inherently dark ones (`terminal`, `neon`, `matrix`, `cyberpunk`,
+   `horror`), which still need their light-theme tokens to not be broken if someone
+   switches.
 3. **No animation, no glass, no gradient on a content surface.** The §13 list applies
-   to every skin.
+   to every skin. Atmosphere belongs in `effects.css`, not here.
 4. **System fonts only**, and no font that is not on Windows XP.
-5. **The id must be added to both lists**: `Config.Skins` in C# and `SKINS` in
-   `ui.js`. The server refuses an unknown id (it lands in a DOM attribute), so a skin
-   missing from the C# list simply cannot be selected.
+5. **The id must be added to three places**: `Config.Skins` in C#, `SKINS` in
+   `ui.js`, and `SKIN_FX` in `ui.js` (its default effect). The server refuses an
+   unknown id (it lands in a DOM attribute), so a skin missing from the C# list
+   simply cannot be selected.
+6. **Add a `.skin-dot` swatch** at the bottom of `skins.css`, or the picker shows an
+   empty tile.
 
 Precedence, highest first: the browser's own choice (`localStorage['social.skin']`) →
 the account's choice (`user.skin`, so it follows the user to another device) → the
 site default (`ui.skin` in `config.ini`, with an admin dropdown).
 
-`[branding]` defines an accent for the **stock** template only. A skin brings its own
+`[branding]` defines an accent for the **branded** template only. A skin brings its own
 accent; layering a brand accent over `neon` would fight it. If a deployment wants a
 branded skin, the honest path is a new skin with those colours, not a global override.
 
 The picker in Settings is a grid of `.skin-dot` swatches — bar gradient, page fill and
-an accent chip — which is enough to tell ten skins apart at 64×40. It degrades to 3-up
-at 820px and 2-up at 560px.
+an accent chip — which is enough to tell fifteen skins apart at 64×40. It degrades to
+3-up at 820px and 2-up at 560px.
+
+### 12.2 Effects (`effects.css`)
+
+The atmosphere layer is a **second, independent axis**: a template is a look, an
+effect is what the look *does*. Applied by `data-fx` on `<html>`, rendered as one
+fixed `.fx-layer` element created by `ui.js` only when an effect is active, so a
+plain page pays nothing.
+
+| id | Effect | Mechanism |
+| --- | --- | --- |
+| `none` | — | no layer at all |
+| `grain` | Film grain | one static SVG `feTurbulence` tile, multiply/screen blend |
+| `scanlines` | CRT raster | repeating 3px gradient + a slow opacity flicker |
+| `vhs` | VHS tape | 4px raster, a rolling bright band, a 1px chroma split on headings, a 2px horizontal wobble every few seconds |
+| `matrix` | Matrix rain | vertical repeating gradient scrolling down, masked at the edges |
+| `glitch` | Glitch | permanent 1px chroma on chrome; cards glitch 160ms on hover |
+| `snow` | Snow | two tiled radial-gradient layers at different speeds |
+| `leaves` | Falling leaves | same idea, warmer, with a sideways drift |
+| `aurora` | Aurora | two soft colour fields drifting, 26s |
+| `glow` | Neon glow | pulsing rim on the bar, `drop-shadow` on accent icons |
+| `sheen` | Glass sheen | one diagonal highlight sweeping the bar, Vista-style |
+| `paper-cut` | Print offset | no motion: a hard offset shadow on the bar and cards |
+Each skin declares its default effect in `SKIN_FX` (`ui.js`) and `Config.DefaultEffect`
+(C#), and **choosing a template resets the effect to that template's default** —
+otherwise picking `horror` while a manual `glow` was stored would give a horror
+palette with a neon glow, which is nobody's intention. The user can then override the
+effect independently from the Settings dropdown, and `none` is always available.
+
+Hard rules, because these run on old hardware:
+
+- **CSS only.** No WebGL, no canvas, no per-frame JavaScript.
+- **Only `background-position`, `transform` and `opacity` animate.**
+- Every effect is `pointer-events: none`, `contain: strict`, and sits at `z-index: 90`
+  (above content, below the modal scrim at 80 — the layer is decorative, modals win).
+- `prefers-reduced-motion` switches every one of them off in a single block at the
+  bottom of the file.
+- No effect may reduce text contrast below the skin's own baseline.
+
+**Adding an effect** is three steps and no component work:
+
+1. A block in `effects.css` — `html[data-fx="name"] .fx-layer::before { … }`.
+2. Add the id to `EFFECTS` in `ui.js` and an `fx.name` key to `i18n.js`.
+3. Add a line to the `prefers-reduced-motion` block at the bottom of the file.
+
+**Adding a template** is five steps:
+
+1. A token block in `skins.css` — `html[data-skin="name"] { --bg: …; }` plus a
+   `[data-theme="dark"]` variant.
+2. Form overrides only where the shape language really differs.
+3. The id in `Config.Skins` (C#), `SKINS` and `SKIN_FX` (`ui.js`).
+4. A `.skin-dot[data-skin="name"]` swatch so the picker has a preview.
+5. A `skin.name` key in `i18n.js`.
+
+Neither touches a component, a view or an endpoint — which is the property that makes
+future visual work cheap.
+
+### 12.3 Holiday themes without a release
+
+`ui.skinSchedule` takes `skin:MM-DD:MM-DD` entries, comma separated, and a range may
+cross the new year:
+
+```ini
+[ui]
+skin=branded
+skinSchedule=horror:10-25:11-02,newyear:12-20:01-10,autumn:09-20:10-20
+```
+
+While a range is active it **wins over `ui.skin`**, so a holiday theme needs no client
+release, no code change and no restart (it is evaluated per request against
+`DateTime.Now`). A malformed entry is skipped rather than killing the whole list, and
+`Validate()` adds a warning when the value clearly is not in that shape.
+
+`GET /api/theme` exposes the result publicly and unauthenticated, so a launcher, a
+widget, a kiosk or a deployment script can ask what the instance looks like today:
+
+```json
+{ "ok": true, "skin": "horror", "configured": "branded", "active": "horror",
+  "locked": false, "effects": true, "schedule": "horror:10-25:11-02",
+  "skins": [ { "id": "branded", "effect": "none" } ] }
+```
+
+`active` is empty unless a holiday range is actually in force, which makes it the
+field to check. The endpoint leaks nothing but template ids — no users, no counts.
+
+### 12.4 Locking the look
+
+`ui.skinLocked=true` makes the template **staff-only**: a regular account gets `403
+skin-locked` from `POST /api/settings`, and the picker in Settings renders disabled
+with an explanation. The admin dropdown still works, so the instance can be restyled
+without editing the file. This exists for deployments that want one consistent look
+rather than fifteen.
 
 ---
 

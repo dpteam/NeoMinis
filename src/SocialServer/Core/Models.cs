@@ -27,6 +27,9 @@ namespace Social.Core
         public string Theme = "";
         // template chosen by this account; empty means "whatever the site default is"
         public string Skin = "";
+        // atmosphere layer chosen by this account; empty means "the skin's default",
+        // "none" means the user turned effects off
+        public string Effect = "";
         public string Lang = "";
         public bool Sound = true;
         public string Privacy = "public";

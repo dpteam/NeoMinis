@@ -60,6 +60,8 @@ var App = (function () {
   function init() {
     UI.applyTheme(UI.getTheme());
     UI.applySkin(UI.getSkin());
+    // the skin may already have set a default effect; an explicit choice re-applies
+    UI.applyEffect(UI.getEffect(), false);
     I18N.setLang(I18N.detect((Api.site && Api.site.defaultLanguage) || 'ru'));
     bindGlobal();
     var bootText = document.getElementById('boot-text');
@@ -118,6 +120,12 @@ var App = (function () {
       var local = null;
       try { local = localStorage.getItem('social.skin'); } catch (e) { }
       if (!local) UI.applySkin(u.skin);
+    }
+    // an effect chosen on the account follows the user; a local choice wins
+    if (u.effect) {
+      var localFx = null;
+      try { localFx = localStorage.getItem('social.effect'); } catch (e) { }
+      if (!localFx) UI.applyEffect(u.effect, false);
     }
     if (u.lang && I18N.langs.indexOf(u.lang) >= 0) I18N.setLang(u.lang);
   }

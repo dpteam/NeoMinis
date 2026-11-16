@@ -95,17 +95,19 @@ fallback lists), and the admin board can be switched off entirely with
 All screenshots are rendered from standalone demo pages that use the real
 `app.css` with invented people and posts — no real instance data is shown.
 
-**Ten templates ship with the interface.** Same markup, same features, ten
-personalities — pick one in Settings:
+**Fifteen templates ship with the interface, each with its own atmosphere effect.**
+Same markup, same features, fifteen personalities — pick one in Settings, and pick the
+effect separately if you want a different one:
 
-<img src="docs/img/skins/contact.png" alt="Ten interface templates side by side">
+<img src="docs/img/skins/contact.png" alt="Fifteen interface templates side by side">
 
 | | | |
 | --- | --- | --- |
-| **Stock** — the 2008 chrome, unchanged | **Aero** — Vista gloss, tamed | **Metro** — 2012 flat tiles |
+| **Branded** — the 2008 chrome, `[branding]` styles this one | **Aero** — Vista gloss, tamed | **Metro** — 2012 flat tiles |
 | **Paper** — cream and oxblood, serif | **Terminal** — a console, monospace | **Soft** — 2026 restraint |
 | **Brutal** — thick rules, hard offsets | **Neon** — violet on black | **Warm** — terracotta and cream |
-| **Slate** — teal on cool grey | | |
+| **Slate** — teal on cool grey | **Matrix** — phosphor green rain | **Cyberpunk** — magenta and cyan |
+| **New Year** — gold on midnight, snow | **Autumn** — burnt orange, leaves | **Horror** — blood on black, VHS |
 
 <table>
 <tr>
@@ -146,7 +148,9 @@ personalities — pick one in Settings:
 | **Admin** | **a separate board on its own port** — dashboard, users (ban / unban / grant or revoke admin & moderator / warn / mute / reset / badges / delete), reports queue, live log tail, broadcast, backup, storage repair, config reload, AI panel, and a Settings tab that writes straight back to `config.ini` |
 | **Moderation** | a permission matrix for moderators (8 flags, empty means "all", for backwards compatibility), warnings, chat mutes, reports, per-IP account caps |
 | **Themes** | `light` / `dark` / `oled`, instant switch, remembered per user, and a generated `brand.css` from `[branding]` |
-| **Templates** | **10 interface skins** — Stock, Aero, Metro, Paper, Terminal, Soft, Brutal, Neon, Warm, Slate. A skin is a palette plus a shape language on `data-skin` and changes no markup, so layout and behaviour are identical in all ten. Chosen per account, remembered per browser, defaulted by the admin. See [DESIGN.md §12.1](docs/DESIGN.md) |
+| **Templates** | **15 interface skins** — Branded, Aero, Metro, Paper, Terminal, Soft, Brutal, Neon, Warm, Slate, Matrix, Cyberpunk, New Year, Autumn, Horror. A skin is a palette plus a shape language on `data-skin` and changes no markup, so layout and behaviour are identical in all of them. Chosen per account, remembered per browser, defaulted by the admin, and lockable so only staff may change it. See [DESIGN.md §12.1](docs/DESIGN.md) |
+| **Effects** | **12 atmosphere layers** on `data-fx` — film grain, CRT scanlines, VHS tape, matrix rain, glitch, snow, falling leaves, aurora, neon glow, glass sheen, print offset. Pure CSS (no canvas, no WebGL), each skin carries its own default, and the user can pick any effect independently or turn it off. See [DESIGN.md §12.2](docs/DESIGN.md) |
+| **Holiday themes** | `ui.skinSchedule` switches the template by date (`horror:10-25:11-02,newyear:12-20:01-10`) with no client release and no restart, and `GET /api/theme` exposes the current look publicly so a launcher or script can follow it |
 | **Sounds** | WebAudio synth (no audio files): click, post, like, comment, message, notification, friend, login, error, success, theme — with per-event toggles and volume |
 | **i18n** | **English and Russian complete**; Ukrainian and Lithuanian cover the shell and fall back to English for the rest. Auto-detect plus a selector |
 | **Guest mode** | a real read-only session (not an auth bypass) with an endpoint whitelist, optional password, and a kiosk mode with idle timeout |
@@ -273,6 +277,9 @@ CLI overrides: `--port N`, `--admin-port N`, `--no-admin`, `--bind IP`,
 
 ### Rebranding a deployment
 
+The **Branded** template is the one `[branding]` styles — every other template brings
+its own palette, so a brand accent layered over `neon` would fight it.
+
 ```ini
 [branding]
 accent=#0088ff
@@ -287,10 +294,6 @@ The server generates `/brand.css` from this section and the SPA links it after
 `app.css`, so the repository itself stays neutral. Leave the section empty for the
 stock palette. Hover, link, top-bar and cover colours are all derived by mixing,
 so you only give the handful of base colours.
-
-`[branding]` applies to the **Stock** template. A skin brings its own accent, so
-layering a brand accent over `neon` would fight it — if you want a branded skin, copy
-one in `public/assets/css/skins.css` and change its colours.
 
 ### Adding a language
 

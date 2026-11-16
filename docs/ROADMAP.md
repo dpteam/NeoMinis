@@ -157,14 +157,22 @@ poll) but they are the minimum.
 
 ### Visual pass: retro 2008 × modern
 
-**Shipped:** the template layer. `public/assets/css/skins.css` carries ten skins —
-Stock, Aero, Metro, Paper, Terminal, Soft, Brutal, Neon, Warm and Slate — applied by
-`data-skin` on `<html>`. A skin overrides tokens plus a little form, never markup, so
-the layout, the features and the behaviour are identical in all ten. The choice is
-per account (`user.skin`), remembered per browser, and defaulted by the admin
-(`ui.skin`); the server validates every id because it lands in a DOM attribute.
-This is the foundation the rest of the visual work stands on: new palettes can be
-tried without touching a single component.
+**Shipped:** the template and effect layers. `public/assets/css/skins.css` carries
+fifteen skins — Branded, Aero, Metro, Paper, Terminal, Soft, Brutal, Neon, Warm,
+Slate, Matrix, Cyberpunk, New Year, Autumn and Horror — applied by `data-skin` on
+`<html>`. `public/assets/css/effects.css` adds twelve atmosphere layers on `data-fx`
+(grain, scanlines, VHS, matrix rain, glitch, snow, leaves, aurora, glow, sheen, print
+offset), each skin with its own default. A skin overrides tokens plus a little form,
+never markup, so the layout, the features and the behaviour are identical in all
+fifteen. The choice is per account (`user.skin`, `user.effect`), remembered per
+browser, defaulted by the admin (`ui.skin`), lockable so only staff may change it
+(`ui.skinLocked`), and schedulable by date for holidays (`ui.skinSchedule`) with no
+client release. The server validates every id because it lands in a DOM attribute.
+
+`GET /api/theme` is the public surface for all of it: unauthenticated, plain JSON,
+just template ids and the active schedule, so a launcher, a kiosk or a script can
+follow a holiday theme. This is the foundation the rest of the visual work stands on:
+a new palette or a new atmosphere is a file, not a component rewrite.
 
 What is left of the plan is in [DESIGN-RESEARCH.md](DESIGN-RESEARCH.md). The short
 version: keep the 2008 chrome (three columns, blue bar, 1px borders, density, tab

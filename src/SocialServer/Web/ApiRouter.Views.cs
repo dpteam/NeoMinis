@@ -113,6 +113,7 @@ namespace Social.Web
                 b.Prop("likes", _store.CountLikesGiven(u.Id));
                 b.Prop("theme", u.Theme);
                 if (!string.IsNullOrEmpty(u.Skin)) b.Prop("skin", u.Skin);
+                if (!string.IsNullOrEmpty(u.Effect)) b.Prop("effect", u.Effect);
                 b.Prop("lang", u.Lang);
                 b.Prop("sound", u.Sound);
                 b.Prop("hideOnline", u.HideOnline);

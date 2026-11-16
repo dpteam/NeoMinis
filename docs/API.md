@@ -328,14 +328,32 @@ earned (useful after an import or a rule change).
 | POST | `/api/messages/revoke` | `id` | `{ message }` — delete for everyone |
 | POST | `/api/messages/pin` | `id`, `on` | `{ pinned }` |
 | GET | `/api/stickers` | — | `{ enabled, packs[{ id, name, stickers[{ id, url }] }] }` |
+| GET | `/api/theme` | — | **public**: `{ skin, configured, active, locked, effects, schedule, skins[{id,effect}] }` |
 
-**Templates (skins).** `site.skins` in the handshake lists the ten template ids and
-`site.skin` is the site default; `POST /api/settings` with `{ "skin": "paper" }`
-stores a choice on the account (`user.skin`), and `{ "skin": "default" }` resets it.
-An id is written into a DOM attribute, so the server validates it against
-`Config.Skins` and answers `400 bad-skin` for anything it does not know — a value
-like `"><script>` can never reach the page. The list must stay in sync with `SKINS`
-in `public/assets/js/ui.js`; the C# side is the gate.
+**Templates (skins).** `site.skins` in the handshake lists the fifteen template ids and
+`site.skin` is the template in force right now (a holiday range from
+`ui.skinSchedule` wins over the configured default). `POST /api/settings` with
+`{ "skin": "paper" }` stores a choice on the account (`user.skin`), `{ "skin": "" }`
+makes it follow the site default, and `{ "effect": "vhs" }` picks the atmosphere layer
+independently. An id is written into a DOM attribute, so the server validates both
+against known values and answers `400 bad-skin` / `400 bad-effect` otherwise — a value
+like `"><script>` can never reach the page. The lists must stay in sync with `SKINS`
+and `EFFECTS` in `public/assets/js/ui.js`; the C# side is the gate.
+
+**`GET /api/theme` is public and unauthenticated** on purpose. It exists so a
+launcher, a kiosk, a widget or a deployment script can ask "what does this instance
+look like today" without a session — which is how a holiday theme gets applied without
+a client release. It returns template ids and the schedule, never user data. `active`
+is non-empty only while a scheduled range is in force, so that is the field to check.
+
+```json
+{ "ok": true, "skin": "horror", "configured": "branded", "active": "horror",
+  "locked": false, "effects": true, "schedule": "horror:10-25:11-02",
+  "skins": [ { "id": "branded", "effect": "none" }, { "id": "horror", "effect": "vhs" } ] }
+```
+
+`ui.skinLocked=true` turns `POST /api/settings` into a staff-only call (`403
+skin-locked` for a regular account), for a deployment that wants one consistent look.
 
 **Stickers** are files that ship with the site, not uploads. A message carries only
 an id (`faces/smile`), so it costs a few bytes and writes nothing to `data/media`.

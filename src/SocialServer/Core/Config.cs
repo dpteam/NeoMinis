@@ -276,8 +276,17 @@ namespace Social.Core
         public bool StoriesEnabled = true;
         // the built-in sticker packs in the chat picker
         public bool StickersEnabled = true;
-        // template: default | aero | metro | paper | terminal | soft | brutal | neon | warm | slate
-        public string Skin = "default";
+        // template: branded | aero | metro | paper | terminal | soft | brutal | neon | warm | slate |
+        //           matrix | cyberpunk | newyear | autumn | horror
+        public string Skin = "branded";
+        // when true, only an administrator may change the template; users see the
+        // site default and the picker is hidden for them
+        public bool SkinLocked;
+        // holiday overrides, comma separated: "horror:10-25:11-02,newyear:12-20:01-10"
+        // a range may wrap the new year (12-20 to 01-10 is valid)
+        public string SkinSchedule = "";
+        // the atmosphere layer: on by default, and users may turn it off
+        public bool EffectsEnabled = true;
 
         public bool Degraded;
         public string DegradedReason = "";
@@ -615,6 +624,9 @@ namespace Social.Core
                     else if (key == "storiesenabled") StoriesEnabled = Bool(val, StoriesEnabled);
                     else if (key == "stickersenabled") StickersEnabled = Bool(val, StickersEnabled);
                     else if (key == "skin") Skin = NormalizeSkin(val);
+                    else if (key == "skinlocked") SkinLocked = Bool(val, SkinLocked);
+                    else if (key == "skinschedule") SkinSchedule = val;
+                    else if (key == "effectsenabled") EffectsEnabled = Bool(val, EffectsEnabled);
                     break;
             }
         }
@@ -622,6 +634,13 @@ namespace Social.Core
         private void Validate()
         {
             Skin = NormalizeSkin(Skin);
+            // an empty schedule is fine, but a typo should be visible rather than silent
+            if (!string.IsNullOrEmpty(SkinSchedule) && SkinSchedule.Trim().Length > 0)
+            {
+                string probe = ScheduledSkin(SkinSchedule, DateTime.Now);
+                if (probe.Length == 0 && SkinSchedule.IndexOf(':') < 0)
+                    Warnings.Add("ui.skinSchedule looks malformed, expected skin:MM-DD:MM-DD");
+            }
             if (Port < 1 || Port > 65535) { Warnings.Add("server.port out of range, using 8080"); Port = 8080; }
             if (PortFallbacks == null) PortFallbacks = new int[0];
             if (Bind == null || Bind.Length == 0) Bind = "0.0.0.0";
@@ -876,19 +895,129 @@ namespace Social.Core
         /// The template list, kept in one place because the server has to reject an
         /// unknown skin id: an arbitrary value would land in a DOM attribute and in
         /// the settings UI. Must stay in sync with SKINS in public/assets/js/ui.js.
+        /// "branded" is the stock 2008 chrome and is the one that [branding] styles.
         /// </summary>
         public static readonly string[] Skins = new string[]
         {
-            "default", "aero", "metro", "paper", "terminal",
-            "soft", "brutal", "neon", "warm", "slate"
+            "branded", "aero", "metro", "paper", "terminal",
+            "soft", "brutal", "neon", "warm", "slate",
+            "matrix", "cyberpunk", "newyear", "autumn", "horror"
         };
+
+        /// <summary>
+        /// The effect each template defaults to. The server only needs this to tell
+        /// the client what to load first; the client owns the actual effect list.
+        /// Kept here as well so a scheduled skin and its effect arrive together.
+        /// </summary>
+        public static string DefaultEffect(string skin)
+        {
+            switch (NormalizeSkin(skin))
+            {
+                case "paper": return "grain";
+                case "warm": return "grain";
+                case "autumn": return "leaves";
+                case "terminal": return "scanlines";
+                case "matrix": return "matrix";
+                case "cyberpunk": return "glitch";
+                case "newyear": return "snow";
+                case "horror": return "vhs";
+                case "neon": return "glow";
+                case "aero": return "sheen";
+                case "brutal": return "paper-cut";
+                case "soft": return "aurora";
+                default: return "none";
+            }
+        }
+
+        /// <summary>
+        /// True for a short lowercase token (letters, digits, dash). Used for values
+        /// that end up in a DOM attribute - an effect id, for instance - where the
+        /// server must not accept anything it cannot reason about.
+        /// </summary>
+        public static bool IsSafeToken(string value)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length > 32) return false;
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                bool ok = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-';
+                if (!ok) return false;
+            }
+            return true;
+        }
 
         public static string NormalizeSkin(string value)
         {
-            if (string.IsNullOrEmpty(value)) return "default";
+            if (string.IsNullOrEmpty(value)) return "branded";
             string v = value.Trim().ToLowerInvariant();
+            // the old name is still accepted so an existing config.ini keeps working
+            if (v == "default") return "branded";
             for (int i = 0; i < Skins.Length; i++) if (Skins[i] == v) return v;
-            return "default";
+            return "branded";
+        }
+
+        /// <summary>
+        /// The template that is actually in force today: a holiday range from
+        /// ui.skinSchedule wins over the configured default. This is the whole
+        /// "themes for holidays" feature - it needs no client release and no code,
+        /// just a date range in config.ini or in Admin -> Settings.
+        /// </summary>
+        public string EffectiveSkin()
+        {
+            return EffectiveSkin(DateTime.Now);
+        }
+
+        public string EffectiveSkin(DateTime now)
+        {
+            string scheduled = ScheduledSkin(SkinSchedule, now);
+            return NormalizeSkin(string.IsNullOrEmpty(scheduled) ? Skin : scheduled);
+        }
+
+        /// <summary>
+        /// Parses "horror:10-25:11-02,newyear:12-20:01-10" and returns the skin whose
+        /// range contains the given date, or "" when none does. A range may wrap the
+        /// new year; a malformed entry is skipped rather than killing the whole list.
+        /// </summary>
+        public static string ScheduledSkin(string schedule, DateTime now)
+        {
+            if (string.IsNullOrEmpty(schedule)) return "";
+            string[] entries = schedule.Split(',');
+            for (int i = 0; i < entries.Length; i++)
+            {
+                string entry = entries[i].Trim();
+                if (entry.Length == 0) continue;
+                string[] parts = entry.Split(':');
+                if (parts.Length != 3) continue;
+                string skin = NormalizeSkin(parts[0]);
+                int fromMonth, fromDay, toMonth, toDay;
+                if (!TryMonthDay(parts[1], out fromMonth, out fromDay)) continue;
+                if (!TryMonthDay(parts[2], out toMonth, out toDay)) continue;
+                if (!InRange(now, fromMonth, fromDay, toMonth, toDay)) continue;
+                return skin;
+            }
+            return "";
+        }
+
+        private static bool TryMonthDay(string value, out int month, out int day)
+        {
+            month = 0; day = 0;
+            string[] bits = (value ?? "").Trim().Split('-');
+            if (bits.Length != 2) return false;
+            if (!int.TryParse(bits[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out month)) return false;
+            if (!int.TryParse(bits[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out day)) return false;
+            if (month < 1 || month > 12) return false;
+            if (day < 1 || day > 31) return false;
+            return true;
+        }
+
+        private static bool InRange(DateTime now, int fromMonth, int fromDay, int toMonth, int toDay)
+        {
+            int today = now.Month * 100 + now.Day;
+            int from = fromMonth * 100 + fromDay;
+            int to = toMonth * 100 + toDay;
+            if (from <= to) return today >= from && today <= to;
+            // wraps the new year, e.g. 12-20 .. 01-10
+            return today >= from || today <= to;
         }
 
         public static string NormalizeColor(string value)

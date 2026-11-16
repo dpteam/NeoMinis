@@ -239,16 +239,19 @@ function shell(opts) {
 
   return doc(opts.theme || 'dark', `<div id="app">${top}<div class="shell">${left}
     <main class="col-main">${opts.main}</main>
-    ${right}</div></div>`, opts.skin);
+    ${right}</div></div>`, opts.skin, opts.fx);
 }
 
 function onlineUser(u) {
   return `<a class="online-user" href="#">${avatar(u, 24)}<span class="name">${esc(u.name)}</span><span class="presence"></span></a>`;
 }
 
-function doc(theme, body, skin) {
+function doc(theme, body, skin, fx) {
+  // an effect needs the overlay element, which the real SPA creates from ui.js;
+  // the demo pages are static, so it is written here instead
+  const layer = fx && fx !== 'none' ? '<div class="fx-layer" aria-hidden="true"></div>' : '';
   return `<!DOCTYPE html>
-<html lang="en" data-theme="${theme}" data-skin="${skin || 'default'}">
+<html lang="en" data-theme="${theme}" data-skin="${skin || 'branded'}" data-fx="${fx || 'none'}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -258,9 +261,10 @@ function doc(theme, body, skin) {
      these against /skins/ and load nothing, which looks like a broken skin -->
 <link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/skins.css">
+<link rel="stylesheet" href="/effects.css">
 <style>body{margin:0}#app{min-height:100vh}</style>
 </head>
-<body>${body}</body></html>`;
+<body>${body}${layer}</body></html>`;
 }
 
 // ------------------------------------------------------------------- pages
@@ -568,17 +572,26 @@ const pages = {
 // are rendered in whichever theme they were designed for, so each one shows its
 // own palette instead of fighting the theme it was dropped into.
 const SKIN_THEMES = {
-  default: 'dark', aero: 'light', metro: 'light', paper: 'light', terminal: 'dark',
-  soft: 'light', brutal: 'light', neon: 'dark', warm: 'light', slate: 'light'
+  branded: 'dark', aero: 'light', metro: 'light', paper: 'light', terminal: 'dark',
+  soft: 'light', brutal: 'light', neon: 'dark', warm: 'light', slate: 'light',
+  matrix: 'dark', cyberpunk: 'dark', newyear: 'dark', autumn: 'light', horror: 'dark'
 };
 const SKIN_LABELS = {
-  default: 'Stock', aero: 'Aero', metro: 'Metro', paper: 'Paper', terminal: 'Terminal',
-  soft: 'Soft', brutal: 'Brutal', neon: 'Neon', warm: 'Warm', slate: 'Slate'
+  branded: 'Branded', aero: 'Aero', metro: 'Metro', paper: 'Paper', terminal: 'Terminal',
+  soft: 'Soft', brutal: 'Brutal', neon: 'Neon', warm: 'Warm', slate: 'Slate',
+  matrix: 'Matrix', cyberpunk: 'Cyberpunk', newyear: 'New Year', autumn: 'Autumn', horror: 'Horror'
+};
+// the effect each template ships with, so the screenshots show the real pairing
+const SKIN_FX = {
+  branded: 'none', aero: 'sheen', metro: 'none', paper: 'grain',
+  terminal: 'scanlines', soft: 'aurora', brutal: 'paper-cut', neon: 'glow',
+  warm: 'grain', slate: 'none', matrix: 'matrix', cyberpunk: 'glitch',
+  newyear: 'snow', autumn: 'leaves', horror: 'vhs'
 };
 
 for (const [id, theme] of Object.entries(SKIN_THEMES)) {
   pages[`skins/${id}.png`] = shell({
-    theme, skin: id, tab: 'feed', side: 'feed', main: feedMain
+    theme, skin: id, fx: SKIN_FX[id], tab: 'feed', side: 'feed', main: feedMain
   });
 }
 
@@ -594,7 +607,7 @@ console.log('pages written to', WORK);
 // a tiny static server: /app.css and /skins.css from the repo, the rest from WORK
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
-  if (url === '/app.css' || url === '/skins.css') {
+  if (url === '/app.css' || url === '/skins.css' || url === '/effects.css') {
     res.writeHead(200, { 'content-type': 'text/css; charset=utf-8' });
     res.end(fs.readFileSync(path.join(ROOT, 'public', 'assets', 'css', url.slice(1))));
     return;

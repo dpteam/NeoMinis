@@ -406,10 +406,10 @@ async function main() {
   const siteSkins = await alice.call('GET', '/api/settings');
   ok('the template list is served', siteSkins.status === 200 &&
     Array.isArray(siteSkins.data.site.skins) && siteSkins.data.site.skins.length >= 10 &&
-    siteSkins.data.site.skins.indexOf('default') >= 0 &&
+    siteSkins.data.site.skins.indexOf('branded') >= 0 &&
     siteSkins.data.site.skins.indexOf('neon') >= 0,
     JSON.stringify(siteSkins.data && siteSkins.data.site && siteSkins.data.site.skins));
-  ok('the site has a default template', siteSkins.data.site.skin === 'default',
+  ok('the site has a default template', siteSkins.data.site.skin === 'branded',
     JSON.stringify(siteSkins.data.site.skin));
   const skinSet = await alice.call('POST', '/api/settings', { skin: 'paper' });
   ok('a template can be chosen per account',
@@ -423,10 +423,47 @@ async function main() {
   // an id is used as a DOM attribute, so it must never carry anything but a known name
   const skinInject = await alice.call('POST', '/api/settings', { skin: '"><script>alert(1)</script>' });
   ok('a template id cannot carry markup', skinInject.status === 400, String(skinInject.status));
-  const skinReset = await alice.call('POST', '/api/settings', { skin: 'default' });
-  ok('a template can be reset to stock',
-    skinReset.status === 200 && skinReset.data.user.skin === 'default',
+  const skinReset = await alice.call('POST', '/api/settings', { skin: 'branded' });
+  ok('a template can be reset to the branded one',
+    skinReset.status === 200 && skinReset.data.user.skin === 'branded',
     JSON.stringify(skinReset.data && skinReset.data.user && skinReset.data.user.skin));
+  // the pre-rename id must keep working, or an existing config.ini breaks
+  const skinOldName = await alice.call('POST', '/api/settings', { skin: 'default' });
+  ok('the old "default" name still maps to branded',
+    skinOldName.status === 200 && skinOldName.data.user.skin === 'branded',
+    JSON.stringify(skinOldName.data && skinOldName.data.user && skinOldName.data.user.skin));
+
+  // ---- the public theming surface (holiday themes without a client release)
+  const pubTheme = await fetch(BASE + '/api/theme');
+  const pubJson = await pubTheme.json();
+  ok('the theme endpoint is public and plain JSON', pubTheme.status === 200 &&
+    pubJson.ok === true && typeof pubJson.skin === 'string' &&
+    Array.isArray(pubJson.skins) && pubJson.skins.length >= 15,
+    String(pubTheme.status) + ' ' + JSON.stringify(pubJson.skins && pubJson.skins.length));
+  ok('every template reports its default effect',
+    (pubJson.skins || []).every(s => s.id && typeof s.effect === 'string'),
+    JSON.stringify((pubJson.skins || []).filter(s => !s.effect).map(s => s.id)));
+  ok('the holiday templates are in the catalogue',
+    ['matrix', 'cyberpunk', 'newyear', 'autumn', 'horror']
+      .every(id => (pubJson.skins || []).some(s => s.id === id)), '');
+  // a launcher with no session must not see anything private
+  ok('the public theme leaks no user data',
+    pubJson.users === undefined && pubJson.tokens === undefined && pubJson.secret === undefined,
+    JSON.stringify(Object.keys(pubJson)));
+
+  // ---- an effect is a separate axis from the template
+  const fxSet = await alice.call('POST', '/api/settings', { effect: 'vhs' });
+  ok('an effect can be chosen on its own',
+    fxSet.status === 200 && fxSet.data.user.effect === 'vhs',
+    JSON.stringify(fxSet.data && fxSet.data.user && fxSet.data.user.effect));
+  const fxBack = await alice.call('GET', '/api/settings');
+  ok('the effect is remembered on the account', fxBack.data.user.effect === 'vhs',
+    JSON.stringify(fxBack.data.user.effect));
+  const fxBad = await alice.call('POST', '/api/settings', { effect: '"><script>' });
+  ok('an effect id cannot carry markup', fxBad.status === 400, String(fxBad.status));
+  const fxReset = await alice.call('POST', '/api/settings', { effect: 'none' });
+  ok('an effect can be turned off', fxReset.status === 200 && fxReset.data.user.effect === 'none',
+    JSON.stringify(fxReset.data && fxReset.data.user && fxReset.data.user.effect));
 
   // ---- live notifications and per-type mutes
   const baseNotif = await alice.call('GET', '/api/notifications?limit=1');

@@ -111,10 +111,22 @@ namespace Social.Web
             }
             if (ctx.Body.ContainsKey("skin"))
             {
+                // a locked instance means only staff may restyle it: the setting
+                // exists so a deployment can keep one consistent look
+                if (_cfg.SkinLocked && !Perms.SeesAll(ctx.User))
+                    throw new ApiException(403, "skin-locked", "The template is fixed by the administrator");
                 string skin = BodyStr(ctx, "skin", "").Trim().ToLowerInvariant();
-                if (Config.NormalizeSkin(skin) != skin && skin != "")
+                if (skin != "" && Config.NormalizeSkin(skin) != skin && skin != "default")
                     throw new ApiException(400, "bad-skin", "Unknown template");
-                ctx.User.Skin = skin;
+                // empty means "follow the site default", which is what a new account has
+                ctx.User.Skin = skin.Length == 0 ? "" : Config.NormalizeSkin(skin);
+            }
+            if (ctx.Body.ContainsKey("effect"))
+            {
+                string fx = BodyStr(ctx, "effect", "").Trim().ToLowerInvariant();
+                if (fx.Length > 24 || (fx.Length > 0 && !Config.IsSafeToken(fx)))
+                    throw new ApiException(400, "bad-effect", "Unknown effect");
+                ctx.User.Effect = fx;
             }
             if (ctx.Body.ContainsKey("lang"))
             {
@@ -2104,6 +2116,41 @@ namespace Social.Web
             b.Prop("online", _store.CountOnline(_cfg.OnlineWindowSec));
             b.Prop("total", _store.CountUsers());
             SendOk(ctx, b);
+        }
+
+        /// <summary>
+        /// The public theming surface: what template is in force right now, what the
+        /// instance offers, and the holiday calendar. Deliberately unauthenticated
+        /// and plain JSON, so a launcher, a widget, a kiosk or a deployment script
+        /// can ask "what does this instance look like today" without a session.
+        ///
+        ///   GET /api/theme
+        ///   {"ok":true,"skin":"horror","configured":"branded","active":"horror",
+        ///    "locked":false,"effects":true,"schedule":"...","skins":[{id,effect}]}
+        /// </summary>
+        private void HandleTheme(HttpRequest req, HttpResponse resp)
+        {
+            JsonBuilder b = new JsonBuilder(1024);
+            b.BeginObject();
+            b.Prop("ok", true);
+            b.Prop("skin", _cfg.EffectiveSkin());
+            b.Prop("configured", _cfg.Skin);
+            b.Prop("locked", _cfg.SkinLocked);
+            b.Prop("effects", _cfg.EffectsEnabled);
+            b.Prop("schedule", _cfg.SkinSchedule);
+            // non-empty only while a holiday range is actually in force
+            b.Prop("active", Config.ScheduledSkin(_cfg.SkinSchedule, DateTime.Now));
+            b.Name("skins").BeginArray();
+            for (int i = 0; i < Config.Skins.Length; i++)
+            {
+                b.BeginObject();
+                b.Prop("id", Config.Skins[i]);
+                b.Prop("effect", Config.DefaultEffect(Config.Skins[i]));
+                b.EndObject();
+            }
+            b.EndArray();
+            b.EndObject();
+            _web.SendJson(req, resp, 200, b.ToString());
         }
 
         private void HandleStats(ApiCtx ctx)

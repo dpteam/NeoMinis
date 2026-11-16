@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -5111,6 +5111,7 @@ namespace Social.Core
             d["birthday"] = u.Birthday; d["gender"] = u.Gender; d["website"] = u.Website; d["avatar"] = u.Avatar;
             d["theme"] = u.Theme; d["lang"] = u.Lang; d["sound"] = u.Sound; d["privacy"] = u.Privacy;
             if (!string.IsNullOrEmpty(u.Skin)) d["skin"] = u.Skin;
+            if (!string.IsNullOrEmpty(u.Effect)) d["effect"] = u.Effect;
             d["hideOnline"] = u.HideOnline; d["banned"] = u.Banned; d["banReason"] = u.BanReason;
             d["bannedUntil"] = u.BannedUntil; d["warnings"] = u.Warnings; d["karma"] = u.Karma;
             d["email"] = u.Email; d["ipHash"] = u.IpHash; d["loginCount"] = u.LoginCount;
@@ -5153,6 +5154,7 @@ namespace Social.Core
             u.Avatar = Json.GetString(d, "avatar", "");
             u.Theme = Json.GetString(d, "theme", "");
             u.Skin = Json.GetString(d, "skin", "");
+            u.Effect = Json.GetString(d, "effect", "");
             u.Lang = Json.GetString(d, "lang", "");
             u.Sound = Json.GetBool(d, "sound", true);
             u.Privacy = Json.GetString(d, "privacy", "public");
