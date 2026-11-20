@@ -2250,6 +2250,36 @@ async function main() {
     const policyNow = await admin.call('GET', '/api/admin/settings');
     ok('an unknown ICE policy falls back to "all"', badPolicy.status === 200 &&
       policyNow.data.limits.callIcePolicy === 'all', String(policyNow.data.limits.callIcePolicy));
+
+    // ---- sticker caps round-trip through config.ini, and a silly value is clamped
+    const capsSave = await admin.call('POST', '/api/admin/settings/save',
+      { ui: { stickerPacksPerUser: 7, stickersPerPack: 33, maxStickerKB: 256 } });
+    ok('sticker caps can be saved', capsSave.status === 200, String(capsSave.status));
+    const capsNow = await admin.call('GET', '/api/admin/settings');
+    ok('sticker caps come back as saved', capsNow.data.ui.stickerPacksPerUser === 7 &&
+      capsNow.data.ui.stickersPerPack === 33 && capsNow.data.ui.maxStickerKB === 256,
+      JSON.stringify(capsNow.data.ui && {
+        p: capsNow.data.ui.stickerPacksPerUser, s: capsNow.data.ui.stickersPerPack,
+        k: capsNow.data.ui.maxStickerKB
+      }));
+    const silly = await admin.call('POST', '/api/admin/settings/save',
+      { ui: { stickersPerPack: 99999, maxStickerKB: 1 } });
+    const sillyNow = await admin.call('GET', '/api/admin/settings');
+    ok('a silly sticker cap is clamped, not stored',
+      silly.status === 200 && sillyNow.data.ui.stickersPerPack === 300 &&
+      sillyNow.data.ui.maxStickerKB === 16,
+      JSON.stringify({ s: sillyNow.data.ui.stickersPerPack, k: sillyNow.data.ui.maxStickerKB }));
+    // put the shipped values back so the rest of the suite sees a normal site
+    await admin.call('POST', '/api/admin/settings/save',
+      { ui: { stickerPacksPerUser: 10, stickersPerPack: 60, maxStickerKB: 512 } });
+    // and the account-delete switch is a real setting
+    const delOff = await admin.call('POST', '/api/admin/settings/save',
+      { site: { allowAccountDelete: false } });
+    ok('the account-delete switch can be turned off', delOff.status === 200, String(delOff.status));
+    const delOffNow = await admin.call('GET', '/api/admin/settings');
+    ok('the account-delete switch reads back', delOffNow.data.site.allowAccountDelete === false,
+      JSON.stringify(delOffNow.data.site.allowAccountDelete));
+    await admin.call('POST', '/api/admin/settings/save', { site: { allowAccountDelete: true } });
   }
 
   // ---- third-party apps
