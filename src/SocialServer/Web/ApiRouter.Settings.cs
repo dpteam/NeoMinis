@@ -35,6 +35,7 @@ namespace Social.Web
                 .Prop("kioskMode", _cfg.KioskMode)
                 .Prop("kioskIdleSec", _cfg.KioskIdleSec)
                 .Prop("firstUserAdmin", _cfg.FirstUserAdmin)
+                .Prop("allowAccountDelete", _cfg.AllowAccountDelete)
                 .EndObject();
 
             b.Name("security").BeginObject()
@@ -122,6 +123,11 @@ namespace Social.Web
                 .Prop("gamesReady", RufflePresent())
                 .Prop("storiesEnabled", _cfg.StoriesEnabled)
                 .Prop("stickersEnabled", _cfg.StickersEnabled)
+                .Prop("customStickers", _cfg.CustomStickers)
+                .Prop("stickersVipOnly", _cfg.StickersVipOnly)
+                .Prop("stickerPacksPerUser", _cfg.StickerPacksPerUser)
+                .Prop("stickersPerPack", _cfg.StickersPerPack)
+                .Prop("maxStickerKB", _cfg.MaxStickerKB)
                 .Prop("skin", _cfg.Skin)
                 .Prop("skinLocked", _cfg.SkinLocked)
                 .Prop("skinSchedule", _cfg.SkinSchedule)
@@ -252,6 +258,11 @@ namespace Social.Web
                 {
                     _cfg.FirstUserAdmin = Json.GetBool(site, "firstUserAdmin", _cfg.FirstUserAdmin);
                     _cfg.SetIniValue("site", "firstUserAdmin", _cfg.FirstUserAdmin ? "true" : "false");
+                }
+                if (site.ContainsKey("allowAccountDelete"))
+                {
+                    _cfg.AllowAccountDelete = Json.GetBool(site, "allowAccountDelete", _cfg.AllowAccountDelete);
+                    _cfg.SetIniValue("site", "allowAccountDelete", _cfg.AllowAccountDelete ? "true" : "false");
                 }
                 if (site.ContainsKey("guestMode"))
                 {
@@ -491,6 +502,40 @@ namespace Social.Web
                 {
                     _cfg.StickersEnabled = Json.GetBool(ui, "stickersEnabled", _cfg.StickersEnabled);
                     _cfg.SetIniValue("ui", "stickersEnabled", _cfg.StickersEnabled ? "true" : "false");
+                }
+                if (ui.ContainsKey("customStickers"))
+                {
+                    _cfg.CustomStickers = Json.GetBool(ui, "customStickers", _cfg.CustomStickers);
+                    _cfg.SetIniValue("ui", "customStickers", _cfg.CustomStickers ? "true" : "false");
+                }
+                if (ui.ContainsKey("stickersVipOnly"))
+                {
+                    _cfg.StickersVipOnly = Json.GetBool(ui, "stickersVipOnly", _cfg.StickersVipOnly);
+                    _cfg.SetIniValue("ui", "stickersVipOnly", _cfg.StickersVipOnly ? "true" : "false");
+                }
+                if (ui.ContainsKey("stickerPacksPerUser"))
+                {
+                    int v = Json.GetInt(ui, "stickerPacksPerUser", _cfg.StickerPacksPerUser);
+                    if (v < 0) v = 0;
+                    if (v > 100) v = 100;
+                    _cfg.StickerPacksPerUser = v;
+                    _cfg.SetIniValue("ui", "stickerPacksPerUser", v.ToString(CultureInfo.InvariantCulture));
+                }
+                if (ui.ContainsKey("stickersPerPack"))
+                {
+                    int v = Json.GetInt(ui, "stickersPerPack", _cfg.StickersPerPack);
+                    if (v < 1) v = 1;
+                    if (v > 300) v = 300;
+                    _cfg.StickersPerPack = v;
+                    _cfg.SetIniValue("ui", "stickersPerPack", v.ToString(CultureInfo.InvariantCulture));
+                }
+                if (ui.ContainsKey("maxStickerKB"))
+                {
+                    int v = Json.GetInt(ui, "maxStickerKB", _cfg.MaxStickerKB);
+                    if (v < 16) v = 16;
+                    if (v > 4096) v = 4096;
+                    _cfg.MaxStickerKB = v;
+                    _cfg.SetIniValue("ui", "maxStickerKB", v.ToString(CultureInfo.InvariantCulture));
                 }
                 if (ui.ContainsKey("skin"))
                 {

@@ -41,6 +41,7 @@ namespace Social.Core
                 : kind == "message" ? "messages"
                 : kind == "messagevideo" ? "messages"
                 : kind == "voice" ? "messages"
+                : kind == "sticker" ? "stickers"
                 : kind == "story" || kind == "storyvideo" ? "stories"
                 : "posts";
             string dir = Path.Combine(_cfg.MediaDir, sub);

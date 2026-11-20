@@ -231,8 +231,51 @@ namespace Social.Web
             Log.Info("AUTH", "password changed for @" + ctx.User.Username);
         }
 
-        // ============================================================== feed
+        /// <summary>
+        /// Deletes the caller's own account. This is the real thing, not a soft
+        /// delete: the posts, messages, comments and stickers go with it, and the
+        /// media files those records owned are removed from disk. A "delete" that
+        /// leaves everything readable under the old name is not what the person
+        /// asked for.
+        ///
+        /// It needs the password (the same verifier the login uses), because an
+        /// open session on a shared computer must not be enough to erase an account,
+        /// and it refuses to remove the last administrator.
+        /// </summary>
+        private void HandleAccountDelete(ApiCtx ctx)
+        {
+            if (!_cfg.AllowAccountDelete)
+                throw new ApiException(403, "delete-off", "Deleting your own account is disabled on this site");
+            if (ctx.Session != null && ctx.Session.IsGuest)
+                throw new ApiException(403, "guest", "A guest session has no account to delete");
 
+            string verifier = BodyStr(ctx, "verifier", "");
+            if (!Crypto.IsHex(verifier, 64, 64))
+                throw new ApiException(400, "bad-verifier", "Bad verifier");
+            if (!_store.CheckVerifier(ctx.User, verifier))
+                throw new ApiException(403, "bad-password", "Current password is wrong");
+
+            if (ctx.User.Role == "admin" && _cfg.ProtectLastAdmin && _store.CountAdmins() <= 1)
+                throw new ApiException(400, "last-admin", "The last administrator cannot delete the account");
+
+            string gone = "@" + ctx.User.Username;
+            long id = ctx.User.Id;
+            // the files the records own, collected before the records are gone
+            List<string> files = _store.MediaFilesOf(id);
+            int records = _store.HardDeleteUser(id);
+            _sessions.RemoveForUser(id, null);
+            for (int i = 0; i < files.Count; i++) _media.Delete(files[i]);
+            Log.Warn("USER", gone + " deleted their own account (" + records + " records, " + files.Count + " files)");
+
+            JsonBuilder b = new JsonBuilder(128);
+            b.BeginObject();
+            b.Prop("deleted", true);
+            b.Prop("records", records);
+            b.Prop("files", files.Count);
+            SendOk(ctx, b);
+        }
+
+        // ============================================================== feed
         private void HandleFeed(ApiCtx ctx)
         {
             string tab = GetQuery(ctx.Query, "tab");
@@ -1483,15 +1526,22 @@ namespace Social.Web
         // =========================================================== messages
 
         /// <summary>
-        /// The built-in sticker catalogue. It is static data that ships with the site,
-        /// so this is a plain read: the client asks once and caches it, and the
-        /// server never has to look at the filesystem.
+        /// The sticker catalogue: the built-in packs plus every uploaded pack this
+        /// person may use (their own first, then the shared ones). Built-in ids are
+        /// "faces/smile"; uploaded ones are "u&lt;pack&gt;/&lt;sticker&gt;", and the client
+        /// only ever sees the finished url, so it needs no knowledge of the layout.
         /// </summary>
         private void HandleStickers(ApiCtx ctx)
         {
             JsonBuilder b = new JsonBuilder(2048);
             b.BeginObject();
             b.Prop("enabled", _cfg.StickersEnabled);
+            b.Prop("customEnabled", _cfg.CustomStickers);
+            b.Prop("vipOnly", _cfg.StickersVipOnly);
+            b.Prop("canCreate", CanManageStickers(ctx.User));
+            b.Prop("maxPacks", _cfg.StickerPacksPerUser);
+            b.Prop("maxPerPack", _cfg.StickersPerPack);
+            b.Prop("maxKb", _cfg.MaxStickerKB);
             b.Name("packs").BeginArray();
             StickerPack[] packs = Stickers.Packs;
             for (int i = 0; i < packs.Length; i++)
@@ -1511,8 +1561,169 @@ namespace Social.Web
                 b.EndArray();
                 b.EndObject();
             }
+            // uploaded packs
+            List<StickerPackRec> mine = _store.StickerPacksFor(ctx.User.Id);
+            for (int i = 0; i < mine.Count; i++)
+            {
+                StickerPackRec p = mine[i];
+                b.BeginObject();
+                b.Prop("id", "u" + p.Id.ToString(CultureInfo.InvariantCulture));
+                b.Prop("name", p.Name);
+                b.Prop("mine", p.Owner == ctx.User.Id);
+                b.Prop("shared", p.Shared);
+                b.Prop("owner", p.Owner);
+                b.Name("stickers").BeginArray();
+                List<StickerRec> list = _store.StickersOf(p.Id);
+                for (int k = 0; k < list.Count; k++)
+                {
+                    b.BeginObject();
+                    b.Prop("id", Stickers.CustomId(p.Id, list[k].Id));
+                    b.Prop("url", list[k].File);
+                    b.EndObject();
+                }
+                b.EndArray();
+                b.EndObject();
+            }
             b.EndArray();
             SendOk(ctx, b);
+        }
+
+        /// <summary>
+        /// Whether this person may create packs at all. VIP is the gate (that is the
+        /// point of the feature being a perk), an administrator always may, and the
+        /// site switch can open it to everybody.
+        /// </summary>
+        private bool CanManageStickers(User u)
+        {
+            if (u == null || !_cfg.CustomStickers) return false;
+            if (!_cfg.StickersVipOnly) return true;
+            return u.Vip || u.Role == "admin";
+        }
+
+        private void RequireStickerAuthor(ApiCtx ctx)
+        {
+            if (!_cfg.CustomStickers) throw new ApiException(403, "stickers-off", "Custom sticker packs are disabled");
+            if (!CanManageStickers(ctx.User))
+                throw new ApiException(403, "vip-only", "Only VIP members can make sticker packs");
+        }
+
+        private void HandleStickerPackCreate(ApiCtx ctx)
+        {
+            RequireStickerAuthor(ctx);
+            string error;
+            StickerPackRec p = _store.CreateStickerPack(ctx.User.Id, BodyStr(ctx, "name", ""),
+                _cfg.StickerPacksPerUser, out error);
+            if (p == null)
+            {
+                if (error == "too-many-packs")
+                    throw new ApiException(400, "too-many-packs", "You already have " + _cfg.StickerPacksPerUser + " packs");
+                throw new ApiException(400, error, "Give the pack a name");
+            }
+            Log.Info("STICKERS", "@" + ctx.User.Username + " created pack #" + p.Id + " \"" + p.Name + "\"");
+            JsonBuilder b = new JsonBuilder(256);
+            b.BeginObject();
+            b.Prop("id", "u" + p.Id.ToString(CultureInfo.InvariantCulture));
+            b.Prop("name", p.Name);
+            b.Prop("mine", true);
+            b.Prop("shared", false);
+            SendOk(ctx, b);
+        }
+
+        private void HandleStickerPackUpdate(ApiCtx ctx)
+        {
+            RequireStickerAuthor(ctx);
+            long id = ParsePackId(BodyStr(ctx, "id", ""));
+            if (id <= 0) throw new ApiException(400, "bad-pack", "Unknown pack");
+            bool changed = false;
+            if (ctx.Body.ContainsKey("name"))
+                changed = _store.RenameStickerPack(id, ctx.User.Id, BodyStr(ctx, "name", ""));
+            if (ctx.Body.ContainsKey("shared"))
+                changed = _store.SetStickerPackShared(id, ctx.User.Id, BodyBool(ctx, "shared", false)) || changed;
+            if (!changed) throw new ApiException(404, "no-pack", "That pack is not yours");
+            StickerPackRec p = _store.FindStickerPack(id);
+            JsonBuilder b = new JsonBuilder(256);
+            b.BeginObject();
+            b.Prop("id", "u" + id.ToString(CultureInfo.InvariantCulture));
+            b.Prop("name", p == null ? "" : p.Name);
+            b.Prop("shared", p != null && p.Shared);
+            SendOk(ctx, b);
+        }
+
+        private void HandleStickerPackDelete(ApiCtx ctx)
+        {
+            RequireStickerAuthor(ctx);
+            long id = ParsePackId(BodyStr(ctx, "id", ""));
+            if (id <= 0) throw new ApiException(400, "bad-pack", "Unknown pack");
+            List<string> files = new List<string>();
+            if (!_store.DeleteStickerPack(id, ctx.User.Id, files))
+                throw new ApiException(404, "no-pack", "That pack is not yours");
+            for (int i = 0; i < files.Count; i++) _media.Delete(files[i]);
+            Log.Info("STICKERS", "@" + ctx.User.Username + " deleted pack #" + id);
+            JsonBuilder b = new JsonBuilder(64);
+            b.BeginObject();
+            b.Prop("ok", true);
+            b.Prop("removed", files.Count);
+            SendOk(ctx, b);
+        }
+
+        private void HandleStickerAdd(ApiCtx ctx)
+        {
+            RequireStickerAuthor(ctx);
+            long packId = ParsePackId(BodyStr(ctx, "pack", ""));
+            if (packId <= 0) throw new ApiException(400, "bad-pack", "Unknown pack");
+            string data = BodyStr(ctx, "image", "");
+            if (string.IsNullOrEmpty(data)) throw new ApiException(400, "empty", "Pick an image");
+
+            string error;
+            string url = _media.SaveDataUrl(data, "sticker", _cfg.MaxStickerKB, out error);
+            if (url == null)
+            {
+                string text = error == "image-too-large"
+                    ? "That sticker is bigger than " + _cfg.MaxStickerKB + " KB"
+                    : "Only PNG, JPEG, GIF or WebP stickers are accepted";
+                throw new ApiException(400, error, text);
+            }
+            StickerRec s = _store.AddSticker(packId, ctx.User.Id, url, _cfg.StickersPerPack, out error);
+            if (s == null)
+            {
+                // the picture was already written; a rejected sticker must not leave a file
+                _media.Delete(url);
+                if (error == "pack-full")
+                    throw new ApiException(400, "pack-full", "A pack holds at most " + _cfg.StickersPerPack + " stickers");
+                throw new ApiException(404, "no-pack", "That pack is not yours");
+            }
+            JsonBuilder b = new JsonBuilder(256);
+            b.BeginObject();
+            b.Prop("id", Stickers.CustomId(packId, s.Id));
+            b.Prop("url", s.File);
+            SendOk(ctx, b);
+        }
+
+        private void HandleStickerRemove(ApiCtx ctx)
+        {
+            RequireStickerAuthor(ctx);
+            long packId, stickerId;
+            if (!Stickers.ParseCustom(BodyStr(ctx, "id", ""), out packId, out stickerId))
+                throw new ApiException(400, "bad-sticker", "Unknown sticker");
+            string file;
+            if (!_store.RemoveSticker(packId, stickerId, ctx.User.Id, out file))
+                throw new ApiException(404, "no-sticker", "That sticker is not yours");
+            _media.Delete(file);
+            JsonBuilder b = new JsonBuilder(64);
+            b.BeginObject();
+            b.Prop("ok", true);
+            SendOk(ctx, b);
+        }
+
+        /// <summary>Accepts "u12" or "12" - the client sends whichever it has.</summary>
+        private static long ParsePackId(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return 0;
+            string v = raw.Trim().ToLowerInvariant();
+            if (v.Length > 0 && v[0] == 'u') v = v.Substring(1);
+            long id;
+            if (!long.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out id)) return 0;
+            return id > 0 ? id : 0;
         }
 
         private void HandleThreads(ApiCtx ctx)
@@ -1600,9 +1811,12 @@ namespace Social.Web
             string audioData = BodyStr(ctx, "audio", "");
             string videoData = BodyStr(ctx, "video", "");
             string fileData = BodyStr(ctx, "file", "");
-            // a sticker is an id from the built-in catalogue, never an upload
-            string sticker = _cfg.StickersEnabled ? Stickers.Normalize(BodyStr(ctx, "sticker", "")) : "";
-            if (!string.IsNullOrEmpty(BodyStr(ctx, "sticker", "")) && sticker.Length == 0)
+            // a sticker is an id from the catalogue (built-in or an uploaded pack),
+            // never an upload itself, so a message stays a few bytes
+            string rawSticker = BodyStr(ctx, "sticker", "");
+            string sticker = _cfg.StickersEnabled && rawSticker.Length > 0
+                ? _store.ResolveSticker(rawSticker, ctx.User.Id) : "";
+            if (rawSticker.Length > 0 && sticker.Length == 0)
                 throw new ApiException(400, "bad-sticker", "That sticker does not exist");
             string fileName = Util.SingleLine(BodyStr(ctx, "fileName", ""), 120);
             int audioSec = (int)BodyLong(ctx, "audioSec", 0);

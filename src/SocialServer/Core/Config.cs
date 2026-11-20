@@ -47,6 +47,10 @@ namespace Social.Core
         public bool KioskMode = false;
         public int KioskIdleSec = 120;
         public bool FirstUserAdmin = true;
+        // Can a signed-in person delete their own account from Settings? This is the
+        // ordinary user's escape hatch, separate from `allowSelfDelete`, which only
+        // decides whether an *administrator* may delete themselves from the board.
+        public bool AllowAccountDelete = true;
         public string Motd = "";
         public string Footer = "";
         public string SupportEmail = "";
@@ -276,6 +280,14 @@ namespace Social.Core
         public bool StoriesEnabled = true;
         // the built-in sticker packs in the chat picker
         public bool StickersEnabled = true;
+        // user-made sticker packs (uploads). VIP only by default, like Telegram's
+        // paid tier - the switch and the caps are here so an operator can open it
+        // to everyone or close it without a rebuild
+        public bool CustomStickers = true;
+        public bool StickersVipOnly = true;
+        public int StickerPacksPerUser = 10;
+        public int StickersPerPack = 60;
+        public int MaxStickerKB = 512;
         // template: branded | aero | metro | paper | terminal | soft | brutal | neon | warm | slate |
         //           matrix | cyberpunk | newyear | autumn | horror
         public string Skin = "branded";
@@ -440,6 +452,7 @@ namespace Social.Core
                     else if (key == "kioskmode") KioskMode = Bool(val, KioskMode);
                     else if (key == "kioskidlesec") KioskIdleSec = Int(val, KioskIdleSec);
                     else if (key == "firstuseradmin") FirstUserAdmin = Bool(val, FirstUserAdmin);
+                    else if (key == "allowaccountdelete") AllowAccountDelete = Bool(val, AllowAccountDelete);
                     else if (key == "motd") Motd = val;
                     else if (key == "footer") Footer = val;
                     else if (key == "supportemail") SupportEmail = val;
@@ -627,6 +640,11 @@ namespace Social.Core
                     else if (key == "gamesenabled") GamesEnabled = Bool(val, GamesEnabled);
                     else if (key == "storiesenabled") StoriesEnabled = Bool(val, StoriesEnabled);
                     else if (key == "stickersenabled") StickersEnabled = Bool(val, StickersEnabled);
+                    else if (key == "customstickers") CustomStickers = Bool(val, CustomStickers);
+                    else if (key == "stickersviponly") StickersVipOnly = Bool(val, StickersVipOnly);
+                    else if (key == "stickerpacksperuser") StickerPacksPerUser = Int(val, StickerPacksPerUser);
+                    else if (key == "stickersperpack") StickersPerPack = Int(val, StickersPerPack);
+                    else if (key == "maxstickerkb") MaxStickerKB = Int(val, MaxStickerKB);
                     else if (key == "skin") Skin = NormalizeSkin(val);
                     else if (key == "skinlocked") SkinLocked = Bool(val, SkinLocked);
                     else if (key == "skinschedule") SkinSchedule = val;

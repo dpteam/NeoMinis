@@ -778,6 +778,8 @@
     var sendBtn = document.getElementById('chat-send');
     // the sticker page of the picker is filled once per conversation
     var stickersLoaded = false;
+    // the catalogue's own metadata (caps, whether the viewer may create packs)
+    var stickerMeta = {};
     state.im.image = '';
     state.im.album = [];
 
@@ -1261,29 +1263,63 @@
         });
     }
 
-    function renderStickers(packs) {
+    function renderStickers(data) {
       if (!stickerPage) return;
+      var packs = (data && data.packs) || [];
+      var canCreate = !!(data && data.canCreate);
+      stickerMeta = data || {};
       var html = '';
       var tabs = '';
       for (var p = 0; p < packs.length; p++) {
+        var pk = packs[p];
         tabs += '<button type="button" class="sticker-tab' + (p === 0 ? ' active' : '') +
-          '" data-pack="' + UI.attr(packs[p].id) + '">' + UI.esc(packs[p].name) + '</button>';
-        html += '<div class="sticker-page' + (p === 0 ? '' : ' hidden') + '" data-pack="' + UI.attr(packs[p].id) + '">';
-        for (var s = 0; s < packs[p].stickers.length; s++) {
-          var st = packs[p].stickers[s];
+          '" data-pack="' + UI.attr(pk.id) + '"' + (pk.mine ? ' title="' + UI.attr(T('stickers.mine')) + '"' : '') +
+          '>' + (pk.mine ? UI.icon('user') + ' ' : '') + UI.esc(pk.name) + '</button>';
+        html += '<div class="sticker-page' + (p === 0 ? '' : ' hidden') + '" data-pack="' + UI.attr(pk.id) + '">';
+        if (pk.mine) html += '<div class="sticker-bar" data-pack="' + UI.attr(pk.id) + '">' +
+          '<button type="button" class="sticker-tool sticker-add" data-pack="' + UI.attr(pk.id) + '">' +
+          UI.icon('plus') + ' ' + T('stickers.add') + '</button>' +
+          '<button type="button" class="sticker-tool sticker-rename" data-pack="' + UI.attr(pk.id) + '" data-name="' +
+          UI.attr(pk.name) + '">' + UI.icon('pen') + '</button>' +
+          '<button type="button" class="sticker-tool sticker-share' + (pk.shared ? ' on' : '') + '" data-pack="' +
+          UI.attr(pk.id) + '" data-shared="' + (pk.shared ? '1' : '0') + '" title="' +
+          UI.attr(pk.shared ? T('stickers.shared') : T('stickers.private')) + '">' +
+          UI.icon(pk.shared ? 'share-nodes' : 'lock') + '</button>' +
+          '<button type="button" class="sticker-tool sticker-del" data-pack="' + UI.attr(pk.id) + '" data-name="' +
+          UI.attr(pk.name) + '" title="' + UI.attr(T('stickers.deletePack')) + '">' + UI.icon('trash') + '</button>' +
+          '</div>';
+        for (var s = 0; s < pk.stickers.length; s++) {
+          var st = pk.stickers[s];
           html += '<button type="button" class="sticker-item" data-sticker="' + UI.attr(st.id) + '" title="' +
-            UI.attr(st.id) + '"><img src="' + UI.attr(UI.safeUrl(st.url)) + '" alt="" loading="lazy"></button>';
+            UI.attr(st.id) + '"><img src="' + UI.attr(UI.safeUrl(st.url)) + '" alt="" loading="lazy">' +
+            (pk.mine ? '<span class="sticker-x" data-sticker="' + UI.attr(st.id) + '" title="' +
+              UI.attr(T('common.delete')) + '">' + UI.icon('xmark') + '</span>' : '') +
+            '</button>';
+        }
+        if (!pk.stickers.length) {
+          html += '<div class="tiny muted" style="grid-column:1/-1;padding:8px">' + T('stickers.empty') + '</div>';
         }
         html += '</div>';
       }
-      stickerPage.innerHTML = '<div class="sticker-tabs">' + tabs + '</div>' + html;
+      if (canCreate) {
+        tabs += '<button type="button" class="sticker-tab sticker-new" title="' + UI.attr(T('stickers.newPack')) + '">' +
+          UI.icon('plus') + '</button>';
+      }
+      stickerPage.innerHTML = '<div class="sticker-tabs">' + tabs + '</div>' + html +
+        (!canCreate && data && data.customEnabled && data.vipOnly
+          ? '<div class="sticker-vip-hint">' + UI.icon('crown') + ' ' + T('stickers.vipHint') + '</div>'
+          : '') +
+        '<input type="file" id="sticker-file" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden">';
+
       var tabBtns = stickerPage.querySelectorAll('.sticker-tab');
       for (var t = 0; t < tabBtns.length; t++) {
         tabBtns[t].addEventListener('click', function () {
+          if (this.className.indexOf('sticker-new') >= 0) { newStickerPack(); return; }
           var pack = this.getAttribute('data-pack');
           var all = stickerPage.querySelectorAll('.sticker-tab');
           for (var a = 0; a < all.length; a++)
-            all[a].className = 'sticker-tab' + (all[a].getAttribute('data-pack') === pack ? ' active' : '');
+            all[a].className = 'sticker-tab' + (all[a].getAttribute('data-pack') === pack ? ' active' : '') +
+              (all[a].className.indexOf('sticker-new') >= 0 ? ' sticker-new' : '');
           var pages = stickerPage.querySelectorAll('.sticker-page');
           for (var b = 0; b < pages.length; b++)
             pages[b].className = 'sticker-page' + (pages[b].getAttribute('data-pack') === pack ? '' : ' hidden');
@@ -1291,15 +1327,129 @@
       }
       var items = stickerPage.querySelectorAll('.sticker-item');
       for (var i = 0; i < items.length; i++) {
-        items[i].addEventListener('click', function () {
+        items[i].addEventListener('click', function (e) {
+          var x = e.target && e.target.closest ? e.target.closest('.sticker-x') : null;
+          if (x) { e.stopPropagation(); removeSticker(x.getAttribute('data-sticker')); return; }
           sendSticker(this.getAttribute('data-sticker'));
           emojiPop.className = 'emoji-pop hidden';
         });
       }
+      bindStickerTools();
     }
 
-    function loadStickers() {
+    /// <summary>
+    /// The manage row above an own pack: add a picture, rename, share, delete.
+    /// Kept in one place because every one of them has to reload the catalogue
+    /// afterwards, and the picker is rebuilt from the server's answer - never
+    /// patched locally, so what you see is what the server actually stored.
+    /// </summary>
+    function bindStickerTools() {
+      var adds = stickerPage.querySelectorAll('.sticker-add');
+      for (var a = 0; a < adds.length; a++) {
+        adds[a].addEventListener('click', function () {
+          var pack = this.getAttribute('data-pack');
+          var input = document.getElementById('sticker-file');
+          if (!input) return;
+          input.setAttribute('data-pack', pack);
+          input.click();
+        });
+      }
+      var file = document.getElementById('sticker-file');
+      if (file) file.addEventListener('change', function () {
+        var f = this.files && this.files[0];
+        var pack = this.getAttribute('data-pack');
+        this.value = '';
+        if (!f) return;
+        var kb = (stickerMeta && stickerMeta.maxKb) || 512;
+        UI.fileToDataUrl(f, kb * 1024, function (err, dataUrl) {
+          if (err) {
+            UI.toast(err === 'too-large' ? T('stickers.tooBig', kb) : T('stickers.badImage'), 'err');
+            return;
+          }
+          Api.request('POST', '/api/stickers/add', { pack: pack, image: dataUrl }, function (e2, d2) {
+            if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+            UI.toast(T('stickers.added'), 'ok');
+            SoundFX.play('success');
+            loadStickers(true);
+          });
+        });
+      });
+
+      var renames = stickerPage.querySelectorAll('.sticker-rename');
+      for (var r = 0; r < renames.length; r++) {
+        renames[r].addEventListener('click', function () {
+          var pack = this.getAttribute('data-pack');
+          var name = this.getAttribute('data-name');
+          UI.prompt({ title: T('stickers.renamePack'), label: T('stickers.packName'), value: name,
+            maxlength: 40, icon: 'pen' }, function (v) {
+            if (v === null) return;
+            Api.request('POST', '/api/stickers/pack/update', { id: pack, name: v }, function (e2) {
+              if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+              loadStickers(true);
+            });
+          });
+        });
+      }
+
+      var shares = stickerPage.querySelectorAll('.sticker-share');
+      for (var sh = 0; sh < shares.length; sh++) {
+        shares[sh].addEventListener('click', function () {
+          var pack = this.getAttribute('data-pack');
+          var on = this.getAttribute('data-shared') !== '1';
+          Api.request('POST', '/api/stickers/pack/update', { id: pack, shared: on }, function (e2) {
+            if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+            UI.toast(on ? T('stickers.nowShared') : T('stickers.nowPrivate'), 'ok');
+            loadStickers(true);
+          });
+        });
+      }
+
+      var dels = stickerPage.querySelectorAll('.sticker-del');
+      for (var d = 0; d < dels.length; d++) {
+        dels[d].addEventListener('click', function () {
+          var pack = this.getAttribute('data-pack');
+          var name = this.getAttribute('data-name');
+          UI.confirm(T('stickers.deletePack'), T('stickers.deletePackHint', name), T('common.delete'), function () {
+            Api.request('POST', '/api/stickers/pack/delete', { id: pack }, function (e2) {
+              if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+              UI.toast(T('stickers.packDeleted'), 'ok');
+              loadStickers(true);
+            });
+          });
+        });
+      }
+    }
+
+    function newStickerPack() {
+      UI.prompt({ title: T('stickers.newPack'), label: T('stickers.packName'),
+        placeholder: T('stickers.packNameHint'), maxlength: 40, icon: 'icons' }, function (v) {
+        if (v === null || !String(v).trim()) return;
+        Api.request('POST', '/api/stickers/pack', { name: v }, function (err, data) {
+          if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+          UI.toast(T('stickers.packCreated'), 'ok');
+          SoundFX.play('success');
+          loadStickers(true);
+          // open the new pack straight away: it is empty and waiting for pictures
+          setTimeout(function () {
+            var btn = stickerPage.querySelector('.sticker-tab[data-pack="' + data.id + '"]');
+            if (btn) btn.click();
+          }, 300);
+        });
+      });
+    }
+
+    function removeSticker(id) {
+      UI.confirm(T('common.delete'), T('stickers.removeStickerHint'), T('common.delete'), function () {
+        Api.request('POST', '/api/stickers/remove', { id: id }, function (err) {
+          if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+          loadStickers(true);
+        });
+      });
+    }
+
+    function loadStickers(force) {
       if (!stickerPage) return;
+      if (stickersLoaded && !force) return;
       stickerPage.innerHTML = '<div class="center" style="padding:14px">' + UI.spinner() + '</div>';
       Api.request('GET', '/api/stickers', null, function (err, data) {
         if (err) {
@@ -1307,7 +1457,7 @@
           return;
         }
         stickersLoaded = true;
-        renderStickers((data && data.packs) || []);
+        renderStickers(data || {});
       });
     }
 
@@ -3440,6 +3590,17 @@
         '<div class="tiny muted" style="margin-bottom:8px">@' + UI.esc(u.username) + ' · ' + T('profile.joined') + ' ' + UI.formatDate(u.created) + '</div>' +
         '<button class="btn btn-danger" id="logout-2">' + UI.icon('right-from-bracket') + ' ' + T('settings.logout') + '</button></div>';
 
+      // ---- delete account: the one action that cannot be undone, so it gets its
+      // own block, its own warning, and a password. Hiding it in a menu would be
+      // the dark pattern; putting it next to "log out" would be the other one.
+      if (state.site.allowAccountDelete !== false) {
+        pAccount += '<div class="settings-block danger-zone"><h3>' + UI.icon('triangle-exclamation') + ' ' +
+          T('settings.dangerZone') + '</h3>' +
+          '<div class="tiny muted" style="margin-bottom:8px">' + T('settings.deleteAccountHint') + '</div>' +
+          '<button class="btn btn-danger" id="delete-account">' + UI.icon('trash') + ' ' + T('settings.deleteAccount') + '</button>' +
+          '</div>';
+      }
+
       // ---- assembly: a tab strip, then one panel at a time
       var tabs = [
         { id: 'profile', icon: 'id-card', label: T('settings.tabProfile'), body: pProfile },
@@ -3759,6 +3920,32 @@
 
       var lo = document.getElementById('logout-2');
       if (lo) lo.addEventListener('click', App.doLogout);
+
+      var del = document.getElementById('delete-account');
+      if (del) del.addEventListener('click', function () {
+        // Two steps on purpose: a confirm, then the password. The server checks the
+        // password itself - an open session must not be enough to erase an account.
+        UI.confirm(T('settings.deleteAccount'), T('settings.deleteAccountConfirm'),
+          T('common.continue'), function () {
+            UI.prompt({
+              title: T('settings.deleteAccount'),
+              label: T('settings.deleteAccountPassword'),
+              icon: 'key', maxlength: 200, ok: T('settings.deleteAccountFinal')
+            }, function (pw) {
+              if (pw === null) return;
+              if (!pw) { UI.toast(T('auth.passwordShort'), 'err'); return; }
+              var iter = (Api.hs && Api.hs.kdfIterations) || 12000;
+              var verifier = DptCrypto.deriveVerifier(pw, state.user.username, iter);
+              Api.request('POST', '/api/account/delete', { verifier: verifier }, function (err) {
+                if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+                Api.clearSession();
+                state.authed = false;
+                UI.toast(T('settings.deleteAccountDone'), 'ok');
+                App.renderAuth('login');
+              });
+            });
+          }, true);
+      });
     });
   };
 
@@ -4635,6 +4822,8 @@
         check('cfg-invite', T('admin.inviteOnly'), s.inviteOnly) +
         field('cfg-perip', T('admin.accountsPerIp'), s.accountsPerIp, 'number', ' min="0" max="100"') +
         check('cfg-firstadmin', T('admin.firstUserAdmin'), s.firstUserAdmin) +
+        check('cfg-accountdelete', T('admin.allowAccountDelete'), s.allowAccountDelete !== false) +
+        '<div class="hint" style="margin:-4px 0 8px">' + T('admin.allowAccountDeleteHint') + '</div>' +
         '<hr>' +
         check('cfg-guest', T('admin.guestMode'), s.guestMode) +
         field('cfg-guestpass', T('admin.guestPassword'), s.guestPassword) +
@@ -4754,6 +4943,14 @@
         check('cfg-games', T('admin.gamesEnabled'), ui.gamesEnabled) +
         check('cfg-stories', T('admin.storiesEnabled'), ui.storiesEnabled) +
         check('cfg-stickers', T('admin.stickersEnabled'), ui.stickersEnabled !== false) +
+        check('cfg-customstickers', T('admin.customStickers'), ui.customStickers !== false) +
+        check('cfg-stickervip', T('admin.stickersVipOnly'), ui.stickersVipOnly !== false) +
+        '<div class="inline-fields">' +
+        field('cfg-stickerpacks', T('admin.stickerPacksPerUser'), ui.stickerPacksPerUser, 'number', ' min="0" max="100"') +
+        field('cfg-stickersperpack', T('admin.stickersPerPack'), ui.stickersPerPack, 'number', ' min="1" max="300"') +
+        field('cfg-stickerkb', T('admin.maxStickerKB'), ui.maxStickerKB, 'number', ' min="16" max="4096"') +
+        '</div>' +
+        '<div class="hint" style="margin:-4px 0 8px">' + T('admin.stickersHint') + '</div>' +
         select('cfg-skin', T('admin.skin'), (function () {
           var list = UI.skinList(), opts = [];
           for (var q = 0; q < list.length; q++) opts.push([list[q], T('skin.' + list[q])]);
@@ -4820,6 +5017,7 @@
             inviteOnly: document.getElementById('cfg-invite').checked,
             accountsPerIp: Number(App.val('cfg-perip')),
             firstUserAdmin: document.getElementById('cfg-firstadmin').checked,
+            allowAccountDelete: document.getElementById('cfg-accountdelete').checked,
             guestMode: document.getElementById('cfg-guest').checked,
             guestPassword: App.val('cfg-guestpass'),
             kioskMode: document.getElementById('cfg-kiosk').checked,
@@ -4898,6 +5096,11 @@
             gamesEnabled: document.getElementById('cfg-games').checked,
             storiesEnabled: document.getElementById('cfg-stories').checked,
             stickersEnabled: document.getElementById('cfg-stickers').checked,
+            customStickers: document.getElementById('cfg-customstickers').checked,
+            stickersVipOnly: document.getElementById('cfg-stickervip').checked,
+            stickerPacksPerUser: Number(App.val('cfg-stickerpacks')),
+            stickersPerPack: Number(App.val('cfg-stickersperpack')),
+            maxStickerKB: Number(App.val('cfg-stickerkb')),
             skin: App.val('cfg-skin'),
             skinLocked: document.getElementById('cfg-skinlock').checked,
             skinSchedule: App.val('cfg-skinschedule'),

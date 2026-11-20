@@ -309,9 +309,11 @@ namespace Social.Web
             }
             if (!string.IsNullOrEmpty(m.Sticker))
             {
-                // the id and the url, so a client never has to know the folder layout
+                // the id and the url, so a client never has to know the folder layout.
+                // The url goes through the store because an uploaded sticker lives in
+                // a pack that may have been deleted or made private since.
                 b.Prop("sticker", m.Sticker);
-                b.Prop("stickerUrl", Stickers.Url(m.Sticker));
+                b.Prop("stickerUrl", _store.StickerUrl(m.Sticker, viewer == null ? 0 : viewer.Id));
             }
             b.Prop("created", Util.Iso(m.Created));
             b.Prop("read", m.Read);

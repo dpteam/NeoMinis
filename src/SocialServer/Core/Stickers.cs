@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace Social.Core
 {
@@ -86,6 +87,36 @@ namespace Social.Core
             string v = Normalize(sticker);
             if (v.Length == 0) return "";
             return "/assets/stickers/" + v + ".svg";
+        }
+
+        /// <summary>
+        /// Recognises an uploaded sticker id: <c>u&lt;pack&gt;/&lt;sticker&gt;</c>, both
+        /// numeric. The "u" prefix keeps the two namespaces apart, so a user pack can
+        /// never shadow a built-in one and an id is unambiguous in a message.
+        /// </summary>
+        public static bool ParseCustom(string raw, out long packId, out long stickerId)
+        {
+            packId = 0;
+            stickerId = 0;
+            if (string.IsNullOrEmpty(raw)) return false;
+            string v = raw.Trim().ToLowerInvariant();
+            // the shortest possible id is "u1/1" - four characters, not five
+            if (v.Length < 4 || v[0] != 'u') return false;
+            int slash = v.IndexOf('/');
+            if (slash <= 1 || slash == v.Length - 1) return false;
+            string packPart = v.Substring(1, slash - 1);
+            string itemPart = v.Substring(slash + 1);
+            for (int i = 0; i < packPart.Length; i++) if (packPart[i] < '0' || packPart[i] > '9') return false;
+            for (int i = 0; i < itemPart.Length; i++) if (itemPart[i] < '0' || itemPart[i] > '9') return false;
+            return long.TryParse(packPart, out packId) && long.TryParse(itemPart, out stickerId) &&
+                   packId > 0 && stickerId > 0;
+        }
+
+        /// <summary>The id a custom sticker is stored under.</summary>
+        public static string CustomId(long packId, long stickerId)
+        {
+            return "u" + packId.ToString(CultureInfo.InvariantCulture) + "/" +
+                   stickerId.ToString(CultureInfo.InvariantCulture);
         }
     }
 }

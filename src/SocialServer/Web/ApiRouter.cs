@@ -256,6 +256,14 @@ namespace Social.Web
                 .Prop("giftsEnabled", _cfg.GiftsEnabled)
                 .Prop("gamesEnabled", GamesAvailable())
                 .Prop("stickersEnabled", _cfg.StickersEnabled)
+                // custom packs: whether the feature is on, whether it is a VIP perk,
+                // and the caps - the client shows the right state without guessing
+                .Prop("customStickers", _cfg.CustomStickers)
+                .Prop("stickersVipOnly", _cfg.StickersVipOnly)
+                .Prop("stickerPacksPerUser", _cfg.StickerPacksPerUser)
+                .Prop("stickersPerPack", _cfg.StickersPerPack)
+                .Prop("maxStickerKB", _cfg.MaxStickerKB)
+                .Prop("allowAccountDelete", _cfg.AllowAccountDelete)
                 .Prop("maxGameKB", _cfg.MaxGameKB)
                 .Prop("maxGameFiles", _cfg.MaxGameFiles)
                 .Prop("storiesEnabled", _cfg.StoriesEnabled)
@@ -805,6 +813,7 @@ namespace Social.Web
             if (r == "logout") { RequireMethod(m, "POST"); HandleLogout(ctx); return; }
             if (r == "settings") { HandleSettings(ctx); return; }
             if (r == "password") { RequireMethod(m, "POST"); HandlePassword(ctx); return; }
+            if (r == "account/delete") { RequireMethod(m, "POST"); HandleAccountDelete(ctx); return; }
             if (r == "feed") { RequireMethod(m, "GET"); HandleFeed(ctx); return; }
             if (r == "wall") { RequireMethod(m, "GET"); HandleWall(ctx); return; }
             if (r == "post") { HandlePost(ctx); return; }
@@ -888,6 +897,11 @@ namespace Social.Web
             if (r == "friend") { RequireMethod(m, "POST"); HandleFriendAction(ctx); return; }
             if (r == "messages/threads") { RequireMethod(m, "GET"); HandleThreads(ctx); return; }
             if (r == "stickers") { RequireMethod(m, "GET"); HandleStickers(ctx); return; }
+            if (r == "stickers/pack") { RequireMethod(m, "POST"); HandleStickerPackCreate(ctx); return; }
+            if (r == "stickers/pack/update") { RequireMethod(m, "POST"); HandleStickerPackUpdate(ctx); return; }
+            if (r == "stickers/pack/delete") { RequireMethod(m, "POST"); HandleStickerPackDelete(ctx); return; }
+            if (r == "stickers/add") { RequireMethod(m, "POST"); HandleStickerAdd(ctx); return; }
+            if (r == "stickers/remove") { RequireMethod(m, "POST"); HandleStickerRemove(ctx); return; }
             if (r == "messages") { HandleMessages(ctx); return; }
             if (r == "messages/send") { RequireMethod(m, "POST"); HandleMessageSend(ctx); return; }
             if (r == "messages/read") { RequireMethod(m, "POST"); HandleMessageRead(ctx); return; }

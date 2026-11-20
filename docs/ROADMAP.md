@@ -254,8 +254,9 @@ Small things that would make what already exists noticeably better.
 
 **Messages**
 - Scheduled messages ("send at 9:00").
-- Sticker uploads: user-made packs on top of the built-in two, stored like any other
-  media and moderated. The built-in packs are in.
+- Sticker packs: done — built-in packs plus uploaded ones (VIP), with create, rename,
+  share and delete. What is left is moderation: a staff view of every uploaded pack,
+  and a report button on a pack.
 
 **Communities**
 - Per-community rules shown before joining.
@@ -348,8 +349,24 @@ Kept here so the list above stays honest.
   a participant count that ignores people who declined, a minimised floating call
   window that keeps the media flowing, avatars of who is on the line with a blue dot
   when somebody joins, and rooms that no longer die under the last person in them.
-- Admin, made useful: a **storage audit** that walks `data/media` once and answers the
-  four questions an operator actually has — how big each folder is, what the biggest
+- **Your own sticker packs**, VIP only, like Telegram's paid tier: create a pack in the
+  chat picker, upload PNG/JPEG/GIF/WebP stickers one at a time, rename it, share it with
+  everyone or keep it private, delete it. Built-in stickers stay a few bytes (the
+  picture ships with the site); an uploaded one is `u<pack>/<sticker>` and its file
+  lives under `data/media/stickers`. Sending is strict — your pack or a shared one —
+  while *rendering* is lenient, because a sticker already delivered must still show for
+  the person who received it. Two real bugs found by the tests: the id parser rejected
+  `u1/1` (it demanded five characters when four is the shortest possible), and
+  `stickers/remove` matched the item id without checking the pack, so a crafted id
+  could delete a row out of somebody else's pack.
+- **Deleting your own account**, from Settings → Account, in a boxed "danger zone"
+  rather than a link next to "log out". It is the real thing: posts, comments,
+  messages, photos, albums, stories and sticker packs go, the media files they owned
+  are removed from disk (the file list is collected *before* the records are deleted —
+  that ordering is the whole trick), the session dies, and the username frees up. Two
+  steps and the password, because an open session on a shared computer must not be
+  enough. A switch in the admin panel turns the button off for a closed site.
+- Admin, made useful: a **storage audit** that walks `data/media` once and answers the  four questions an operator actually has — how big each folder is, what the biggest
   files are, which files no record references, and which records point at files that
   are gone. Read-only on purpose; it never deletes. On the live test instance it
   immediately found 703 unreferenced files (14.4 MB) left by deleted posts and

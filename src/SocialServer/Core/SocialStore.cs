@@ -46,13 +46,15 @@ namespace Social.Core
         private readonly List<AppData> _appData = new List<AppData>();
         private readonly List<AppScore> _appScores = new List<AppScore>();
         private readonly List<PushSub> _pushSubs = new List<PushSub>();
+        private readonly List<StickerPackRec> _stickerPacks = new List<StickerPackRec>();
+        private readonly List<StickerRec> _stickers = new List<StickerRec>();
         private Meta _meta = new Meta();
 
         private readonly Dictionary<long, User> _userById = new Dictionary<long, User>();
         private readonly Dictionary<string, User> _userByName = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
 
         private bool _dirtyUsers, _dirtyPosts, _dirtyComments, _dirtyFriends, _dirtyMessages;
-        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts, _dirtyAlbums, _dirtyStories, _dirtyChannels, _dirtyApps, _dirtyAppGrants, _dirtyAppData, _dirtyAppScores, _dirtyPush;
+        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts, _dirtyAlbums, _dirtyStories, _dirtyChannels, _dirtyApps, _dirtyAppGrants, _dirtyAppData, _dirtyAppScores, _dirtyPush, _dirtyStickerPacks, _dirtyStickers;
         private bool _readOnly;
         private string _saveError = "";
         private DateTime _lastSave = DateTime.MinValue;
@@ -77,12 +79,26 @@ namespace Social.Core
             {
                 lock (_sync)
                 {
-                    return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
-                           _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
-                           _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls || _dirtyGifts || _dirtyAlbums || _dirtyStories || _dirtyChannels ||
-                           _dirtyApps || _dirtyAppGrants || _dirtyAppData || _dirtyAppScores || _dirtyPush;
+                    return AnyDirty();
                 }
             }
+        }
+
+        /// <summary>
+        /// One list of every dirty flag, used both by the public check and by the
+        /// save itself. They used to be two lists and the save's copy had drifted:
+        /// stories, channels, apps, gifts, calls, albums and push were missing, so a
+        /// change to only one of those was reported as dirty and then skipped by
+        /// SaveAll - it sat in memory until something else was written.
+        /// </summary>
+        private bool AnyDirty()
+        {
+            return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
+                   _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
+                   _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls ||
+                   _dirtyGifts || _dirtyAlbums || _dirtyStories || _dirtyChannels || _dirtyApps ||
+                   _dirtyAppGrants || _dirtyAppData || _dirtyAppScores || _dirtyPush ||
+                   _dirtyStickerPacks || _dirtyStickers;
         }
 
         // ============================================================== load
@@ -157,6 +173,10 @@ namespace Social.Core
                 _appScores.AddRange(LoadTable("appscores.json", AppScoreFromDict));
                 _pushSubs.Clear();
                 _pushSubs.AddRange(LoadTable("push.json", PushSubFromDict));
+                _stickerPacks.Clear();
+                _stickerPacks.AddRange(LoadTable("stickerpacks.json", StickerPackFromDict));
+                _stickers.Clear();
+                _stickers.AddRange(LoadTable("stickers.json", StickerFromDict));
 
                 // sort newest first, keeping the hot queries cheap
                 _posts.Sort(delegate(Post a, Post b) { return b.Id.CompareTo(a.Id); });
@@ -170,6 +190,7 @@ namespace Social.Core
                 _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyBookmarks = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = _dirtyStories = _dirtyChannels = false;
                 _dirtyApps = _dirtyAppGrants = _dirtyAppData = _dirtyAppScores = false;
                 _dirtyPush = false;
+                _dirtyStickerPacks = _dirtyStickers = false;
 
                 Log.Info("DATA", "loaded users=" + _users.Count + " posts=" + _posts.Count +
                                   " comments=" + _comments.Count + " friends=" + _friends.Count +
@@ -270,6 +291,12 @@ namespace Social.Core
             long maxPush = 0;
             for (int i = 0; i < _pushSubs.Count; i++) if (_pushSubs[i].Id > maxPush) maxPush = _pushSubs[i].Id;
             if (_meta.NextPushId <= maxPush) _meta.NextPushId = maxPush + 1;
+            long maxPack = 0;
+            for (int i = 0; i < _stickerPacks.Count; i++) if (_stickerPacks[i].Id > maxPack) maxPack = _stickerPacks[i].Id;
+            if (_meta.NextStickerPackId <= maxPack) _meta.NextStickerPackId = maxPack + 1;
+            long maxSticker = 0;
+            for (int i = 0; i < _stickers.Count; i++) if (_stickers[i].Id > maxSticker) maxSticker = _stickers[i].Id;
+            if (_meta.NextStickerId <= maxSticker) _meta.NextStickerId = maxSticker + 1;
         }
 
         private string ReadJson(string path)
@@ -386,11 +413,14 @@ namespace Social.Core
                     if (force || _dirtyAppData) WriteTable("appdata.json", AppDataToArray());
                     if (force || _dirtyAppScores) WriteTable("appscores.json", AppScoresToArray());
                     if (force || _dirtyPush) WriteTable("push.json", PushSubsToArray());
+                    if (force || _dirtyStickerPacks) WriteTable("stickerpacks.json", StickerPacksToArray());
+                    if (force || _dirtyStickers) WriteTable("stickers.json", StickersToArray());
 
                     _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
                     _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = _dirtyStories = _dirtyChannels = false;
                     _dirtyApps = _dirtyAppGrants = _dirtyAppData = _dirtyAppScores = false;
                     _dirtyPush = false;
+                    _dirtyStickerPacks = _dirtyStickers = false;
                     _lastSave = DateTime.UtcNow;
                     _saveError = "";
                     if (_readOnly)
@@ -414,9 +444,7 @@ namespace Social.Core
 
         private bool HasDirtyLocked()
         {
-            return _dirtyUsers || _dirtyPosts || _dirtyComments || _dirtyFriends || _dirtyMessages ||
-                   _dirtyNotifications || _dirtyGroups || _dirtyReports || _dirtyBookmarks || _dirtyMeta ||
-                   _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback;
+            return AnyDirty();
         }
 
         private void WriteTable(string file, object value)
@@ -3716,6 +3744,395 @@ namespace Social.Core
             return s;
         }
 
+        // ====================================================== custom stickers
+
+        private void MarkStickerPacks() { _dirtyStickerPacks = true; }
+        private void MarkStickers() { _dirtyStickers = true; }
+
+        private List<object> StickerPacksToArray()
+        {
+            List<object> list = new List<object>(_stickerPacks.Count);
+            for (int i = 0; i < _stickerPacks.Count; i++)
+            {
+                StickerPackRec p = _stickerPacks[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = p.Id; d["owner"] = p.Owner; d["name"] = p.Name;
+                d["shared"] = p.Shared; d["created"] = p.Created;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static StickerPackRec StickerPackFromDict(Dictionary<string, object> d)
+        {
+            StickerPackRec p = new StickerPackRec();
+            p.Id = Json.GetLong(d, "id", 0);
+            p.Owner = Json.GetLong(d, "owner", 0);
+            p.Name = Json.GetString(d, "name", "");
+            p.Shared = Json.GetBool(d, "shared", false);
+            p.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            if (p.Id <= 0 || p.Owner <= 0) return null;
+            return p;
+        }
+
+        private List<object> StickersToArray()
+        {
+            List<object> list = new List<object>(_stickers.Count);
+            for (int i = 0; i < _stickers.Count; i++)
+            {
+                StickerRec s = _stickers[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = s.Id; d["pack"] = s.Pack; d["file"] = s.File; d["created"] = s.Created;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static StickerRec StickerFromDict(Dictionary<string, object> d)
+        {
+            StickerRec s = new StickerRec();
+            s.Id = Json.GetLong(d, "id", 0);
+            s.Pack = Json.GetLong(d, "pack", 0);
+            s.File = Json.GetString(d, "file", "");
+            s.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            if (s.Id <= 0 || s.Pack <= 0 || s.File.Length == 0) return null;
+            return s;
+        }
+
+        /// <summary>
+        /// The packs a person may use: their own (in the order they were made) and
+        /// every shared pack. Own packs come first, because the picker opens on the
+        /// first tab and that should be the set you built yourself.
+        /// </summary>
+        public List<StickerPackRec> StickerPacksFor(long userId)
+        {
+            List<StickerPackRec> mine = new List<StickerPackRec>();
+            List<StickerPackRec> shared = new List<StickerPackRec>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _stickerPacks.Count; i++)
+                {
+                    StickerPackRec p = _stickerPacks[i];
+                    if (p.Owner == userId) mine.Add(p);
+                    else if (p.Shared) shared.Add(p);
+                }
+            }
+            mine.Sort(delegate(StickerPackRec a, StickerPackRec b) { return a.Id.CompareTo(b.Id); });
+            shared.Sort(delegate(StickerPackRec a, StickerPackRec b) { return a.Id.CompareTo(b.Id); });
+            mine.AddRange(shared);
+            return mine;
+        }
+
+        public StickerPackRec FindStickerPack(long packId)
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _stickerPacks.Count; i++)
+                    if (_stickerPacks[i].Id == packId) return _stickerPacks[i];
+                return null;
+            }
+        }
+
+        public List<StickerRec> StickersOf(long packId)
+        {
+            List<StickerRec> list = new List<StickerRec>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _stickers.Count; i++)
+                    if (_stickers[i].Pack == packId) list.Add(_stickers[i]);
+            }
+            list.Sort(delegate(StickerRec a, StickerRec b) { return a.Id.CompareTo(b.Id); });
+            return list;
+        }
+
+        public int CountStickerPacks(long owner)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _stickerPacks.Count; i++) if (_stickerPacks[i].Owner == owner) n++;
+                return n;
+            }
+        }
+
+        public int CountStickers(long packId)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _stickers.Count; i++) if (_stickers[i].Pack == packId) n++;
+                return n;
+            }
+        }
+
+        /// <summary>
+        /// Creates a pack. Returns null and sets <paramref name="error"/> to a short
+        /// machine-readable code when the name is empty or the owner is at the cap.
+        /// </summary>
+        public StickerPackRec CreateStickerPack(long owner, string name, int maxPacks, out string error)
+        {
+            error = "";
+            string clean = Util.SingleLine(name, 40).Trim();
+            if (clean.Length == 0) { error = "bad-name"; return null; }
+            lock (_sync)
+            {
+                EnsureWritable();
+                if (maxPacks > 0 && CountStickerPacksLocked(owner) >= maxPacks) { error = "too-many-packs"; return null; }
+                StickerPackRec p = new StickerPackRec();
+                p.Id = _meta.NextStickerPackId++;
+                p.Owner = owner;
+                p.Name = clean;
+                p.Created = DateTime.UtcNow;
+                _stickerPacks.Add(p);
+                MarkStickerPacks();
+                _dirtyMeta = true;
+                return p;
+            }
+        }
+
+        private int CountStickerPacksLocked(long owner)
+        {
+            int n = 0;
+            for (int i = 0; i < _stickerPacks.Count; i++) if (_stickerPacks[i].Owner == owner) n++;
+            return n;
+        }
+
+        public bool RenameStickerPack(long packId, long owner, string name)
+        {
+            string clean = Util.SingleLine(name, 40).Trim();
+            if (clean.Length == 0) return false;
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _stickerPacks.Count; i++)
+                {
+                    if (_stickerPacks[i].Id != packId || _stickerPacks[i].Owner != owner) continue;
+                    _stickerPacks[i].Name = clean;
+                    MarkStickerPacks();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        public bool SetStickerPackShared(long packId, long owner, bool shared)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _stickerPacks.Count; i++)
+                {
+                    if (_stickerPacks[i].Id != packId || _stickerPacks[i].Owner != owner) continue;
+                    _stickerPacks[i].Shared = shared;
+                    MarkStickerPacks();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Deletes a pack and its stickers. The file paths are handed back rather
+        /// than deleted here: the store knows records, the media layer knows files,
+        /// and mixing the two is how a data folder ends up with dangling pictures.
+        /// </summary>
+        public bool DeleteStickerPack(long packId, long owner, List<string> removedFiles)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                StickerPackRec pack = null;
+                for (int i = 0; i < _stickerPacks.Count; i++)
+                    if (_stickerPacks[i].Id == packId && _stickerPacks[i].Owner == owner) { pack = _stickerPacks[i]; break; }
+                if (pack == null) return false;
+
+                for (int i = _stickers.Count - 1; i >= 0; i--)
+                {
+                    if (_stickers[i].Pack != packId) continue;
+                    if (removedFiles != null && !string.IsNullOrEmpty(_stickers[i].File)) removedFiles.Add(_stickers[i].File);
+                    _stickers.RemoveAt(i);
+                }
+                _stickerPacks.Remove(pack);
+                MarkStickerPacks();
+                MarkStickers();
+                return true;
+            }
+        }
+
+        public StickerRec AddSticker(long packId, long owner, string file, int maxPerPack, out string error)
+        {
+            error = "";
+            if (string.IsNullOrEmpty(file)) { error = "bad-image"; return null; }
+            lock (_sync)
+            {
+                EnsureWritable();
+                bool mine = false;
+                for (int i = 0; i < _stickerPacks.Count; i++)
+                    if (_stickerPacks[i].Id == packId && _stickerPacks[i].Owner == owner) { mine = true; break; }
+                if (!mine) { error = "not-yours"; return null; }
+
+                int have = 0;
+                for (int i = 0; i < _stickers.Count; i++) if (_stickers[i].Pack == packId) have++;
+                if (maxPerPack > 0 && have >= maxPerPack) { error = "pack-full"; return null; }
+
+                StickerRec s = new StickerRec();
+                s.Id = _meta.NextStickerId++;
+                s.Pack = packId;
+                s.File = file;
+                s.Created = DateTime.UtcNow;
+                _stickers.Add(s);
+                MarkStickers();
+                _dirtyMeta = true;
+                return s;
+            }
+        }
+
+        public bool RemoveSticker(long packId, long stickerId, long owner, out string file)
+        {
+            file = "";
+            lock (_sync)
+            {
+                EnsureWritable();
+                for (int i = 0; i < _stickers.Count; i++)
+                {
+                    // the pack matters: "u2/1" and "u5/1" are different stickers, and
+                    // matching on the item id alone let one pack delete another's row
+                    if (_stickers[i].Id != stickerId || _stickers[i].Pack != packId) continue;
+                    bool mine = false;
+                    for (int k = 0; k < _stickerPacks.Count; k++)
+                        if (_stickerPacks[k].Id == packId && _stickerPacks[k].Owner == owner) { mine = true; break; }
+                    if (!mine) return false;
+                    file = _stickers[i].File;
+                    _stickers.RemoveAt(i);
+                    MarkStickers();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Turns a sticker id into the URL a browser should load, for both the
+        /// built-in catalogue and uploaded packs. Empty when the id is not a sticker
+        /// this person is allowed to see - a message from a deleted pack must render
+        /// as nothing rather than as a broken image.
+        /// </summary>
+        public string StickerUrl(string id, long viewerId)
+        {
+            string builtin = Stickers.Url(id);
+            if (builtin.Length > 0) return builtin;
+
+            long packId, stickerId;
+            if (!Stickers.ParseCustom(id, out packId, out stickerId)) return "";
+            lock (_sync)
+            {
+                StickerPackRec pack = null;
+                for (int i = 0; i < _stickerPacks.Count; i++)
+                    if (_stickerPacks[i].Id == packId) { pack = _stickerPacks[i]; break; }
+                if (pack == null) return "";
+                // Rendering does not care whether the pack is shared: a sticker that
+                // was already sent must show up for the person who received it, or a
+                // private pack would be unusable in a conversation. Sharing only
+                // controls the catalogue and who may *send* it.
+                for (int i = 0; i < _stickers.Count; i++)
+                    if (_stickers[i].Id == stickerId && _stickers[i].Pack == packId) return _stickers[i].File;
+                return "";
+            }
+        }
+
+        /// <summary>
+        /// Validates a sticker id for sending. Built-in ids go through the static
+        /// catalogue; a custom id must exist and be visible to the sender, so a
+        /// client cannot invent "u1/2" and point a message at someone's private set.
+        /// </summary>
+        public string ResolveSticker(string raw, long senderId)
+        {
+            string builtin = Stickers.Normalize(raw);
+            if (builtin.Length > 0) return builtin;
+
+            long packId, stickerId;
+            if (!Stickers.ParseCustom(raw, out packId, out stickerId)) return "";
+            lock (_sync)
+            {
+                StickerPackRec pack = null;
+                for (int i = 0; i < _stickerPacks.Count; i++)
+                    if (_stickerPacks[i].Id == packId) { pack = _stickerPacks[i]; break; }
+                if (pack == null) return "";
+                // Sending is stricter than rendering: your own pack or a shared one,
+                // nothing else. Otherwise a private pack would be usable by anyone who
+                // happened to see an id, which is exactly what "private" denies.
+                if (!pack.Shared && pack.Owner != senderId) return "";
+                for (int i = 0; i < _stickers.Count; i++)
+                    if (_stickers[i].Id == stickerId && _stickers[i].Pack == packId)
+                        return Stickers.CustomId(packId, stickerId);
+                return "";
+            }
+        }
+
+        /// <summary>
+        /// Every media file the account owns: avatar, cover, post pictures, message
+        /// attachments, uploaded stickers. Used when an account is deleted, so the
+        /// files go with the records instead of turning into orphans nobody dares
+        /// remove by hand.
+        /// </summary>
+        public List<string> MediaFilesOf(long userId)
+        {
+            List<string> files = new List<string>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            lock (_sync)
+            {
+                User u = FindUser(userId);
+                if (u != null)
+                {
+                    AddMediaFile(files, seen, u.Avatar);
+                    AddMediaFile(files, seen, u.Cover);
+                }
+                for (int i = 0; i < _posts.Count; i++)
+                    if (_posts[i].Author == userId) AddMediaFile(files, seen, _posts[i].Image);
+                for (int i = 0; i < _messages.Count; i++)
+                {
+                    Message m = _messages[i];
+                    if (m.From != userId) continue;
+                    AddMediaFile(files, seen, m.Image);
+                    AddMediaFile(files, seen, m.Audio);
+                    AddMediaFile(files, seen, m.Video);
+                    AddMediaFile(files, seen, m.FileUrl);
+                    if (!string.IsNullOrEmpty(m.Images))
+                    {
+                        string[] parts = m.Images.Split('\n');
+                        for (int k = 0; k < parts.Length; k++) AddMediaFile(files, seen, parts[k]);
+                    }
+                }
+                for (int i = 0; i < _stories.Count; i++)
+                {
+                    if (_stories[i].Author != userId) continue;
+                    AddMediaFile(files, seen, _stories[i].Image);
+                    AddMediaFile(files, seen, _stories[i].Video);
+                }
+                for (int i = 0; i < _media.Count; i++)
+                    if (_media[i].Owner == userId) AddMediaFile(files, seen, _media[i].Url);
+                for (int i = 0; i < _groups.Count; i++)
+                    if (_groups[i].Owner == userId) AddMediaFile(files, seen, _groups[i].Avatar);
+                for (int i = 0; i < _albums.Count; i++)
+                    if (_albums[i].Owner == userId) AddMediaFile(files, seen, _albums[i].Cover);
+                for (int i = 0; i < _stickerPacks.Count; i++)
+                {
+                    if (_stickerPacks[i].Owner != userId) continue;
+                    long packId = _stickerPacks[i].Id;
+                    for (int k = 0; k < _stickers.Count; k++)
+                        if (_stickers[k].Pack == packId) AddMediaFile(files, seen, _stickers[k].File);
+                }
+            }
+            return files;
+        }
+
+        private static void AddMediaFile(List<string> files, HashSet<string> seen, string url)
+        {
+            if (string.IsNullOrEmpty(url)) return;
+            if (!url.StartsWith("/media/", StringComparison.OrdinalIgnoreCase)) return;
+            if (seen.Add(url)) files.Add(url);
+        }
+
         // ============================================================== games
         /// <summary>
         /// The games shelf: newest first, optionally filtered by a search string
@@ -4873,6 +5290,18 @@ namespace Social.Core
                 for (int s = _stories.Count - 1; s >= 0; s--)
                     if (_stories[s].Author == userId) _stories.RemoveAt(s);
 
+                // custom sticker packs, and the stickers inside them
+                for (int p = _stickerPacks.Count - 1; p >= 0; p--)
+                {
+                    if (_stickerPacks[p].Owner != userId) continue;
+                    long packId = _stickerPacks[p].Id;
+                    for (int s = _stickers.Count - 1; s >= 0; s--)
+                        if (_stickers[s].Pack == packId) _stickers.RemoveAt(s);
+                    _stickerPacks.RemoveAt(p);
+                }
+                MarkStickerPacks();
+                MarkStickers();
+
                 _users.Remove(u);
                 _userById.Remove(userId);
                 if (!string.IsNullOrEmpty(u.Username)) _userByName.Remove(u.Username);
@@ -4887,6 +5316,7 @@ namespace Social.Core
                 MarkGroups();
                 MarkAlbums();
                 MarkStories();
+                MarkChannels();
                 return removed + 1;
             }
         }
@@ -5192,6 +5622,13 @@ namespace Social.Core
                     Album a = _albums[i];
                     AddRef(used, missing, mediaRoot, a.Cover, "album #" + a.Id);
                 }
+                // uploaded stickers: a pack's pictures are referenced by the sticker
+                // rows, so an unreferenced file here means a sticker row went away
+                for (int i = 0; i < _stickers.Count; i++)
+                {
+                    StickerRec s = _stickers[i];
+                    AddRef(used, missing, mediaRoot, s.File, "sticker #" + s.Id);
+                }
             }
 
             return StorageScan.Run(_cfg, used, missing, topCount);
@@ -5240,6 +5677,14 @@ namespace Social.Core
             d["nextGiftId"] = m.NextGiftId;
             d["nextAlbumId"] = m.NextAlbumId;
             d["nextStoryId"] = m.NextStoryId;
+            d["nextChannelId"] = m.NextChannelId;
+            d["nextAppId"] = m.NextAppId;
+            d["nextAppGrantId"] = m.NextAppGrantId;
+            d["nextAppDataId"] = m.NextAppDataId;
+            d["nextAppScoreId"] = m.NextAppScoreId;
+            d["nextPushId"] = m.NextPushId;
+            d["nextStickerPackId"] = m.NextStickerPackId;
+            d["nextStickerId"] = m.NextStickerId;
             d["totalRegistrations"] = m.TotalRegistrations;
             d["lastBackup"] = m.LastBackup;
             d["installId"] = m.InstallId;

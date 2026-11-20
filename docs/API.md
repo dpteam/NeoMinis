@@ -90,11 +90,11 @@ permission, `404` missing, `409` conflict, `413` too large, `429` rate limit,
 | GET | `/api/settings` | — | `{ user, site }` |
 | POST | `/api/settings` | `theme`, `lang`, `sound`, `hideOnline`, `privacy`, `privacyPrefs`, `status`, `notifyMute[]` | `{ user }` |
 | POST | `/api/password` | `oldVerifier`, `newVerifier` | `{ sessionSalt }` (all other sessions dropped) |
+| POST | `/api/account/delete` | `verifier` (current password) | `{ deleted, records, files }` — irreversible |
 | POST | `/api/avatar` | `data` (data URL, png/jpg/gif/webp) | `{ avatar }` |
 | POST | `/api/profile/cover` | `data` (data URL, empty clears) | `{ cover }` |
 
-`privacy` is the old coarse profile visibility (`public` / `friends` / `private`).
-`privacyPrefs` is the per-area switch set and takes an object:
+`privacy` is the old coarse profile visibility (`public` / `friends` / `private`).`privacyPrefs` is the per-area switch set and takes an object:
 
 ```json
 { "write": "friends", "call": "nobody", "wall": "all",
@@ -113,6 +113,20 @@ Where each scope is enforced: `write` in `CanMessageUser`, `call` in
 `/api/gifts/send` and `canSend`, `albums` in `/api/albums` and `/api/album`,
 `friends` in `/api/friends`. The owner and moderators always pass; a block always
 wins over a permissive setting.
+
+### Deleting your own account
+
+`POST /api/account/delete` with the current password's verifier is the only way for a
+person to erase themselves, and it is the real thing: `HardDeleteUser` removes the
+posts, comments, messages, notifications, friendships, gifts, albums, stories and
+sticker packs, and every media file those records owned is deleted from disk
+(`MediaFilesOf` collects the list *before* the records are gone — that ordering is the
+whole trick). The session dies with the account and the username becomes free again.
+
+It is gated three ways: `site.allowAccountDelete` (an operator can switch the button
+off entirely), the password itself (an open session on a shared computer must not be
+enough), and `protectLastAdmin` — the last administrator cannot erase themselves out of
+the site. Guests have no account to delete and get `403 guest`.
 
 ### Peer file transfer (friends only)
 
@@ -335,14 +349,30 @@ earned (useful after an import or a rule change).
 | POST | `/api/messages/delete` | `id` | `{ ok }` (per-side delete) |
 | POST | `/api/messages/revoke` | `id` | `{ message }` — delete for everyone |
 | POST | `/api/messages/pin` | `id`, `on` | `{ pinned }` |
-| GET | `/api/stickers` | — | `{ enabled, packs[{ id, name, stickers[{ id, url }] }] }` |
+| GET | `/api/stickers` | — | `{ enabled, customEnabled, vipOnly, canCreate, maxPacks, maxPerPack, maxKb, packs[{ id, name, mine, shared, stickers[{ id, url }] }] }` |
+| POST | `/api/stickers/pack` | `name` | `{ id, name, mine, shared }` |
+| POST | `/api/stickers/pack/update` | `id`, `name` or `shared` | `{ id, name, shared }` |
+| POST | `/api/stickers/pack/delete` | `id` | `{ ok, removed }` (sticker files are deleted too) |
+| POST | `/api/stickers/add` | `pack`, `image` (data URL) | `{ id, url }` |
+| POST | `/api/stickers/remove` | `id` | `{ ok }` |
+| GET | `/api/theme` | — | **public**: `{ skin, configured, active, locked, effects, schedule, skins[{id,effect}] }` |
 
 **Paging a conversation.** `before` is an **exclusive upper bound on the id**, so the
 cursor for "load older" is the *oldest* id currently on screen — not the newest. Using
 the newest re-serves the page you are already looking at; the client did exactly that
 and duplicated the visible messages until it was fixed. `next` in the reply is the
 oldest id of the page returned, which is the value to pass back as `before`.
-| GET | `/api/theme` | — | **public**: `{ skin, configured, active, locked, effects, schedule, skins[{id,effect}] }` |
+
+**Stickers.** A built-in sticker is an id like `faces/smile` and its picture ships with
+the site, so a message costs a few bytes. An uploaded sticker is `u<pack>/<sticker>`
+and its file lives under `data/media/stickers`. Both namespaces are checked by the
+server on send: a built-in id must exist in the catalogue, an uploaded one must be in a
+pack the sender owns or one that is shared. Rendering is deliberately laxer than
+sending — a sticker that was already delivered must still show for the person who
+received it, even if the pack is private or was deleted afterwards (in which case the
+picture is simply gone and the bubble renders empty). `canCreate` in the catalogue tells
+the client whether to offer the "+" tab at all; a non-VIP user gets `vipOnly: true` and
+`canCreate: false`, and every write answers `403 vip-only`.
 
 **Templates (skins).** `site.skins` in the handshake lists the fifteen template ids and
 `site.skin` is the template in force right now (a holiday range from

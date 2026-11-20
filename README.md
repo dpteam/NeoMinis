@@ -12,7 +12,7 @@ Runs on Windows XP SP3 and anything newer, including behind Nginx Proxy Manager
 [![.NET Framework](https://img.shields.io/badge/.NET_Framework-4.0-512bd4)](https://dotnet.microsoft.com/)
 [![C#](https://img.shields.io/badge/C%23-4.0-239120)](https://learn.microsoft.com/dotnet/csharp/)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#why-this-exists)
-[![API tests](https://img.shields.io/badge/API_tests-538_passing-brightgreen)](#testing)
+[![API tests](https://img.shields.io/badge/API_tests-577_passing-brightgreen)](#testing)
 [![License](https://img.shields.io/badge/license-use_it_fork_it-blue)](#license)
 
 [Quick start](#quick-start) · [Screenshots](#screenshots) · [Features](#features) · [Configuration](#configuration) · [API](#api-and-security) · [Docs](#documentation) · [Testing](#testing)
@@ -133,7 +133,7 @@ effect separately if you want a different one:
 | **Feed** | home / everything / friends-only tabs, **a live "N new posts" pill** that never moves the list under you, posts with images, video links and polls, likes (with a "who liked" list), emoji reactions, comments, **reposts to your own wall**, edit and pin your own posts, **drafts and scheduled publication**, visibility (`public` / `friends` / `private`), delete with cascade |
 | **Profiles** | avatar and cover, status, bio, city/country, birthday, gender, website, interests, mood, achievements, photo gallery, a **completeness rating**, friends wall, per-area privacy |
 | **Friends** | requests, accept/decline, remove, block, incoming/outgoing lists, "friends online" |
-| **Messages** | live delivery (long poll), typing indicator, read receipts, unread divider, replies with quotes, emoji reactions, forwarding, **search inside a conversation with jump-to-message**, **per-conversation drafts**, picture/GIF/album attachments, **voice messages**, **file attachments**, video clips, **sticker packs**, **paste a screenshot straight into the composer**, **delete for everyone** with tombstones, **pinned messages**, per-side delete. One "attach" menu holds photo, file, voice and the peer transfer, so the composer row stays three controls wide |
+| **Messages** | live delivery (long poll), typing indicator, read receipts, unread divider, replies with quotes, emoji reactions, forwarding, **search inside a conversation with jump-to-message**, **per-conversation drafts**, picture/GIF/album attachments, **voice messages**, **file attachments**, video clips, **sticker packs** (two built in, plus **your own uploaded packs, VIP only** — create, rename, share, delete), **paste a screenshot straight into the composer**, **delete for everyone** with tombstones, **pinned messages**, per-side delete. One "attach" menu holds photo, file, voice and the peer transfer, so the composer row stays three controls wide |
 | **Calls** | 1:1 audio/video over WebRTC, **always-on voice channels**, **screen sharing** (instant, no renegotiation), **calls that survive a page reload**, **audio processing toggles** (echo cancel, noise suppression, auto-gain), speaking ring from a real audio level meter, mute badges, camera on mid-call, minimised floating window, avatars of who is on the line with a blue join dot, call history |
 | **Groups** | public/private groups, membership, group feed, owner role, editable name/description/picture, member management, join requests, a post review queue, per-member roles |
 | **Notifications** | likes, comments, reactions, reposts, friend requests, messages, mentions, badges, broadcasts, reports — delivered **live** over a long poll (instant toast, sound, tab title counter, optional desktop notification), per-type switches, All / Unread / Mentions filters, **grouped rows** ("Nina and 9 more"), paging, plus **Web Push** with a VAPID tickle |
@@ -148,7 +148,7 @@ effect separately if you want a different one:
 | **Admin** | **a separate board on its own port** — dashboard, users (ban / unban / grant or revoke admin & moderator / warn / mute / reset / badges / delete, with **All / Online / Staff / Banned / Deleted filters** that run server-side), reports queue, live log tail, broadcast, backup, storage repair, **a read-only storage audit** (folder sizes, biggest files, unreferenced files, records pointing at missing files), config reload, AI panel, and a Settings tab that writes straight back to `config.ini` |
 | **Moderation** | a permission matrix for moderators (8 flags, empty means "all", for backwards compatibility), warnings, chat mutes, reports, per-IP account caps |
 | **Themes** | `light` / `dark` / `oled`, instant switch, remembered per user, and a generated `brand.css` from `[branding]` |
-| **Settings** | five tabs — Profile, Appearance, Notifications, Privacy, Account — instead of one long wall, so nothing is squeezed into an unreadable column |
+| **Settings** | five tabs — Profile, Appearance, Notifications, Privacy, Account — instead of one long wall, so nothing is squeezed into an unreadable column. The Account tab carries **"delete my account"**: a real, irreversible removal behind a warning and a password, which takes your posts, messages, photos and sticker packs with it |
 | **Templates** | **15 interface skins** — Branded, Aero, Metro, Paper, Terminal, Soft, Brutal, Neon, Warm, Slate, Matrix, Cyberpunk, New Year, Autumn, Horror. A skin is a palette plus a shape language on `data-skin` and changes no markup, so layout and behaviour are identical in all of them. Chosen per account, remembered per browser, defaulted by the admin, and lockable so only staff may change it. See [DESIGN.md §12.1](docs/DESIGN.md) |
 | **Effects** | **12 atmosphere layers** on `data-fx` — film grain, CRT scanlines, VHS tape, matrix rain, glitch, snow, falling leaves, aurora, neon glow, glass sheen, print offset. Pure CSS (no canvas, no WebGL), each skin carries its own default, and the user can pick any effect independently or turn it off. See [DESIGN.md §12.2](docs/DESIGN.md) |
 | **Holiday themes** | `ui.skinSchedule` switches the template by date (`horror:10-25:11-02,newyear:12-20:01-10`) with no client release and no restart, and `GET /api/theme` exposes the current look publicly so a launcher or script can follow it |
@@ -187,6 +187,7 @@ public/                  SPA: index.html, 404/403, assets/css, assets/js
   assets/js/             crypto, api, app, app.more, calls, apps, games, gifts,
                          stories, transfers, push, i18n, ui, sound, player
   assets/stickers/       the built-in sticker packs (SVG) + manifest.json
+                         (uploaded packs live in bin/data/media/stickers)
 docs/                    ARCHITECTURE, API, CLI, AI, IMPORT, ROADMAP, img/
 tools/                   firewall, test-web.mjs, ci-test.ps1, rename-user.mjs,
                          make-logo.mjs, make-demo-screens.mjs
@@ -360,7 +361,7 @@ powershell -ExecutionPolicy Bypass -File tools\ci-test.ps1
 folder, runs the Node suite against **both boards**, restarts the server and
 verifies that data survived.
 
-`tools/test-web.mjs` speaks the same crypto as the browser: **538 checks** covering
+`tools/test-web.mjs` speaks the same crypto as the browser: **577 checks** covering
 registration, login, signature enforcement, replay rejection, encryption
 enforcement, posts, likes, comments, friends, messages, groups, notifications,
 calls, channels, apps, push, transfers, admin actions, recovery and logout.

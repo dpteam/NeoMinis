@@ -619,6 +619,118 @@ async function main() {
     { to: alice.user.id, body: '', sticker: '' });
   ok('an empty message is still empty', stickerEmpty.status === 400, String(stickerEmpty.status));
 
+  // ---- custom sticker packs: a VIP perk, with real files behind it
+  const notVip = await bob.call('POST', '/api/stickers/pack', { name: 'Bob pack' });
+  ok('a plain user cannot create a sticker pack', notVip.status === 403, String(notVip.status));
+  ok('the refusal says why', notVip.data && notVip.data.error === 'vip-only',
+    JSON.stringify(notVip.data && notVip.data.error));
+  const catForUser = await alice.call('GET', '/api/stickers');
+  ok('the catalogue tells the client whether packs are allowed',
+    catForUser.data.canCreate === true && catForUser.data.vipOnly === true,
+    JSON.stringify({ canCreate: catForUser.data.canCreate, vipOnly: catForUser.data.vipOnly }));
+
+  const pack = await alice.call('POST', '/api/stickers/pack', { name: 'Suite pack' });
+  ok('a VIP can create a pack', pack.status === 200 && /^u\d+$/.test(pack.data.id || ''),
+    JSON.stringify(pack.data && pack.data.id));
+  const packId = pack.data.id;
+  const packNoName = await alice.call('POST', '/api/stickers/pack', { name: '   ' });
+  ok('a pack needs a name', packNoName.status === 400, String(packNoName.status));
+  const added = await alice.call('POST', '/api/stickers/add', { pack: packId, image: PNG });
+  ok('a sticker can be uploaded to a pack', added.status === 200 &&
+    /^u\d+\/\d+$/.test(added.data.id || ''), JSON.stringify(added.data && added.data.id));
+  const stickerId = added.data.id;
+  const stickerUrl = added.data.url || '';
+  ok('the uploaded sticker is a real media file',
+    stickerUrl.indexOf('/media/stickers/') === 0, stickerUrl);
+  const stickerServed = await fetch(BASE + stickerUrl);
+  ok('the uploaded sticker file is served', stickerServed.status === 200,
+    String(stickerServed.status));
+
+  // a sticker with no picture is refused, and the empty body must not leave a file
+  const noPicture = await alice.call('POST', '/api/stickers/add', { pack: packId, image: '' });
+  ok('an upload without a picture is refused', noPicture.status === 400, String(noPicture.status));
+  // a text file dressed as a picture must be refused by the sniffer
+  const notAnImage = await alice.call('POST', '/api/stickers/add', {
+    pack: packId, image: 'data:image/png;base64,' + Buffer.from('<html>nope</html>').toString('base64')
+  });
+  ok('a fake picture is refused', notAnImage.status === 400, String(notAnImage.status));
+
+  const catAfter = await alice.call('GET', '/api/stickers');
+  const minePack = (catAfter.data.packs || []).filter(p => p.id === packId)[0];
+  ok('the pack shows up in the catalogue', !!minePack && minePack.mine === true &&
+    minePack.stickers.length === 1, JSON.stringify(minePack && minePack.stickers.length));
+
+  // a custom sticker can be sent, and a stranger sees the picture
+  const customMsg = await alice.call('POST', '/api/messages/send',
+    { to: bob.user.id, body: '', sticker: stickerId });
+  ok('a custom sticker can be sent', customMsg.status === 200 &&
+    customMsg.data.message.sticker === stickerId &&
+    customMsg.data.message.stickerUrl === stickerUrl,
+    JSON.stringify(customMsg.data && customMsg.data.message && customMsg.data.message.stickerUrl));
+  const customSeen = await bob.call('GET', '/api/messages?with=' + alice.user.id);
+  const seenMsg = (customSeen.data.messages || []).filter(m => m.sticker === stickerId)[0];
+  ok('a custom sticker renders for the other side', !!seenMsg && seenMsg.stickerUrl === stickerUrl,
+    JSON.stringify(seenMsg && seenMsg.stickerUrl));
+
+  // a private pack is not usable by anyone else
+  const foreignSend = await bob.call('POST', '/api/messages/send',
+    { to: alice.user.id, body: '', sticker: stickerId });
+  ok('a private pack cannot be used by someone else', foreignSend.status === 400,
+    String(foreignSend.status));
+
+  // sharing it makes it usable, and it appears in the other person's catalogue
+  const shared = await alice.call('POST', '/api/stickers/pack/update', { id: packId, shared: true });
+  ok('a pack can be shared', shared.status === 200 && shared.data.shared === true,
+    JSON.stringify(shared.data && shared.data.shared));
+  const bobCat = await bob.call('GET', '/api/stickers');
+  ok('a shared pack appears in someone else\'s catalogue',
+    (bobCat.data.packs || []).some(p => p.id === packId && p.mine === false), '');
+  const foreignSend2 = await bob.call('POST', '/api/messages/send',
+    { to: alice.user.id, body: '', sticker: stickerId });
+  ok('a shared pack can be used by someone else', foreignSend2.status === 200,
+    String(foreignSend2.status));
+
+  const renamed = await alice.call('POST', '/api/stickers/pack/update', { id: packId, name: 'Renamed' });
+  ok('a pack can be renamed', renamed.status === 200 && renamed.data.name === 'Renamed',
+    JSON.stringify(renamed.data && renamed.data.name));
+  const bobRename = await bob.call('POST', '/api/stickers/pack/update', { id: packId, name: 'Hijacked' });
+  ok('nobody else can rename a pack', bobRename.status !== 200, String(bobRename.status));
+  const nameIntact = await alice.call('GET', '/api/stickers');
+  ok('a refused rename leaves the name alone',
+    (nameIntact.data.packs || []).some(p => p.id === packId && p.name === 'Renamed'),
+    JSON.stringify((nameIntact.data.packs || []).filter(p => p.id === packId).map(p => p.name)));
+
+  const removedSticker = await alice.call('POST', '/api/stickers/remove', { id: stickerId });
+  ok('a sticker can be removed', removedSticker.status === 200, String(removedSticker.status));
+  const goneFile = await fetch(BASE + stickerUrl);
+  ok('removing a sticker deletes its file', goneFile.status === 404, String(goneFile.status));
+  const bobRemove = await alice.call('POST', '/api/stickers/remove', { id: 'u' + 999999 + '/1' });
+  ok('removing an unknown sticker fails cleanly', bobRemove.status === 404, String(bobRemove.status));
+
+  // ---- a sticker id is a PAIR: the pack and the item must both match. Matching
+  // the item id alone let one pack delete a row that belonged to another.
+  const packB = await alice.call('POST', '/api/stickers/pack', { name: 'Second pack' });
+  const addedB = await alice.call('POST', '/api/stickers/add', { pack: packB.data.id, image: PNG });
+  const itemB = String(addedB.data.id).split('/')[1];
+  ok('a second pack holds its own sticker', addedB.status === 200, JSON.stringify(addedB.data));
+  const crossed = await alice.call('POST', '/api/stickers/remove',
+    { id: packId + '/' + itemB });
+  ok('a sticker id from another pack is refused', crossed.status === 404, String(crossed.status));
+  const stillInB = await alice.call('GET', '/api/stickers');
+  ok('the crossed removal did not touch the other pack',
+    (stillInB.data.packs || []).some(p => p.id === packB.data.id && p.stickers.length === 1),
+    JSON.stringify((stillInB.data.packs || []).filter(p => p.id === packB.data.id)
+      .map(p => p.stickers.length)));
+  await alice.call('POST', '/api/stickers/pack/delete', { id: packB.data.id });
+
+  const deletedPack = await alice.call('POST', '/api/stickers/pack/delete', { id: packId });
+  ok('a pack can be deleted', deletedPack.status === 200, String(deletedPack.status));
+  const catGone = await alice.call('GET', '/api/stickers');
+  ok('a deleted pack leaves the catalogue',
+    !(catGone.data.packs || []).some(p => p.id === packId), '');
+  const deleteAgain = await alice.call('POST', '/api/stickers/pack/delete', { id: packId });
+  ok('deleting a pack twice fails cleanly', deleteAgain.status === 404, String(deleteAgain.status));
+
   // a clip picked from the gallery
   const MP4 = 'data:video/mp4;base64,' + Buffer.concat([
     Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom'), Buffer.from([0, 0, 2, 0]),
@@ -1643,6 +1755,53 @@ async function main() {
   ok('settings saved', settings.status === 200 && settings.data.user.theme === 'dark', '');
   const badTheme = await alice.call('POST', '/api/settings', { theme: 'neon' });
   ok('bad theme rejected', badTheme.status === 400, String(badTheme.status));
+
+  // ---- deleting your own account: for real, and only with the password
+  const goner = new Client('goner');
+  const gonerName = 'goner_' + stamp;
+  const gonerPass = 'goner-pass-1';
+  await goner.register(gonerName, gonerPass, 'Gonzo');
+  const gonerPost = await goner.call('POST', '/api/post', { body: 'this should not survive', image: PNG });
+  const gonerImage = gonerPost.data && gonerPost.data.post.image;
+  ok('the doomed account has a post with a picture',
+    typeof gonerImage === 'string' && gonerImage.indexOf('/media/posts/') === 0, String(gonerImage));
+
+  const noPassword = await goner.call('POST', '/api/account/delete', {});
+  ok('deleting an account needs the password', noPassword.status === 400, String(noPassword.status));
+  const wrongPassword = await goner.call('POST', '/api/account/delete', {
+    verifier: verifierOf('not-my-password', gonerName, goner.iterations)
+  });
+  ok('a wrong password cannot delete the account', wrongPassword.status === 403,
+    String(wrongPassword.status));
+  const accountStillThere = await goner.call('GET', '/api/me');
+  ok('the account is still there after a failed attempt', accountStillThere.status === 200,
+    String(accountStillThere.status));
+
+  const doDelete = await goner.call('POST', '/api/account/delete', {
+    verifier: verifierOf(gonerPass, gonerName, goner.iterations)
+  });
+  ok('the account deletes itself with the right password',
+    doDelete.status === 200 && doDelete.data.deleted === true,
+    JSON.stringify(doDelete.data));
+  ok('the deletion reports what it removed', doDelete.data.records >= 2 &&
+    doDelete.data.files >= 1, JSON.stringify({ r: doDelete.data.records, f: doDelete.data.files }));
+
+  // the session is gone with the account
+  const afterDelete = await goner.call('GET', '/api/me');
+  ok('the session dies with the account', afterDelete.status === 401 || afterDelete.status === 403,
+    String(afterDelete.status));
+  // the login is gone too - a fresh client cannot sign in
+  const ghost = new Client('ghost');
+  const ghostLogin = await ghost.login(gonerName, gonerPass);
+  ok('the deleted account cannot log in', ghostLogin.status !== 200, String(ghostLogin.status));
+  // and the post went with it
+  const postGone = await alice.call('GET', '/api/post?id=' + gonerPost.data.post.id);
+  ok('the deleted account takes its posts with it', postGone.status === 404,
+    String(postGone.status));
+  // the picture is not left on disk as an orphan
+  const imageGone = await fetch(BASE + gonerImage);
+  ok('the deleted account takes its media files with it', imageGone.status === 404,
+    String(imageGone.status));
 
   // ---- video, bookmarks, interests, badges
   const vpost = await alice.call('POST', '/api/post', {

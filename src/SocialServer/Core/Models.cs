@@ -179,6 +179,34 @@ namespace Social.Core
         public DateTime Updated = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// A sticker pack made by a user (VIP only by default). The built-in packs are
+    /// files that ship with the site and cost nothing to store; a custom pack is
+    /// uploads, so it is capped per user and per pack. A pack is private until its
+    /// owner shares it, and sharing is what makes it usable in other people's chats.
+    /// </summary>
+    public sealed class StickerPackRec
+    {
+        public long Id;
+        public long Owner;
+        public string Name = "";
+        public bool Shared;             // visible to everyone, not just the owner
+        public DateTime Created = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// One uploaded sticker. The file lives under data/media/stickers; the message
+    /// stores only "u&lt;pack&gt;/&lt;id&gt;", so a sticker in a chat is a few bytes even
+    /// though its picture is on disk.
+    /// </summary>
+    public sealed class StickerRec
+    {
+        public long Id;
+        public long Pack;
+        public string File = "";        // /media/stickers/xxxx.png
+        public DateTime Created = DateTime.UtcNow;
+    }
+
     public sealed class Playlist
     {
         public long Id;
@@ -496,6 +524,8 @@ namespace Social.Core
         public long NextAppDataId = 1;
         public long NextAppScoreId = 1;
         public long NextPushId = 1;
+        public long NextStickerPackId = 1;
+        public long NextStickerId = 1;
         public long TotalRegistrations;
         public DateTime LastBackup = DateTime.MinValue;
         public string InstallId = "";

@@ -238,8 +238,46 @@ var UI = (function () {
     });
   }
 
-  function imageModal(src) {
-    var safe = safeUrl(src);
+  /// <summary>
+  /// One-line text prompt. There was no such helper, and every caller that needed
+  /// "type a name" was building its own modal; this is the same modal with an input
+  /// and an Enter handler, so a rename is one keystroke away.
+  /// </summary>
+  function promptBox(opts, cb) {
+    opts = opts || {};
+    var value = opts.value === undefined ? '' : String(opts.value);
+    var close = modal({
+      title: opts.title || '',
+      icon: opts.icon || 'pen',
+      body: '<div class="field" style="margin-bottom:0"><label>' + esc(opts.label || '') + '</label>' +
+        '<input class="input" id="prompt-value" maxlength="' + (opts.maxlength || 120) + '" value="' + attr(value) +
+        '" placeholder="' + attr(opts.placeholder || '') + '" autocomplete="off"></div>',
+      actions: [
+        { label: I18N.t('common.cancel'), cls: 'btn-ghost', onClick: function () { cb(null); } },
+        {
+          label: opts.ok || I18N.t('common.save'), cls: 'btn-primary', onClick: function (box) {
+            var input = box.querySelector('#prompt-value');
+            cb(input ? input.value : '');
+          }
+        }
+      ]
+    });
+    setTimeout(function () {
+      var input = document.getElementById('prompt-value');
+      if (!input) return;
+      try { input.focus(); input.select(); } catch (e) { }
+      input.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        var v = input.value;
+        close();
+        cb(v);
+      });
+    }, 40);
+    return close;
+  }
+
+  function imageModal(src) {    var safe = safeUrl(src);
     if (!safe) return;
     return modal({
       title: '',
@@ -551,7 +589,7 @@ var UI = (function () {
     safeUrl: safeUrl, timeAgo: timeAgo, formatDate: formatDate, formatTime: formatTime, initials: initials,
     avatar: avatar, icon: icon, userLink: userLink, roleBadge: roleBadge, vipBadge: vipBadge, presence: presence,
     spinner: spinner, empty: empty, toast: toast, modal: modal, confirm: confirmBox,
-    imageModal: imageModal, getTheme: getTheme, applyTheme: applyTheme, cycleTheme: cycleTheme,
+    imageModal: imageModal, prompt: promptBox, getTheme: getTheme, applyTheme: applyTheme, cycleTheme: cycleTheme,
     getSkin: getSkin, applySkin: applySkin, skinList: skinList, skinGroups: skinGroups,
     getEffect: getEffect, applyEffect: applyEffect, effectList: effectList,
     getFont: getFont, applyFont: applyFont, fontList: fontList,
