@@ -905,6 +905,49 @@ img { max-width: 100%; }
 .chat-pin-row b { flex: 0 0 auto; font-weight: 600; }
 .chat-pin-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-soft); }
 .chat-pin-row .icon-btn { padding: 1px 4px; font-size: 10px; opacity: .6; }
+
+/* search inside one conversation: a bar that replaces the pinned strip while
+   open, so the message list does not jump down when it appears */
+.chat-search {
+  padding: 6px 8px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+}
+.chat-search-form { display: flex; align-items: center; gap: 6px; }
+.chat-search-form > i { color: var(--muted); font-size: 11px; }
+.chat-search-form input {
+  flex: 1; min-width: 0; height: 28px; padding: 0 9px;
+  border: 1px solid var(--field-border); border-radius: var(--radius-sm);
+  background: var(--field); color: var(--text); outline: none; font-size: 12px;
+}
+.chat-search-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.chat-search-results { max-height: 210px; overflow-y: auto; margin-top: 5px; }
+.chat-search-results:empty { margin-top: 0; }
+
+.chat-hit {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 12px;
+}
+.chat-hit:hover { background: var(--hover); color: var(--text); }
+.chat-hit-who { font-weight: 700; color: var(--text); white-space: nowrap; }
+.chat-hit-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-hit-when { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+
+/* a thread with an unsent draft: the preview says so instead of lying */
+.thread .last.has-draft { color: var(--muted); font-style: italic; }
+.thread .last.has-draft i { color: var(--accent); font-style: normal; }
 .chat-pin-row:hover .icon-btn { opacity: 1; }
 .bubble-row.flash .bubble { box-shadow: 0 0 0 2px var(--accent); transition: box-shadow .25s; }
 .chat-form { display: flex; gap: 8px; padding: 9px 12px; border-top: 1px solid var(--border); background: var(--panel); }

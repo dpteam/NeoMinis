@@ -668,6 +668,33 @@ async function main() {
   const searchMiss = await bob.call('GET', '/api/messages/search?q=' + encodeURIComponent('zzz-nothing-here'));
   ok('search miss returns nothing', searchMiss.status === 200 && searchMiss.data.results.length === 0, '');
 
+  // ---- paging backwards must not re-serve the page you are looking at
+  // The client used to page with before=<newest id>, which returned the same window
+  // again and duplicated it on screen. The cursor has to be the OLDEST id loaded.
+  for (let p = 0; p < 3; p++) {
+    await bob.call('POST', '/api/messages/send', { to: alice.user.id, body: 'page marker ' + p + ' ' + stamp });
+  }
+  const pageOne = await bob.call('GET', '/api/messages?with=' + alice.user.id + '&limit=2');
+  const pageIds = (pageOne.data.messages || []).map(m => m.id);
+  const pageOldest = pageIds[0];
+  const pageNewest = pageIds[pageIds.length - 1];
+  ok('a page has an oldest and a newest id', pageIds.length === 2 && pageOldest < pageNewest,
+    pageIds.join(','));
+  const withOldest = await bob.call('GET', '/api/messages?with=' + alice.user.id +
+    '&limit=2&before=' + pageOldest);
+  const withOldestIds = (withOldest.data.messages || []).map(m => m.id);
+  ok('paging with the oldest id returns strictly older messages',
+    withOldestIds.length > 0 && withOldestIds.every(id => id < pageOldest),
+    withOldestIds.join(',') + ' vs ' + pageOldest);
+  ok('paging with the oldest id does not repeat the page',
+    !withOldestIds.some(id => pageIds.indexOf(id) >= 0), withOldestIds.join(','));
+  // and the old, wrong cursor really does overlap - which is why it was wrong
+  const withNewest = await bob.call('GET', '/api/messages?with=' + alice.user.id +
+    '&limit=2&before=' + pageNewest);
+  const withNewestIds = (withNewest.data.messages || []).map(m => m.id);
+  ok('the newest id as a cursor would have repeated the page',
+    withNewestIds.some(id => pageIds.indexOf(id) >= 0), withNewestIds.join(','));
+
   // ---- calls (signalling only; media is peer to peer)
   const callStart = await alice.call('POST', '/api/call/start', { with: bob.user.id, video: false });
   ok('call started', callStart.status === 200 && callStart.data.call.id > 0 &&

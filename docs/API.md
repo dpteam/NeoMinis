@@ -325,8 +325,7 @@ earned (useful after an import or a rule change).
 
 | Method | Path | Body / query | Result |
 | --- | --- | --- | --- |
-| GET | `/api/messages/threads` | — | `{ threads[], unread }` || GET | `/api/messages` | `with`, `before`, `limit` | `{ other, messages[], hasMore, next }` |
-| POST | `/api/messages/send` | `to`, `body`, `image`, `images[]`, `video`, `audio`, `audioSec`, `file`, `fileName`, `sticker`, `replyTo` | `{ message }` |
+| GET | `/api/messages/threads` | — | `{ threads[], unread }` || GET | `/api/messages` | `with`, `before`, `limit` | `{ other, messages[], hasMore, next }` || POST | `/api/messages/send` | `to`, `body`, `image`, `images[]`, `video`, `audio`, `audioSec`, `file`, `fileName`, `sticker`, `replyTo` | `{ message }` |
 | GET | `/api/messages/wait` | `with`, `after`, `timeout` | `{ messages[], latest, typing, read, unread, live }` |
 | POST | `/api/messages/typing` | `to` | `{ ok }` |
 | POST | `/api/messages/react` | `id`, `emoji` | `{ message }` |
@@ -337,6 +336,12 @@ earned (useful after an import or a rule change).
 | POST | `/api/messages/revoke` | `id` | `{ message }` — delete for everyone |
 | POST | `/api/messages/pin` | `id`, `on` | `{ pinned }` |
 | GET | `/api/stickers` | — | `{ enabled, packs[{ id, name, stickers[{ id, url }] }] }` |
+
+**Paging a conversation.** `before` is an **exclusive upper bound on the id**, so the
+cursor for "load older" is the *oldest* id currently on screen — not the newest. Using
+the newest re-serves the page you are already looking at; the client did exactly that
+and duplicated the visible messages until it was fixed. `next` in the reply is the
+oldest id of the page returned, which is the value to pass back as `before`.
 | GET | `/api/theme` | — | **public**: `{ skin, configured, active, locked, effects, schedule, skins[{id,effect}] }` |
 
 **Templates (skins).** `site.skins` in the handshake lists the fifteen template ids and

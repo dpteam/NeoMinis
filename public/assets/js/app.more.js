@@ -154,8 +154,24 @@
     pop.className = 'sticker-pop hidden';
   });
 
-  function msgPreview(m) {
-    var body = String((m && m.body) || '').replace(/\s+/g, ' ').trim();
+  // Per-conversation drafts. Text you typed and did not send is the most annoying
+  // thing to lose, and switching threads to check something is exactly when it
+  // happens, so the draft is kept per peer in localStorage - it survives a reload,
+  // a route change and closing the tab.
+  function draftKey(withId) { return 'social.draft.' + withId; }
+
+  function getDraft(withId) {
+    try { return localStorage.getItem(draftKey(withId)) || ''; } catch (e) { return ''; }
+  }
+
+  function setDraft(withId, text) {
+    try {
+      if (text && String(text).trim()) localStorage.setItem(draftKey(withId), String(text));
+      else localStorage.removeItem(draftKey(withId));
+    } catch (e) { }
+  }
+
+  function msgPreview(m) {    var body = String((m && m.body) || '').replace(/\s+/g, ' ').trim();
     if (body) return body.substring(0, 60);
     if (m && m.sticker) return T('messages.sticker');
     if (m.file) return T('messages.file');
@@ -436,9 +452,15 @@
     var last = t.last || {};
     var preview = t.typing ? T('messages.typingShort') : msgPreview(last);
     var icon = !last.body && last.sticker ? UI.icon('icons') + ' ' : (!last.body && last.image ? UI.icon('image') + ' ' : '');
+    // an unsent draft is more useful in the list than the last delivered message
+    var draft = getDraft(o.id);
+    if (draft && !t.typing) {
+      preview = T('messages.draftPrefix') + ' ' + draft.replace(/\s+/g, ' ').slice(0, 50);
+      icon = UI.icon('file-pen') + ' ';
+    }
     return '<div class="thread' + (Number(activeId) === Number(o.id) ? ' active' : '') + '" data-user="' + o.id + '">' +
       UI.avatar(o, 34) + '<div class="thread-main"><div class="name">' + UI.esc(o.displayName) + '</div>' +
-      '<div class="last' + (t.typing ? ' typing' : '') + '">' + icon + UI.esc(preview) + '</div></div>' +
+      '<div class="last' + (t.typing ? ' typing' : (draft ? ' has-draft' : '')) + '">' + icon + UI.esc(preview) + '</div></div>' +
       '<div class="thread-side"><span class="thread-time">' + (last.created ? UI.timeAgo(last.created) : '') + '</span>' +
       (t.unread ? '<span class="unread">' + (t.unread > 99 ? '99+' : t.unread) + '</span>' : '') + '</div></div>';
   }
@@ -528,9 +550,18 @@
         '<div class="chat-head-main"><div class="name">' + UI.esc(other.displayName) + ' ' + UI.vipBadge(other) + '</div>' +
         '<div class="tiny muted" id="chat-presence">' + (other.online ? T('profile.online') : '@' + UI.esc(other.username)) + '</div>' +
         '<div class="tiny muted chat-read hidden" id="chat-read"></div></div>' +
+        '<button class="btn btn-sm" id="chat-search-btn" title="' + UI.attr(T('messages.searchInChat')) + '">' + UI.icon('magnifying-glass') + '</button>' +
         '<button class="btn btn-sm" id="chat-call-audio" title="' + UI.attr(T('calls.audioCall')) + '">' + UI.icon('phone') + '</button>' +
         '<button class="btn btn-sm" id="chat-call-video" title="' + UI.attr(T('calls.videoCall')) + '">' + UI.icon('video') + '</button>' +
         '<a class="btn btn-sm right" href="#/profile/' + other.id + '">' + T('nav.profile') + '</a></div>';
+      // the in-chat search bar: hidden until asked for, and it does not push the
+      // conversation down because it replaces the pinned bar while open
+      body += '<div class="chat-search hidden" id="chat-search">' +
+        '<form class="chat-search-form" id="chat-search-form">' + UI.icon('magnifying-glass') +
+        '<input type="search" id="chat-search-q" placeholder="' + UI.attr(T('messages.searchInChatHint')) + '" autocomplete="off">' +
+        '<button type="submit" class="btn btn-xs btn-primary">' + T('common.search') + '</button>' +
+        '<button type="button" class="icon-btn" id="chat-search-x" title="' + UI.attr(T('common.cancel')) + '">' + UI.icon('xmark') + '</button>' +
+        '</form><div class="chat-search-results" id="chat-search-results"></div></div>';
       body += '<div class="chat-body" id="chat-body">';
       if (data.hasMore) body += '<div class="center" style="padding:6px"><button type="button" class="btn btn-xs" id="chat-older">' + T('messages.loadOlder') + '</button></div>';
       // pinned bar: a short list, newest pin last, so it reads like a list
@@ -567,6 +598,8 @@
       chat.innerHTML = body;
       chat.setAttribute('data-last', lastId);
       state.im.last = lastId;
+      // the other end of the window: "load older" pages back from here
+      state.im.oldest = messages.length ? messages[0].id : 0;
       state.im.rev = data.rev || 0;
       state.im.other = other;
 
@@ -611,9 +644,114 @@
       if (ca) ca.addEventListener('click', function () { CallUI.start(withId, false); });
       var cv = document.getElementById('chat-call-video');
       if (cv) cv.addEventListener('click', function () { CallUI.start(withId, true); });
+      bindChatSearch(withId, other);
       if (!silent) refreshThreads();
       startMessageLoop(withId);
     });
+  }
+
+  /// <summary>
+  /// Search inside one conversation. The global search already finds a message
+  /// anywhere, but "where did she send that address?" is a question about *this*
+  /// thread, and jumping to the hit matters more than finding it. A hit outside the
+  /// loaded window reloads the thread ending at that message, so the jump always
+  /// lands on something.
+  /// </summary>
+  function bindChatSearch(withId, other) {
+    var btn = document.getElementById('chat-search-btn');
+    var bar = document.getElementById('chat-search');
+    var form = document.getElementById('chat-search-form');
+    var input = document.getElementById('chat-search-q');
+    var results = document.getElementById('chat-search-results');
+    var closeBtn = document.getElementById('chat-search-x');
+    if (!btn || !bar || !form || !input || !results) return;
+
+    function hide() {
+      bar.className = 'chat-search hidden';
+      results.innerHTML = '';
+      input.value = '';
+    }
+
+    btn.addEventListener('click', function () {
+      var open = bar.className.indexOf('hidden') < 0;
+      if (open) { hide(); return; }
+      bar.className = 'chat-search';
+      try { input.focus(); } catch (e) { }
+    });
+    if (closeBtn) closeBtn.addEventListener('click', hide);
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var q = input.value.trim();
+      if (q.length < 2) { results.innerHTML = '<div class="tiny muted" style="padding:8px">' + T('messages.searchTooShort') + '</div>'; return; }
+      results.innerHTML = '<div class="center" style="padding:10px">' + UI.spinner() + '</div>';
+      Api.request('GET', '/api/messages/search?q=' + encodeURIComponent(q) +
+        '&with=' + withId + '&limit=40', null, function (err, data) {
+        if (err) { results.innerHTML = '<div class="alert err" style="margin:8px">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+        var hits = (data && data.results) || [];
+        if (!hits.length) {
+          results.innerHTML = '<div class="tiny muted" style="padding:8px">' + T('messages.searchNoHits') + '</div>';
+          return;
+        }
+        var h = '';
+        for (var i = 0; i < hits.length; i++) {
+          var m = hits[i].message || hits[i];
+          var mine = !!m.mine;
+          var text = String(m.body || '').replace(/\s+/g, ' ').trim();
+          if (!text) text = m.image ? T('messages.photo') : m.audio ? T('messages.voice') : T('messages.attachment');
+          h += '<button type="button" class="chat-hit" data-id="' + m.id + '">' +
+            '<span class="chat-hit-who">' + UI.esc(mine ? T('common.you') : (other.displayName || other.username)) + '</span>' +
+            '<span class="chat-hit-text">' + UI.esc(text.slice(0, 120)) + '</span>' +
+            '<span class="chat-hit-when">' + UI.formatDate(m.created, true) + '</span></button>';
+        }
+        results.innerHTML = h;
+        var rows = results.querySelectorAll('.chat-hit');
+        for (var r = 0; r < rows.length; r++) {
+          rows[r].addEventListener('click', function () {
+            jumpToMessage(Number(this.getAttribute('data-id')), withId, other);
+            hide();
+          });
+        }
+      });
+    });
+  }
+
+  /// <summary>
+  /// Scrolls to a message and flashes it. If the message is older than the loaded
+  /// window the thread pages backwards until it appears, because a search hit that
+  /// cannot be shown is worse than no search at all.
+  /// </summary>
+  function jumpToMessage(id, withId, other) {
+    var body = document.getElementById('chat-body');
+    if (!body || !id) return;
+
+    function land(row) {
+      try { row.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { }
+      flashRow(row);
+    }
+
+    var row = body.querySelector('.bubble-row[data-id="' + id + '"]');
+    if (row) { land(row); return; }
+
+    // Walk back through the history using the same "older" button a reader would
+    // use, with a cap so a missing id cannot spin forever.
+    var tries = 0;
+    function step() {
+      var older = document.getElementById('chat-older');
+      var b = document.getElementById('chat-body');
+      var r = b ? b.querySelector('.bubble-row[data-id="' + id + '"]') : null;
+      if (r) { land(r); return; }
+      if (!older || tries >= 12) { UI.toast(T('messages.jumpFailed'), 'info'); return; }
+      tries++;
+      older.click();
+      setTimeout(step, 450);
+    }
+    step();
+  }
+
+  function flashRow(row) {
+    row.className += ' flash';
+    setTimeout(function () { row.className = row.className.replace(/\s*flash\b/g, ''); }, 1800);
   }
 
   function autoGrow(ta) {
@@ -643,19 +781,42 @@
     state.im.image = '';
     state.im.album = [];
 
+    // ---- draft: restore what was typed, and keep it while typing
+    if (ta) {
+      if (!ta.value) {
+        var kept = getDraft(withId);
+        if (kept) { ta.value = kept; autoGrow(ta); }
+      }
+      var draftTimer = null;
+      ta.addEventListener('input', function () {
+        if (draftTimer) clearTimeout(draftTimer);
+        draftTimer = setTimeout(function () { setDraft(withId, ta.value); }, 400);
+      });
+    }
+
     // older messages
+    // `before` must be the OLDEST id on screen, not the newest: using the newest
+    // re-fetched the page that was already rendered and prepended it again, so
+    // "load older" duplicated the visible messages instead of going further back.
     var older = document.getElementById('chat-older');
     if (older) older.addEventListener('click', function () {
       var body = document.getElementById('chat-body');
-      if (!body || !state.im.last) return;
+      if (!body || !state.im.oldest) return;
       older.disabled = true;
-      Api.request('GET', '/api/messages?with=' + withId + '&limit=40&before=' + state.im.last, null, function (e2, d2) {
+      Api.request('GET', '/api/messages?with=' + withId + '&limit=40&before=' + state.im.oldest, null, function (e2, d2) {
         if (e2) { older.disabled = false; UI.toast(Api.errorText(e2), 'err'); return; }
         var older2 = (d2.messages || []).slice().reverse();
         var html = '';
-        for (var i = 0; i < older2.length; i++) html += bubbleHtml(older2[i], other);
+        var added = 0;
+        for (var i = 0; i < older2.length; i++) {
+          // a late page can overlap one already on screen; skip those
+          if (body.querySelector('.bubble-row[data-id="' + older2[i].id + '"]')) continue;
+          html += bubbleHtml(older2[i], other);
+          added++;
+        }
+        if (older2.length) state.im.oldest = older2[0].id;
         var keep = body.scrollHeight;
-        body.insertAdjacentHTML('afterbegin', html);
+        if (html) body.insertAdjacentHTML('afterbegin', html);
         body.scrollTop = body.scrollHeight - keep;
         older.disabled = false;
         if (!d2.hasMore && older.parentNode) older.parentNode.removeChild(older);
@@ -1069,6 +1230,8 @@
         if (err) { UI.toast(Api.errorText(err), 'err'); return; }
         ta.value = '';
         autoGrow(ta);
+        // the draft became a message, so there is nothing left to keep
+        setDraft(withId, '');
         state.im.image = '';
         state.im.album = [];
         state.im.clip = '';

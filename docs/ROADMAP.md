@@ -253,7 +253,6 @@ Small things that would make what already exists noticeably better.
 - Link preview cards (title + description, no images).
 
 **Messages**
-- Search inside one conversation (the global search already finds them).
 - Scheduled messages ("send at 9:00").
 - Sticker uploads: user-made packs on top of the built-in two, stored like any other
   media and moderated. The built-in packs are in.
@@ -349,6 +348,14 @@ Kept here so the list above stays honest.
   a participant count that ignores people who declined, a minimised floating call
   window that keeps the media flowing, avatars of who is on the line with a blue dot
   when somebody joins, and rooms that no longer die under the last person in them.
+- Messages, sharpened: **search inside one conversation** with a jump to the hit (it
+  pages back through the history until the message is on screen), **per-conversation
+  drafts** that survive switching threads, a reload and closing the tab — and the
+  thread list says "Draft:" instead of showing the last delivered message. Fixed a
+  real bug on the way: "load older" paged with the *newest* id as its cursor, so it
+  re-fetched the page already on screen and prepended duplicates; it now pages from
+  the oldest id, skips anything already rendered, and has a test that pins the
+  invariant.
 - The feed tells you there is something new instead of silently going stale: a poll
   on `since=<newest id>` every 25 s, and a pill that adds the posts when clicked —
   nothing moves under the reader. Notifications group by type and target, so ten
