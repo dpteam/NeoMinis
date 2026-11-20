@@ -235,6 +235,11 @@ namespace Social.Core
         public string Scopes = "";         // comma separated requested scopes
         public bool Published;
         public int Installs;
+        // A game that ships with the site. It is a real app - that is how it gets a
+        // leaderboard and a catalogue entry - but nobody owns it, nobody may edit or
+        // delete it, and it never appears in the app list where "install" would be
+        // the wrong verb.
+        public bool Builtin;
         public DateTime Created = DateTime.UtcNow;
     }
 

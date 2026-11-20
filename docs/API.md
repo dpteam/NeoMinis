@@ -349,8 +349,7 @@ earned (useful after an import or a rule change).
 | POST | `/api/messages/delete` | `id` | `{ ok }` (per-side delete) |
 | POST | `/api/messages/revoke` | `id` | `{ message }` — delete for everyone |
 | POST | `/api/messages/pin` | `id`, `on` | `{ pinned }` |
-| GET | `/api/stickers` | — | `{ enabled, customEnabled, vipOnly, canCreate, maxPacks, maxPerPack, maxKb, packs[{ id, name, mine, shared, stickers[{ id, url }] }] }` |
-| POST | `/api/stickers/pack` | `name` | `{ id, name, mine, shared }` |
+| GET | `/api/stickers` | — | `{ enabled, customEnabled, vipOnly, canCreate, maxPacks, maxPerPack, maxKb, packs[{ id, name, mine, shared, stickers[{ id, url }] }] }` || POST | `/api/stickers/pack` | `name` | `{ id, name, mine, shared }` |
 | POST | `/api/stickers/pack/update` | `id`, `name` or `shared` | `{ id, name, shared }` |
 | POST | `/api/stickers/pack/delete` | `id` | `{ ok, removed }` (sticker files are deleted too) |
 | POST | `/api/stickers/add` | `pack`, `image` (data URL) | `{ id, url }` |
@@ -589,11 +588,32 @@ Session endpoints (HMAC-signed like everything else):
 | POST | `/api/apps/authorize` | `id`, `scopes` | `{ code, expires, scopes }` |
 | POST | `/api/apps/revoke` | `id` | `{ revoked }` |
 | GET | `/api/apps/scores` | `id`, `limit` | `{ scores[], mine }` |
-| POST | `/api/apps/score` | `id`, `score` | `{ score, rank, improved }` |
+| POST | `/api/apps/score` | `id`, `score`, `playId` | `{ score, rank, improved }` |
+| POST | `/api/apps/play` | `id` | `{ playId, appId }` — opens a round of a built-in game |
+| GET | `/api/minigames` | — | `{ enabled, games[{ id, name, description, icon, seconds, appId, best, top[] }] }` |
 
 `scopes` is accepted as an array (what the SPA sends) or a comma separated string
 (what curl and the CLI send). An app may only be approved for scopes it actually
 asked for — `400 scope-not-offered` otherwise.
+
+**Built-in mini-games are apps.** Each one (Snake, 2048, Memory, Minesweeper) is
+seeded on first start as an `App` with `type: html`, `url: /play/mini/<id>`,
+`builtin: true` and `owner: 0`. That is what gives them a leaderboard for free: the
+score table, the rank and the catalogue plumbing are the Applications API, not a
+second parallel system. Three consequences worth knowing:
+
+- They never appear in `GET /api/apps` — "install" is the wrong verb for a game that
+  is already there — and `POST /api/apps/update` / `delete` answer `400 builtin`.
+- A score from a built-in game must name a **round**: `POST /api/apps/play` first,
+  then `POST /api/apps/score` with that `playId`. A round pays out once, belongs to
+  the account that opened it, and expires after 45 minutes. The point is not to prove
+  a browser score is honest (it cannot) but to make a scripted leaderboard cost a
+  request per entry instead of one loop.
+- A third-party app scores exactly as before, with no `playId`: its number arrives
+  from its own server with a token and there is no browser round to point at.
+
+Rounds live in memory, not in a table: a play session is worth seconds, and a restart
+ends every game in progress anyway.
 
 **The token surface is different on purpose.** An external app cannot produce our
 HMAC signatures, so it talks plain JSON with `X-App-Token`:

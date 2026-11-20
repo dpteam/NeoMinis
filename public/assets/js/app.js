@@ -334,7 +334,10 @@ var App = (function () {
   // or would only show an error, so the router quietly sends them to the feed.
   var GUEST_BLOCKED = {
     settings: 1, notifications: 1, bookmarks: 1, drafts: 1,
-    im: 1, admin: 1, calls: 1, gifts: 1, 'new-post': 1
+    im: 1, admin: 1, calls: 1, gifts: 1, 'new-post': 1,
+    // a game needs an account behind the score: a guest session has no id to put
+    // on a leaderboard, so the shelf is not theirs to open
+    minigames: 1
   };
 
   function renderShell() {
@@ -397,6 +400,10 @@ var App = (function () {
       html += side('#/gifts', 'gift', T('nav.gifts'), 'gifts');
     // games and apps are one place with tabs, so one entry, not two
     html += side('#/apps', 'puzzle-piece', T('nav.apps'), 'apps');
+    // the built-in games get their own entry: they are the thing most people want
+    // when they open this site after work, and hiding them behind a tab is a waste
+    if (!App.state.site || App.state.site.miniGames !== false)
+      html += side('#/minigames', 'gamepad', T('nav.minigames'), 'minigames');
     html += '<div class="side-sep"></div>';
     html += side('#/profile/' + u.id, 'id-card', T('nav.profile'), 'profile');
     html += side('#/settings', 'gear', T('nav.settings'), 'settings');

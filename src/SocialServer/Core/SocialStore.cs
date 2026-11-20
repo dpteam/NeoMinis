@@ -3082,6 +3082,37 @@ namespace Social.Core
             }
         }
 
+        /// <summary>
+        /// Finds the seeded app behind a built-in game by its player URL. Used by the
+        /// seeder, which must not create a second row after a restart.
+        /// </summary>
+        public App FindBuiltinApp(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return null;
+            lock (_sync)
+            {
+                for (int i = 0; i < _apps.Count; i++)
+                {
+                    App a = _apps[i];
+                    if (!a.Builtin) continue;
+                    if (string.Equals(a.Url, url, StringComparison.OrdinalIgnoreCase)) return a;
+                }
+                return null;
+            }
+        }
+
+        public void MarkAppBuiltin(App app)
+        {
+            if (app == null) return;
+            lock (_sync)
+            {
+                app.Builtin = true;
+                app.Published = true;
+                app.Owner = 0;
+                MarkApps();
+            }
+        }
+
         public App FindAppByClientId(string clientId)
         {
             if (string.IsNullOrEmpty(clientId)) return null;
@@ -3455,6 +3486,87 @@ namespace Social.Core
             return better + 1;
         }
 
+        // ------------------------------------------------------- play sessions
+
+        /// <summary>
+        /// One started round of a built-in game. The point is not to prove the score
+        /// is honest - a browser game can always lie to itself - it is to make a
+        /// scripted leaderboard cost a request per entry instead of one loop: a
+        /// score must name a round this account actually started, and each round
+        /// pays out once.
+        ///
+        /// In memory on purpose. A play session is worth seconds, not a table: a
+        /// restart ends every game in progress anyway, so persisting it would only
+        /// mean reloading tokens for rounds nobody can finish.
+        /// </summary>
+        private sealed class PlayToken
+        {
+            public long AppId;
+            public long User;
+            public DateTime Created;
+        }
+
+        private readonly Dictionary<string, PlayToken> _plays = new Dictionary<string, PlayToken>(StringComparer.Ordinal);
+        private const int MaxPlays = 4000;
+        private static readonly TimeSpan PlayTtl = TimeSpan.FromMinutes(45);
+
+        public string StartPlay(long appId, long userId)
+        {
+            string token = Crypto.RandomHex(16);
+            DateTime now = DateTime.UtcNow;
+            lock (_sync)
+            {
+                if (_plays.Count >= MaxPlays) PrunePlaysLocked(now);
+                PlayToken p = new PlayToken();
+                p.AppId = appId;
+                p.User = userId;
+                p.Created = now;
+                _plays[token] = p;
+            }
+            return token;
+        }
+
+        /// <summary>
+        /// True when this token names a round of this game started by this account and
+        /// not yet spent. Consuming it is the whole point: a round pays once.
+        /// </summary>
+        public bool ConsumePlay(string token, long appId, long userId)
+        {
+            if (string.IsNullOrEmpty(token)) return false;
+            DateTime now = DateTime.UtcNow;
+            lock (_sync)
+            {
+                PlayToken p;
+                if (!_plays.TryGetValue(token, out p)) return false;
+                if (p.AppId != appId || p.User != userId) return false;
+                _plays.Remove(token);
+                return (now - p.Created) <= PlayTtl;
+            }
+        }
+
+        /// <summary>How many rounds are waiting for a score; shown in the admin panel.</summary>
+        public int ActivePlays
+        {
+            get { lock (_sync) { return _plays.Count; } }
+        }
+
+        private void PrunePlaysLocked(DateTime now)
+        {
+            List<string> dead = new List<string>();
+            foreach (KeyValuePair<string, PlayToken> kv in _plays)
+                if ((now - kv.Value.Created) > PlayTtl) dead.Add(kv.Key);
+            for (int i = 0; i < dead.Count; i++) _plays.Remove(dead[i]);
+            if (_plays.Count < MaxPlays) return;
+            // still full: drop the oldest half, the same policy the nonce cache uses
+            List<KeyValuePair<string, PlayToken>> all = new List<KeyValuePair<string, PlayToken>>(_plays);
+            all.Sort(delegate(KeyValuePair<string, PlayToken> a, KeyValuePair<string, PlayToken> b)
+            {
+                return a.Value.Created.CompareTo(b.Value.Created);
+            });
+            int drop = all.Count / 2;
+            for (int i = 0; i < drop; i++) _plays.Remove(all[i].Key);
+        }
+
         public List<AppScore> TopScores(long appId, int limit)
         {
             lock (_sync)
@@ -3495,6 +3607,7 @@ namespace Social.Core
                 d["description"] = a.Description; d["icon"] = a.Icon; d["type"] = a.Type;
                 d["url"] = a.Url; d["clientId"] = a.ClientId; d["secretHash"] = a.SecretHash;
                 d["scopes"] = a.Scopes; d["published"] = a.Published; d["installs"] = a.Installs;
+                if (a.Builtin) d["builtin"] = true;
                 d["created"] = a.Created;
                 list.Add(d);
             }
@@ -3516,6 +3629,7 @@ namespace Social.Core
             a.Scopes = Json.GetString(d, "scopes", "");
             a.Published = Json.GetBool(d, "published", false);
             a.Installs = Json.GetInt(d, "installs", 0);
+            a.Builtin = Json.GetBool(d, "builtin", false);
             a.Created = Json.GetDate(d, "created", DateTime.UtcNow);
             if (a.Id <= 0) return null;
             return a;

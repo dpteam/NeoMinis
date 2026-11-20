@@ -57,6 +57,10 @@ namespace Social.Web
 
         private void RequireAppOwner(App a, User user)
         {
+            // a built-in game has no owner: it ships with the site, and an
+            // administrator deleting it would only make the seeder put it back
+            if (a.Builtin)
+                throw new ApiException(400, "builtin", "A built-in game cannot be changed");
             if (a.Owner != user.Id && !user.IsAdmin)
                 throw new ApiException(403, "not-owner", "Only the developer or an administrator can change this app");
         }
@@ -69,7 +73,13 @@ namespace Social.Web
             JsonBuilder b = new JsonBuilder(8192);
             b.BeginObject();
             b.Name("apps").BeginArray();
-            for (int i = 0; i < published.Count; i++) b.Raw(AppJson(published[i], ctx.User, false));
+            // a built-in game is an app for the score table, not something to install,
+            // so it lives in its own tab instead of the catalogue
+            for (int i = 0; i < published.Count; i++)
+            {
+                if (published[i].Builtin) continue;
+                b.Raw(AppJson(published[i], ctx.User, false));
+            }
             b.EndArray();
             b.Name("scopes").BeginArray();
             for (int i = 0; i < AppScopes.All.Length; i++) b.Str(AppScopes.All[i]);
@@ -361,6 +371,16 @@ namespace Social.Web
             if (score < 0) score = 0;
             if (score > 1000000000L) score = 1000000000L;
 
+            // A built-in game must name the round it came from, and a round pays
+            // once. A third-party app keeps working without this: its score arrives
+            // from its own server with a token, and it has no browser round to point at.
+            if (app.Builtin)
+            {
+                string play = BodyStr(ctx, "playId", "");
+                if (!_store.ConsumePlay(play, app.Id, ctx.User.Id))
+                    throw new ApiException(400, "no-play", "That round is not open - start the game again");
+            }
+
             bool improved;
             int rank = _store.SubmitScore(id, ctx.User.Id, score, out improved);
             JsonBuilder b = new JsonBuilder(256);
@@ -368,6 +388,70 @@ namespace Social.Web
             b.Prop("score", score);
             b.Prop("rank", rank);
             b.Prop("improved", improved);
+            SendOk(ctx, b);
+        }
+
+        /// <summary>
+        /// Opens a round of a built-in game and hands back a token for it. Separate
+        /// from the score call so a score cannot arrive out of nowhere.
+        /// </summary>
+        private void HandleAppPlay(ApiCtx ctx)
+        {
+            if (!_cfg.MiniGames) throw new ApiException(403, "minigames-off", "Mini-games are switched off here");
+            long id = BodyLong(ctx, "id", 0);
+            App app = RequireApp(id);
+            if (!app.Builtin) throw new ApiException(400, "not-a-game", "That app does not open rounds");
+
+            string playId = _store.StartPlay(app.Id, ctx.User.Id);
+            JsonBuilder b = new JsonBuilder(128);
+            b.BeginObject();
+            b.Prop("playId", playId);
+            b.Prop("appId", app.Id);
+            SendOk(ctx, b);
+        }
+
+        /// <summary>
+        /// The mini-game shelf: one entry per built-in game, with the caller's own best
+        /// score and the top of the leaderboard, so the card can show something real
+        /// instead of a static list.
+        /// </summary>
+        private void HandleMiniGames(ApiCtx ctx)
+        {
+            JsonBuilder b = new JsonBuilder(4096);
+            b.BeginObject();
+            b.Prop("enabled", _cfg.MiniGames);
+            b.Name("games").BeginArray();
+            for (int i = 0; i < MiniGames.All.Length; i++)
+            {
+                MiniGame g = MiniGames.All[i];
+                App app = _store.FindBuiltinApp("/play/mini/" + g.Id);
+                b.BeginObject();
+                b.Prop("id", g.Id);
+                b.Prop("name", g.Name);
+                b.Prop("description", g.Description);
+                b.Prop("icon", g.Icon);
+                b.Prop("seconds", g.Seconds);
+                b.Prop("appId", app == null ? 0 : app.Id);
+                AppScore mine = app == null ? null : _store.ScoreFor(app.Id, ctx.User.Id);
+                b.Prop("best", mine == null ? 0 : mine.Score);
+                b.Name("top").BeginArray();
+                if (app != null)
+                {
+                    List<AppScore> top = _store.TopScores(app.Id, 5);
+                    for (int k = 0; k < top.Count; k++)
+                    {
+                        User u = _store.FindUser(top[k].User);
+                        b.BeginObject()
+                            .Prop("rank", k + 1)
+                            .Prop("score", top[k].Score)
+                            .Prop("name", u == null ? "?" : (u.DisplayName.Length > 0 ? u.DisplayName : u.Username))
+                            .EndObject();
+                    }
+                }
+                b.EndArray();
+                b.EndObject();
+            }
+            b.EndArray();
             SendOk(ctx, b);
         }
 

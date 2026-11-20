@@ -45,9 +45,12 @@ var AppsUI = (function () {
   /// </summary>
   function hub(main, active) {
     var gamesOn = !(App.state.site && App.state.site.gamesEnabled === false);
+    var miniOn = !(App.state.site && App.state.site.miniGames === false) && !!window.MiniGamesUI;
     var tabs = '<div class="feed-tabs hub-tabs">' +
+      (miniOn ? '<a class="tab2' + (active === 'mini' ? ' active' : '') + '" href="#/minigames">' +
+        UI.icon('gamepad') + ' ' + T('apps.tabMini') + '</a>' : '') +
       (gamesOn ? '<a class="tab2' + (active === 'games' ? ' active' : '') + '" href="#/games">' +
-        UI.icon('gamepad') + ' ' + T('apps.tabGames') + '</a>' : '') +
+        UI.icon('compact-disc') + ' ' + T('apps.tabGames') + '</a>' : '') +
       '<a class="tab2' + (active === 'apps' ? ' active' : '') + '" href="#/apps">' +
       UI.icon('puzzle-piece') + ' ' + T('apps.tabApps') + '</a>' +
       '<a class="tab2' + (active === 'mine' ? ' active' : '') + '" href="#/apps?tab=mine">' +
@@ -57,6 +60,16 @@ var AppsUI = (function () {
     main.innerHTML = tabs + '<div id="hub-body"></div>';
     var body = byId('hub-body');
     if (!body) return;
+
+    if (active === 'mini') {
+      if (!miniOn) {
+        body.innerHTML = '<div class="card"><div class="card-b">' +
+          UI.empty('gamepad', T('mini.off'), T('mini.offHint')) + '</div></div>';
+        return;
+      }
+      MiniGamesUI.shelf(body);
+      return;
+    }
 
     if (active === 'games') {
       if (!window.GamesUI || !GamesUI.ready()) {
@@ -84,6 +97,9 @@ var AppsUI = (function () {
 
   // #/games shows the same shell with the games tab on, so the two are one place
   App.views.games = function (main) { hub(main, 'games'); };
+
+  // #/minigames: the built-in HTML games, which need no Ruffle and no upload
+  App.views.minigames = function (main) { hub(main, 'mini'); };
 
   // --------------------------------------------------------------- catalogue
 

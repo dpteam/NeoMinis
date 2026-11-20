@@ -12,7 +12,7 @@ Runs on Windows XP SP3 and anything newer, including behind Nginx Proxy Manager
 [![.NET Framework](https://img.shields.io/badge/.NET_Framework-4.0-512bd4)](https://dotnet.microsoft.com/)
 [![C#](https://img.shields.io/badge/C%23-4.0-239120)](https://learn.microsoft.com/dotnet/csharp/)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#why-this-exists)
-[![API tests](https://img.shields.io/badge/API_tests-602_passing-brightgreen)](#testing)
+[![API tests](https://img.shields.io/badge/API_tests-625_passing-brightgreen)](#testing)
 [![License](https://img.shields.io/badge/license-use_it_fork_it-blue)](#license)
 
 [Quick start](#quick-start) · [Screenshots](#screenshots) · [Features](#features) · [Configuration](#configuration) · [API](#api-and-security) · [Docs](#documentation) · [Testing](#testing)
@@ -141,7 +141,7 @@ effect separately if you want a different one:
 | **Media** | personal music and video shelves with upload, inline players, playlists, "save to my library" from somebody else's shelf, size and count limits |
 | **Stories** | 24-hour photo and video stories with a progress bar, view tracking and per-story viewer lists |
 | **Gifts** | a catalogue of 14 gifts, each with its own icon and colour, sent to a profile with a message |
-| **Games and apps** | a Flash shelf through vendored Ruffle, and a real **Applications API** — third-party apps register, get scopes, ask for consent, exchange a code for a bearer token, get per-user storage with a quota, and publish leaderboards |
+| **Games and apps** | **four built-in mini-games** (Snake, 2048, Memory, Minesweeper — plain HTML, no plugin, themed to match the site, with a leaderboard each), a Flash shelf through vendored Ruffle, and a real **Applications API** — third-party apps register, get scopes, ask for consent, exchange a code for a bearer token, get per-user storage with a quota, and publish leaderboards |
 | **Achievements** | 34 badges, auto-granted from activity (posts, comments, likes, friends, messages, bookmarks, age) plus manual awards; admin can grant or revoke any badge |
 | **Peer file transfer** | direct browser-to-browser transfer between friends with an 8-digit code, consent, SHA-256 verification and no server-side storage |
 | **AI citizens** | imported personas that post, comment and like on their own — Markov chain or any OpenAI-compatible endpoint. Off by default. See [docs/AI.md](docs/AI.md) |
@@ -188,6 +188,8 @@ public/                  SPA: index.html, 404/403, assets/css, assets/js
                          stories, transfers, push, i18n, ui, sound, player
   assets/stickers/       the built-in sticker packs (SVG) + manifest.json
                          (uploaded packs live in bin/data/media/stickers)
+  assets/mini/           the built-in mini-games: sdk, css, snake, 2048,
+                         memory, mines - plain HTML/canvas, no plugin needed
 docs/                    ARCHITECTURE, API, CLI, AI, IMPORT, ROADMAP, img/
 tools/                   firewall, test-web.mjs, ci-test.ps1, rename-user.mjs,
                          make-logo.mjs, make-demo-screens.mjs
@@ -361,7 +363,7 @@ powershell -ExecutionPolicy Bypass -File tools\ci-test.ps1
 folder, runs the Node suite against **both boards**, restarts the server and
 verifies that data survived.
 
-`tools/test-web.mjs` speaks the same crypto as the browser: **602 checks** covering
+`tools/test-web.mjs` speaks the same crypto as the browser: **625 checks** covering
 registration, login, signature enforcement, replay rejection, encryption
 enforcement, posts, likes, comments, friends, messages, groups, notifications,
 calls, channels, apps, push, transfers, admin actions, recovery and logout.

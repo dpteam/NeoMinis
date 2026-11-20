@@ -4980,6 +4980,8 @@
         check('cfg-live', T('admin.liveNotifications'), ui.liveNotifications) +
         check('cfg-gifts', T('admin.giftsEnabled'), ui.giftsEnabled) +
         check('cfg-games', T('admin.gamesEnabled'), ui.gamesEnabled) +
+        check('cfg-minigames', T('admin.miniGames'), ui.miniGames !== false) +
+        '<div class="hint" style="margin:-4px 0 8px">' + T('admin.miniGamesHint') + '</div>' +
         check('cfg-stories', T('admin.storiesEnabled'), ui.storiesEnabled) +
         check('cfg-stickers', T('admin.stickersEnabled'), ui.stickersEnabled !== false) +
         check('cfg-customstickers', T('admin.customStickers'), ui.customStickers !== false) +
@@ -5133,6 +5135,7 @@
             liveNotifications: document.getElementById('cfg-live').checked,
             giftsEnabled: document.getElementById('cfg-gifts').checked,
             gamesEnabled: document.getElementById('cfg-games').checked,
+            miniGames: document.getElementById('cfg-minigames').checked,
             storiesEnabled: document.getElementById('cfg-stories').checked,
             stickersEnabled: document.getElementById('cfg-stickers').checked,
             customStickers: document.getElementById('cfg-customstickers').checked,

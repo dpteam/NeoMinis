@@ -270,8 +270,9 @@ Small things that would make what already exists noticeably better.
 - Profile covers (see the quick wins above).
 
 **Games**
-- Comments under a game, and a "plays today" counter.
-- Score submission and a leaderboard per game (needs the apps API above).
+- Built-in mini-games: done — four of them, each with a leaderboard through the
+  Applications API. What is left: comments under a game, a "plays today" counter, and
+  a per-game daily leaderboard (the score table holds one best per player).
 - "Continue where you left off" for `.swf` that support save data.
 
 **Stories**
@@ -360,6 +361,21 @@ Kept here so the list above stays honest.
   `u1/1` (it demanded five characters when four is the shortest possible), and
   `stickers/remove` matched the item id without checking the pack, so a crafted id
   could delete a row out of somebody else's pack.
+- **Four built-in mini-games** that need no plugin and no upload: Snake, 2048, Memory
+  and Minesweeper, in `public/assets/mini/`. They are plain HTML and canvas, they read
+  the current template's colours so they look like the rest of the site, and each one
+  has a real leaderboard. The trick is that a game **is** an app: seeding creates an
+  `App` row (`builtin: true`, `url: /play/mini/<id>`) on first start, so the score
+  table, the rank and the catalogue plumbing come from the Applications API instead of
+  a second parallel system. They stay out of the app catalogue ("install" is the wrong
+  verb for a game that is already there) and answer `400 builtin` to edit and delete.
+  A score must name a round (`/api/apps/play` first, then `/api/apps/score` with the
+  `playId`), a round pays once, belongs to the account that opened it and expires in 45
+  minutes — not to prove a browser score is honest (it cannot) but so a scripted
+  leaderboard costs a request per entry instead of one loop. Third-party apps score
+  exactly as before, with no `playId`. Found while testing: the "play again" button
+  restarted the board underneath the old "game over" panel, which then covered the new
+  one; the panel is now removed on restart, and the death path cannot stack two.
 - **Sticker packs can be moderated.** A report button sits on somebody else's shared
   pack in the picker, the report targets the pack (not a message), and a new admin tab
   lists every uploaded pack — private ones included, because a private pack is exactly

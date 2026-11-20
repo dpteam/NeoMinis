@@ -241,6 +241,9 @@ namespace Social.Web
         public bool ServePlayer(HttpRequest req, HttpResponse resp, string path)
         {
             if (!path.StartsWith("/play/", StringComparison.OrdinalIgnoreCase)) return false;
+            // the built-in mini-games have their own page (see ServeMiniGame)
+            if (path.StartsWith("/play/mini/", StringComparison.OrdinalIgnoreCase))
+                return ServeMiniGame(req, resp, path);
             if (!string.Equals(req.Method, "GET", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(req.Method, "HEAD", StringComparison.OrdinalIgnoreCase))
             {
@@ -302,8 +305,73 @@ namespace Social.Web
             return (req.IsHttps ? "https://" : "http://") + host;
         }
 
-        private string PlayerHtml(MediaItem game)
+        /// <summary>
+        /// Serves <c>/play/mini/&lt;id&gt;</c>: the standalone page a built-in game runs
+        /// in. The SPA frames it with <c>sandbox="allow-scripts"</c>, so the document
+        /// lives on an opaque origin with no cookies and no way to touch the parent -
+        /// which is why the CSP names the site origin explicitly instead of 'self',
+        /// exactly like the Ruffle host page above. The game talks to the SPA over
+        /// postMessage and the SPA is what calls the API.
+        /// </summary>
+        public bool ServeMiniGame(HttpRequest req, HttpResponse resp, string path)
         {
+            if (!string.Equals(req.Method, "GET", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(req.Method, "HEAD", StringComparison.OrdinalIgnoreCase))
+            {
+                _web.SendJson(req, resp, 405, "{\"ok\":false,\"error\":\"method-not-allowed\"}");
+                return true;
+            }
+
+            string raw = path.Substring("/play/mini/".Length);
+            int cut = raw.IndexOf('?');
+            if (cut >= 0) raw = raw.Substring(0, cut);
+            MiniGame game = _cfg.MiniGames ? MiniGames.Find(raw) : null;
+            if (game == null)
+            {
+                resp.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'self'");
+                _web.SendText(req, resp, 404, "Game not found");
+                return true;
+            }
+
+            string origin = OriginOf(req);
+            string csp = "default-src 'none'; base-uri 'none'; form-action 'none'; " +
+                         "frame-ancestors 'self'; " +
+                         "script-src " + origin + "; " +
+                         "style-src " + origin + " 'unsafe-inline'; " +
+                         "img-src " + origin + " data:; " +
+                         "font-src " + origin + " data:";
+            resp.Set("Content-Security-Policy", csp);
+            resp.Set("Referrer-Policy", "no-referrer");
+            resp.Set("X-Robots-Tag", "noindex");
+            resp.Set("X-Frame-Options", "SAMEORIGIN");
+            resp.Set("Cross-Origin-Resource-Policy", "cross-origin");
+
+            string html = MiniGameHtml(game);
+            _web.SendBytes(req, resp, 200, Encoding.UTF8.GetBytes(html),
+                           "text/html; charset=utf-8", true, false, null);
+            return true;
+        }
+
+        private string MiniGameHtml(MiniGame game)
+        {
+            string basePath = _cfg.PublicBasePath ?? "";
+            StringBuilder sb = new StringBuilder(2048);
+            sb.Append("<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\">");
+            sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, user-scalable=no\">");
+            sb.Append("<title>").Append(Html(game.Name)).Append("</title>");
+            // the game reads the template's colours from the SPA and applies them as
+            // CSS variables; until then the stylesheet's own defaults are used, so
+            // there is no flash of an unstyled board
+            sb.Append("<link rel=\"stylesheet\" href=\"").Append(Html(basePath)).Append("/assets/mini/mini.css\">");
+            sb.Append("</head><body data-game=\"").Append(Html(game.Id)).Append("\">");
+            sb.Append("<div id=\"game\"></div>");
+            sb.Append("<script src=\"").Append(Html(basePath)).Append("/assets/mini/sdk.js\"></script>");
+            sb.Append("<script src=\"").Append(Html(basePath)).Append("/assets/mini/").Append(Html(game.Id)).Append(".js\"></script>");
+            sb.Append("</body></html>");
+            return sb.ToString();
+        }
+
+        private string PlayerHtml(MediaItem game)        {
             string basePath = _cfg.PublicBasePath ?? "";
             StringBuilder sb = new StringBuilder(4096);
             sb.Append("<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\">");

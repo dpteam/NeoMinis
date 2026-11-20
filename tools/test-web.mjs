@@ -2477,6 +2477,106 @@ async function main() {
   ok('the developer deletes the app', appDel.status === 200 && appDel.data.deleted === true &&
     appDel.data.records >= 2, JSON.stringify(appDel.data));
 
+  // ---- mini-games: built-in apps that use the same score table
+  const mini = await alice.call('GET', '/api/minigames');
+  ok('the mini-game shelf answers', mini.status === 200 && mini.data.enabled === true &&
+    Array.isArray(mini.data.games), String(mini.status));
+  ok('every game is backed by a real app', (mini.data.games || []).length === 4 &&
+    mini.data.games.every(g => g.appId > 0 && g.id && g.name),
+    JSON.stringify((mini.data.games || []).map(g => g.id + ':' + g.appId)));
+  const snakeGame = (mini.data.games || []).filter(g => g.id === 'snake')[0];
+  ok('a game carries the caller\'s own best and the top of the board',
+    !!snakeGame && typeof snakeGame.best === 'number' && Array.isArray(snakeGame.top),
+    JSON.stringify(snakeGame && snakeGame.best));
+
+  // a built-in game is an app for the score table, not something to install
+  const pubApps = await alice.call('GET', '/api/apps');
+  ok('a built-in game stays out of the app catalogue',
+    !(pubApps.data.apps || []).some(a => a.builtin), JSON.stringify((pubApps.data.apps || []).length));
+
+  // a round must be opened first, and a round pays once
+  const noPlay = await alice.call('POST', '/api/apps/score',
+    { id: snakeGame.appId, score: 40 });
+  ok('a score without an open round is refused', noPlay.status === 400 &&
+    noPlay.data.error === 'no-play', JSON.stringify(noPlay.data && noPlay.data.error));
+
+  const play = await alice.call('POST', '/api/apps/play', { id: snakeGame.appId });
+  ok('a round can be opened', play.status === 200 && !!play.data.playId, String(play.status));
+  const scored = await alice.call('POST', '/api/apps/score',
+    { id: snakeGame.appId, score: 40, playId: play.data.playId });
+  ok('the round pays out once', scored.status === 200 && scored.data.score === 40 &&
+    scored.data.improved === true, JSON.stringify(scored.data));
+  const twice = await alice.call('POST', '/api/apps/score',
+    { id: snakeGame.appId, score: 999, playId: play.data.playId });
+  ok('the same round cannot pay twice', twice.status === 400, String(twice.status));
+
+  // a better round moves the best; a worse one does not
+  const play2 = await alice.call('POST', '/api/apps/play', { id: snakeGame.appId });
+  const better = await alice.call('POST', '/api/apps/score',
+    { id: snakeGame.appId, score: 120, playId: play2.data.playId });
+  ok('a better score becomes the best', better.status === 200 && better.data.improved === true &&
+    better.data.rank >= 1, JSON.stringify(better.data));
+  const play3 = await alice.call('POST', '/api/apps/play', { id: snakeGame.appId });
+  const worse = await alice.call('POST', '/api/apps/score',
+    { id: snakeGame.appId, score: 10, playId: play3.data.playId });
+  ok('a worse score does not lower the best', worse.status === 200 &&
+    worse.data.improved === false, JSON.stringify(worse.data));
+
+  const miniAfter = await alice.call('GET', '/api/minigames');
+  const snakeAfter = (miniAfter.data.games || []).filter(g => g.id === 'snake')[0];
+  ok('the shelf shows the new best', !!snakeAfter && snakeAfter.best === 120,
+    JSON.stringify(snakeAfter && snakeAfter.best));
+  ok('the leaderboard lists the player', !!snakeAfter &&
+    (snakeAfter.top || []).some(r => r.score === 120), JSON.stringify(snakeAfter && snakeAfter.top));
+
+  // a round belongs to the account that opened it
+  const thief = new Client('round-thief');
+  const thiefReg = await thief.register('thief_' + stamp, 'thief-pass-1', 'Thief');
+  ok('a second account for the round-ownership check', thiefReg.status === 200, String(thiefReg.status));
+  const stolen = await thief.call('POST', '/api/apps/score',
+    { id: snakeGame.appId, score: 5000, playId: play3.data.playId });
+  ok('a round belongs to the account that opened it', stolen.status === 400,
+    String(stolen.status) + ' ' + JSON.stringify(stolen.data && stolen.data.error));
+
+  // a built-in game cannot be edited or deleted: it ships with the site
+  const editBuiltin = await alice.call('POST', '/api/apps/update',
+    { id: snakeGame.appId, name: 'Hijacked' });
+  ok('a built-in game cannot be edited', editBuiltin.status === 400 &&
+    editBuiltin.data.error === 'builtin', JSON.stringify(editBuiltin.data && editBuiltin.data.error));
+  const delBuiltin = await alice.call('POST', '/api/apps/delete', { id: snakeGame.appId });
+  ok('a built-in game cannot be deleted', delBuiltin.status === 400, String(delBuiltin.status));
+  const gamesAfterRefusal = await alice.call('GET', '/api/minigames');
+  ok('the refused delete leaves the game in place',
+    (gamesAfterRefusal.data.games || []).some(g => g.id === 'snake'), '');
+
+  // the player page and the game files
+  const playPage = await fetch(BASE + '/play/mini/snake');
+  const playHtml = await playPage.text();
+  ok('the player page is served', playPage.status === 200 &&
+    (playPage.headers.get('content-type') || '').indexOf('text/html') >= 0, String(playPage.status));
+  ok('the player page frames only itself and runs no inline script',
+    (playPage.headers.get('content-security-policy') || '').indexOf("frame-ancestors 'self'") >= 0 &&
+    playHtml.indexOf('sdk.js') > 0 && playHtml.indexOf('<script>') < 0,
+    (playPage.headers.get('content-security-policy') || '').slice(0, 60));
+  const noGame = await fetch(BASE + '/play/mini/nope');
+  ok('an unknown game 404s', noGame.status === 404, String(noGame.status));
+  const gameJs = await fetch(BASE + '/assets/mini/snake.js');
+  ok('a game file is served', gameJs.status === 200, String(gameJs.status));
+  const gameCss = await fetch(BASE + '/assets/mini/mini.css');
+  ok('the shared game stylesheet is served', gameCss.status === 200, String(gameCss.status));
+
+  // a third-party app keeps working without a play round: its score arrives from
+  // its own server with a token, and it has no browser round to point at
+  const plainApp = await alice.call('POST', '/api/apps/register', {
+    name: 'Score Only ' + stamp, type: 'external', url: 'https://example.com/s',
+    scopes: ['score']
+  });
+  const plainScore = await alice.call('POST', '/api/apps/score',
+    { id: plainApp.data.app.id, score: 777 });
+  ok('a third-party app still scores without a round', plainScore.status === 200 &&
+    plainScore.data.score === 777, JSON.stringify(plainScore.data));
+  await alice.call('POST', '/api/apps/delete', { id: plainApp.data.app.id });
+
   // ---- push notifications
   const pushState = await alice.call('GET', '/api/push');
   ok('push reports itself and its key', pushState.status === 200 &&

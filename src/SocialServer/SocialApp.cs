@@ -64,6 +64,13 @@ namespace Social
                 Stats.Load();
                 Stats.OnStart();
                 Stats.NotePeak(Store.CountOnline(Config.OnlineWindowSec));
+                // the built-in mini-games are apps; make sure each one has its row so
+                // its leaderboard exists on a fresh install and after a data restore
+                if (Config.MiniGames)
+                {
+                    int seeded = MiniGames.Seed(Store);
+                    if (seeded > 0) Log.Info("APPS", "seeded " + seeded + " built-in mini-game app(s)");
+                }
                 // push needs the store (for subscriptions) and may need to mint a key
                 WebPush.Configure(Config, Store);
 

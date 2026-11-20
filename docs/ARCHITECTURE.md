@@ -73,6 +73,15 @@ The player itself (Ruffle, ~28 MB of wasm) is deliberately *not* in git: it is
 fetched by `tools\fetch-ruffle.ps1` into `public/assets/vendor/ruffle/`, served from
 our own origin, and only ever started inside the sandboxed `/play/<id>` iframe.
 
+The built-in mini-games take the opposite approach on purpose: plain HTML and canvas
+under `public/assets/mini/`, no plugin, no download. Each one is still a real `App`
+row (`builtin: true`, `url: /play/mini/<id>`, seeded on start by `MiniGames.Seed`), so
+the leaderboard comes from the Applications API instead of a parallel score table.
+`/play/mini/<id>` is served with the same opaque-origin treatment as the Ruffle host
+page: the game is untrusted code from the site's point of view, so it has no cookies,
+no storage and no handle on the parent. It reports a finished round over `postMessage`
+and the SPA - which does have the session - submits the score.
+
 Communities extend the group row rather than adding a table: `editors` and
 `requests` are id lists, `postPolicy` is a single string, and a queued post is just
 `pending: true` on the post itself. That keeps the storage flat and means an old

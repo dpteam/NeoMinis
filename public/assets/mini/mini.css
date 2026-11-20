@@ -1,0 +1,252 @@
+/* =========================================================================
+   Shared look for the built-in mini-games.
+
+   Every colour is a CSS variable with a sane fallback, because the page can be
+   opened before the parent has sent its palette - and because a game should not
+   depend on the site's stylesheet to be readable. The parent overrides these
+   with its own computed values, so a game follows the chosen template.
+   ========================================================================= */
+
+:root {
+  --accent: #4472a4;
+  --accent-soft: rgba(68, 114, 164, .16);
+  --panel: #ffffff;
+  --panel-2: #f2f5f9;
+  --border: #d3dae4;
+  --text: #1f2733;
+  --text-soft: #46536a;
+  --muted: #6b7a8c;
+  --ok: #2f8f5b;
+  --err: #b6453c;
+  --radius-sm: 7px;
+  --font-display: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; height: 100%; }
+
+body {
+  background: var(--panel-2);
+  color: var(--text);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#game { width: 100%; max-width: 400px; }
+
+/* ------------------------------------------------------------- the chrome */
+
+.mg-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.mg-score {
+  font: 700 20px var(--font-display);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.mg-label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.mg-spacer { flex: 1; }
+.mg-btn {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 11.5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.mg-btn:hover { border-color: var(--accent); color: var(--accent); }
+.mg-btn:active { transform: translateY(1px); }
+
+.mg-hint {
+  font-size: 10.5px;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 8px;
+  min-height: 15px;
+}
+
+/* ------------------------------------------------------------ the board */
+
+.mg-board {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+/* an overlay that covers the board when a round ends */
+.mg-over {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: blur(2px);
+  z-index: 5;
+}
+.mg-over b { font: 700 17px var(--font-display); }
+.mg-over span { font-size: 12px; color: var(--text-soft); max-width: 24ch; }
+.mg-over .mg-btn { margin-top: 4px; }
+
+/* ---------------------------------------------------------- the d-pad */
+
+.mg-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 42px);
+  grid-template-rows: repeat(2, 42px);
+  gap: 5px;
+  justify-content: center;
+  margin-top: 8px;
+}
+.mg-pad button {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mg-pad button:active { background: var(--accent-soft); color: var(--accent); }
+.mg-pad .up { grid-column: 2; grid-row: 1; }
+.mg-pad .left { grid-column: 1; grid-row: 2; }
+.mg-pad .down { grid-column: 2; grid-row: 2; }
+.mg-pad .right { grid-column: 3; grid-row: 2; }
+
+/* ------------------------------------------------------------- snake */
+
+.mg-canvas { display: block; width: 100%; height: auto; background: var(--panel); }
+
+/* -------------------------------------------------------------- 2048 */
+
+.g2048 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 6px;
+  background: var(--panel-2);
+}
+.g2048 .cell {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 5px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 15px var(--font-display);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.g2048 .cell[data-v="0"] { color: transparent; border-color: transparent; background: var(--panel-2); }
+.g2048 .cell[data-v="2"] { background: var(--panel); }
+.g2048 .cell[data-v="4"] { background: var(--accent-soft); }
+.g2048 .cell[data-v="8"] { background: var(--accent-soft); border-color: var(--accent); }
+.g2048 .cell[data-v="16"], .g2048 .cell[data-v="32"],
+.g2048 .cell[data-v="64"], .g2048 .cell[data-v="128"] {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.g2048 .cell[data-v="256"], .g2048 .cell[data-v="512"],
+.g2048 .cell[data-v="1024"], .g2048 .cell[data-v="2048"],
+.g2048 .cell[data-v="4096"] {
+  background: var(--text); border-color: var(--text); color: var(--panel);
+}
+.g2048 .cell.pop { animation: mg-pop .18s ease-out; }
+@keyframes mg-pop {
+  from { transform: scale(.82); }
+  to { transform: scale(1); }
+}
+
+/* ----------------------------------------------------------- memory */
+
+.gmem {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 6px;
+}
+.gmem .card {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition: background .15s, transform .12s;
+  padding: 0;
+}
+.gmem .card:hover { border-color: var(--accent); }
+.gmem .card.up { background: var(--panel); color: var(--text); }
+.gmem .card.done {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+  cursor: default;
+  opacity: .75;
+}
+.gmem .card.wrong { animation: mg-shake .28s; border-color: var(--err); }
+@keyframes mg-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+/* --------------------------------------------------------- minesweeper */
+
+.gmines {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 2px;
+  padding: 4px;
+  background: var(--panel-2);
+}
+.gmines .sq {
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 3px;
+  font: 700 11px var(--font-display);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+}
+.gmines .sq.open { background: var(--panel-2); border-color: var(--panel-2); cursor: default; }
+.gmines .sq.flag { color: var(--accent); }
+.gmines .sq.boom { background: var(--err); border-color: var(--err); color: #fff; }
+.gmines .sq.n1 { color: #2f6fb5; } .gmines .sq.n2 { color: #2f8f5b; }
+.gmines .sq.n3 { color: #b6453c; } .gmines .sq.n4 { color: #7a4fa3; }
+.gmines .sq.n5 { color: #a35a20; } .gmines .sq.n6 { color: #1f8f96; }
+.gmines .sq.n7 { color: var(--text); } .gmines .sq.n8 { color: var(--muted); }

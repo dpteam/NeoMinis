@@ -255,6 +255,7 @@ namespace Social.Web
                 .Prop("maxGiftMessage", _cfg.MaxGiftMessage)
                 .Prop("giftsEnabled", _cfg.GiftsEnabled)
                 .Prop("gamesEnabled", GamesAvailable())
+                .Prop("miniGames", _cfg.MiniGames)
                 .Prop("stickersEnabled", _cfg.StickersEnabled)
                 // custom packs: whether the feature is on, whether it is a VIP perk,
                 // and the caps - the client shows the right state without guessing
@@ -873,6 +874,8 @@ namespace Social.Web
             if (r == "apps/authorize") { RequireMethod(m, "POST"); HandleAppAuthorize(ctx); return; }
             if (r == "apps/revoke") { RequireMethod(m, "POST"); HandleAppRevoke(ctx); return; }
             if (r == "apps/scores") { RequireMethod(m, "GET"); HandleAppScores(ctx); return; }
+            if (r == "apps/play") { RequireMethod(m, "POST"); HandleAppPlay(ctx); return; }
+            if (r == "minigames") { RequireMethod(m, "GET"); HandleMiniGames(ctx); return; }
             if (r == "apps/score") { RequireMethod(m, "POST"); HandleAppScoreSubmit(ctx); return; }
 
             if (r == "push") { RequireMethod(m, "GET"); HandlePush(ctx); return; }
