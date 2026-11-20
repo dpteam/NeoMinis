@@ -753,6 +753,28 @@ async function main() {
     (stillIn.data.calls || []).some(c => c.id === chanRoom.data.call.id), '');
   await alice.call('POST', '/api/call/leave', { id: chanRoom.data.call.id });
 
+  // ---- returning to a call after a page reload
+  // The browser rebuilds its peer connections from scratch, so the server has to
+  // keep the membership: /api/call/active is what the client asks on boot.
+  const backRoom = await alice.call('POST', '/api/call/start', { room: 'resume_' + stamp, video: false });
+  ok('a room can be opened for the resume check', backRoom.status === 200,
+    String(backRoom.status));
+  const backId = backRoom.data.call.id;
+  const afterReload = await alice.call('GET', '/api/call/active');
+  ok('a live call is still listed after a reload',
+    (afterReload.data.calls || []).some(c => c.id === backId), '');
+  // re-announcing ourselves is idempotent: the same member, still accepted
+  const reAnswer = await alice.call('POST', '/api/call/answer', { id: backId, accept: true });
+  ok('re-joining an existing call is idempotent',
+    reAnswer.status === 200 &&
+    reAnswer.data.call.members.filter(m => m.id === alice.user.id).length === 1 &&
+    reAnswer.data.call.members.filter(m => m.id === alice.user.id)[0].accepted === true,
+    JSON.stringify(reAnswer.data.call.members.length));
+  await alice.call('POST', '/api/call/leave', { id: backId });
+  const afterLeave = await alice.call('GET', '/api/call/active');
+  ok('leaving removes the call from the list',
+    !(afterLeave.data.calls || []).some(c => c.id === backId), '');
+
   // ---- ICE configuration for the browsers
   ok('handshake carries several STUN servers', String(hs.site.callStun || '').split(',').length >= 2,
     String(hs.site.callStun));

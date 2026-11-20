@@ -523,7 +523,12 @@ Do not replace it with a scale.
   by a real `AnalyserNode` RMS > 0.045, sampled every 220ms.
 - `.call-mic-off` — 22px red circle, top-right, `hidden` class when unmuted.
 - `.call-overlay.mini` — a 240px floating card bottom-right; grid collapses to one
-  column, camera and retry buttons hide, people strip keeps only the count.
+  column, camera, screen and audio buttons hide, people strip keeps only the count.
+- `.call-audio-panel` — a small popover above the controls with the three processing
+  switches. Changing one re-captures the microphone and swaps the track in every
+  peer through `RTCRtpSender.replaceTrack`, which needs no renegotiation.
+- `.call-tile.screen video` — `object-fit: contain` and no mirror, because a shared
+  screen is letterboxed: cropping a slide hides the slide.
 - `.call-dot` — 8px `#4c9dff` dot with `call-dot-pulse` (scale 1→1.35, opacity
   1→.65, 1.4s) marking "somebody joined". The same idea appears as `.call-live` on
   the sidebar entry.

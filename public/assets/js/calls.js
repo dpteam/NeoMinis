@@ -113,12 +113,21 @@ var CallUI = (function () {
       '<div class="call-controls">' +
       '<button type="button" class="call-btn" id="call-mic" title="' + UI.attr(T('calls.mic')) + '">' + UI.icon('microphone') + '</button>' +
       '<button type="button" class="call-btn" id="call-cam" title="' + UI.attr(T('calls.cam')) + '">' + UI.icon('video') + '</button>' +
+      '<button type="button" class="call-btn" id="call-screen" title="' + UI.attr(T('calls.shareScreen')) + '">' + UI.icon('display') + '</button>' +
+      '<button type="button" class="call-btn" id="call-audio-opts" title="' + UI.attr(T('calls.audioOptions')) + '">' + UI.icon('sliders') + '</button>' +
       '<button type="button" class="call-btn hidden" id="call-retry" title="' + UI.attr(T('calls.retry')) + '">' + UI.icon('rotate') + '</button>' +
       '<button type="button" class="call-btn call-hang" id="call-hang" title="' + UI.attr(T('calls.hangup')) + '">' + UI.icon('phone-slash') + '</button>' +
-      '</div></div>';
+      '</div>' +
+      '<div class="call-audio-panel hidden" id="call-audio-panel"></div>' +
+      '</div>';
     document.body.appendChild(o);
     byId('call-mic').addEventListener('click', toggleMic);
     byId('call-cam').addEventListener('click', toggleCam);
+    byId('call-screen').addEventListener('click', toggleScreen);
+    byId('call-audio-opts').addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleAudioPanel();
+    });
     byId('call-retry').addEventListener('click', retryConnections);
     byId('call-hang').addEventListener('click', hangup);
     byId('call-min').addEventListener('click', function (e) {
@@ -326,11 +335,75 @@ var CallUI = (function () {
 
   // --------------------------------------------------------------- media
 
+  // Browser-side audio processing. On by default, because a laptop microphone in a
+  // room with a speaker will feed back without them, and a user who wants raw audio
+  // (musicians, podcasters) can turn each one off from the call panel.
+  var audioOpts = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+
+  function loadAudioOpts() {
+    try {
+      var raw = localStorage.getItem('social.callAudio');
+      if (!raw) return;
+      var o = JSON.parse(raw);
+      if (typeof o.echoCancellation === 'boolean') audioOpts.echoCancellation = o.echoCancellation;
+      if (typeof o.noiseSuppression === 'boolean') audioOpts.noiseSuppression = o.noiseSuppression;
+      if (typeof o.autoGainControl === 'boolean') audioOpts.autoGainControl = o.autoGainControl;
+    } catch (e) { }
+  }
+
+  function saveAudioOpts() {
+    try { localStorage.setItem('social.callAudio', JSON.stringify(audioOpts)); } catch (e) { }
+  }
+
+  function audioConstraints() {
+    return {
+      echoCancellation: !!audioOpts.echoCancellation,
+      noiseSuppression: !!audioOpts.noiseSuppression,
+      autoGainControl: !!audioOpts.autoGainControl
+    };
+  }
+
   function getMedia(video) {
-    var constraints = { audio: true, video: !!video };
+    var constraints = { audio: audioConstraints(), video: !!video };
     return navigator.mediaDevices.getUserMedia(constraints).then(function (stream) {
       local = stream;
       return stream;
+    });
+  }
+
+  /// <summary>
+  /// Re-captures only the microphone, keeping the camera track untouched, and swaps
+  /// it into every peer connection. Processing flags are read at capture time, so
+  /// changing one means a new track - there is no way to retune a live one.
+  /// </summary>
+  function recaptureAudio() {
+    if (!local) return;
+    navigator.mediaDevices.getUserMedia({ audio: audioConstraints() }).then(function (fresh) {
+      var track = fresh.getAudioTracks()[0];
+      if (!track) return;
+      var old = local.getAudioTracks ? local.getAudioTracks() : [];
+      for (var i = 0; i < old.length; i++) {
+        try { local.removeTrack(old[i]); } catch (e) { }
+        try { old[i].stop(); } catch (e) { }
+      }
+      local.addTrack(track);
+      // replaceTrack swaps the outgoing track without a renegotiation, which is
+      // the whole reason this can be instant instead of a visible re-offer
+      for (var k in peers) {
+        if (!peers.hasOwnProperty(k) || !peers[k] || !peers[k].pc) continue;
+        var senders = peers[k].pc.getSenders ? peers[k].pc.getSenders() : [];
+        for (var s = 0; s < senders.length; s++) {
+          if (senders[s].track && senders[s].track.kind === 'audio') {
+            try { senders[s].replaceTrack(track); } catch (e) { }
+          }
+        }
+      }
+      var me = byId('call-tile-me');
+      var v = me ? me.querySelector('video') : null;
+      if (v) { try { v.srcObject = local; } catch (e) { } }
+      if (muted) track.enabled = false;
+    }).catch(function (e) {
+      UI.toast(mediaErrorText(e), 'err');
     });
   }
 
@@ -375,6 +448,7 @@ var CallUI = (function () {
   /// </summary>
   function startCamera() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    if (screenStream) { UI.toast(T('calls.stopScreenFirst'), 'err'); return; }
     navigator.mediaDevices.getUserMedia({ video: true }).then(function (stream) {
       var video = stream.getVideoTracks()[0];
       if (!video) return;
@@ -399,7 +473,136 @@ var CallUI = (function () {
     });
   }
 
-  // ----------------------------------------------------------- signalling
+  // ------------------------------------------------------------ screen share
+
+  var screenStream = null;
+
+  /// <summary>
+  /// Shares the screen. The captured video track replaces the camera track in every
+  /// peer connection through RTCRtpSender.replaceTrack, which needs no
+  /// renegotiation - so the switch is instant and nothing drops. The camera track is
+  /// kept alive (disabled) so stopping the share returns to it without a new
+  /// permission prompt.
+  /// </summary>
+  function toggleScreen() {
+    if (screenStream) { stopScreen(); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      UI.toast(T('calls.noScreenShare'), 'err');
+      return;
+    }
+    navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'always' }, audio: false })
+      .then(function (stream) {
+        var track = stream.getVideoTracks()[0];
+        if (!track) { return; }
+        screenStream = stream;
+        // the browser's own "stop sharing" bar ends the track without telling us
+        track.addEventListener('ended', stopScreen);
+
+        if (!local) local = new MediaStream();
+        var camTracks = local.getVideoTracks ? local.getVideoTracks() : [];
+        for (var i = 0; i < camTracks.length; i++) camTracks[i].enabled = false;
+
+        applyOutgoingVideo(track);
+
+        var me = byId('call-tile-me');
+        if (me) {
+          me.className = me.className.replace(/\s*screen\b/g, '') + ' screen';
+          var v = me.querySelector('video');
+          if (v) { try { v.srcObject = stream; } catch (e) { } }
+        }
+        var btn = byId('call-screen');
+        if (btn) btn.className = 'call-btn on';
+        if (call) Api.request('POST', '/api/call/media', { id: call.id, video: true }, function () { });
+      })
+      .catch(function (e) {
+        // a cancelled picker is not an error worth a toast
+        if (e && (e.name === 'NotAllowedError' || e.name === 'AbortError')) return;
+        UI.toast(mediaErrorText(e), 'err');
+      });
+  }
+
+  function stopScreen() {
+    if (!screenStream) return;
+    var tracks = screenStream.getTracks ? screenStream.getTracks() : [];
+    for (var i = 0; i < tracks.length; i++) { try { tracks[i].stop(); } catch (e) { } }
+    screenStream = null;
+
+    var camTrack = null;
+    if (local) {
+      var cams = local.getVideoTracks ? local.getVideoTracks() : [];
+      for (var c = 0; c < cams.length; c++) { cams[c].enabled = !camOff; if (!camTrack) camTrack = cams[c]; }
+    }
+    applyOutgoingVideo(camTrack);
+
+    var me = byId('call-tile-me');
+    if (me) {
+      me.className = me.className.replace(/\s*screen\b/g, '');
+      var v = me.querySelector('video');
+      if (v) { try { v.srcObject = local; } catch (e) { } }
+    }
+    var btn = byId('call-screen');
+    if (btn) btn.className = 'call-btn';
+    // an audio-only call goes back to reporting "no video"
+    if (call && !camTrack) Api.request('POST', '/api/call/media', { id: call.id, video: false }, function () { });
+  }
+
+  /// Swaps the outgoing video track in every peer connection, or adds one if the
+  /// connection has no video sender yet (an audio-only call that starts sharing).
+  function applyOutgoingVideo(track) {
+    for (var k in peers) {
+      if (!peers.hasOwnProperty(k) || !peers[k] || !peers[k].pc) continue;
+      var pc = peers[k].pc;
+      var senders = pc.getSenders ? pc.getSenders() : [];
+      var replaced = false;
+      for (var s = 0; s < senders.length; s++) {
+        if (senders[s].track && senders[s].track.kind === 'video') {
+          try { senders[s].replaceTrack(track); replaced = true; } catch (e) { }
+        }
+      }
+      if (!replaced && track && local) {
+        try { pc.addTrack(track, local); } catch (e) { }
+        offerTo(Number(k), peers[k].user);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------- audio options
+
+  function audioPanelHtml() {
+    var rows = [
+      ['echoCancellation', 'calls.echoCancel'],
+      ['noiseSuppression', 'calls.noiseSuppress'],
+      ['autoGainControl', 'calls.autoGain']
+    ];
+    var html = '<div class="call-audio-h">' + UI.icon('sliders') + ' ' + T('calls.audioOptions') + '</div>';
+    for (var i = 0; i < rows.length; i++) {
+      var key = rows[i][0];
+      html += '<label class="call-audio-row"><input type="checkbox" data-audio="' + key + '"' +
+        (audioOpts[key] ? ' checked' : '') + '> <span>' + T(rows[i][1]) + '</span></label>';
+    }
+    html += '<div class="call-audio-hint tiny muted">' + T('calls.audioHint') + '</div>';
+    return html;
+  }
+
+  function toggleAudioPanel() {
+    var panel = byId('call-audio-panel');
+    if (!panel) return;
+    var open = panel.className.indexOf('hidden') < 0;
+    if (open) { panel.className = 'call-audio-panel hidden'; return; }
+    panel.innerHTML = audioPanelHtml();
+    panel.className = 'call-audio-panel';
+    var boxes = panel.querySelectorAll('[data-audio]');
+    for (var i = 0; i < boxes.length; i++) {
+      boxes[i].addEventListener('change', function () {
+        var key = this.getAttribute('data-audio');
+        audioOpts[key] = this.checked;
+        saveAudioOpts();
+        // a processing flag is baked into the captured track, so it needs a new one
+        recaptureAudio();
+      });
+    }
+  }
+
 
   function send(to, kind, data) {
     if (!call) return;
@@ -921,6 +1124,16 @@ var CallUI = (function () {
     call = null;
     muted = false;
     camOff = false;
+    // a screen share belongs to the call, so it dies with it
+    if (screenStream) {
+      var st = screenStream.getTracks ? screenStream.getTracks() : [];
+      for (var si = 0; si < st.length; si++) { try { st[si].stop(); } catch (e) { } }
+      screenStream = null;
+    }
+    var sbtn = byId('call-screen');
+    if (sbtn) sbtn.className = 'call-btn';
+    var apanel = byId('call-audio-panel');
+    if (apanel) apanel.className = 'call-audio-panel hidden';
     // the channel page may be watching: put its idle panel back
     if (App.state.callsIntroReset) {
       try { App.state.callsIntroReset(); } catch (e) { }
@@ -1307,12 +1520,20 @@ var CallUI = (function () {
       updateMembers(c);
       Api.request('POST', '/api/call/answer', { id: c.id, accept: true }, function () { });
       startPolling();
-    }).catch(function () { teardown(); });
+    }).catch(function (e) {
+      // the call is still alive on the server but this browser cannot get a
+      // microphone back, which is worth saying out loud instead of vanishing
+      UI.toast(mediaErrorText(e), 'err');
+      // leave properly, or the others keep a silent member in the room
+      Api.request('POST', '/api/call/leave', { id: c.id }, function () { });
+      teardown();
+    });
   }
 
   return {
     init: function () {
       if (!App.state.authed) return;
+      loadAudioOpts();
       syncCursor(function () {
         startPolling();
         resumeActive();

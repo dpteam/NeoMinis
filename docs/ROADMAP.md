@@ -146,10 +146,10 @@ poll) but they are the minimum.
 
 | Piece | Notes |
 | --- | --- |
-| **Screen sharing** | `getDisplayMedia` plus a second track per peer; `display-capture` is already allowed in `Permissions-Policy`. Needs renegotiation, because adding a track mid-call changes the SDP. |
-| **Calls that survive a reload** | `/api/call/active` exists; the overlay has to restore the peer connections from `sessionStorage` too. |
+| **Screen sharing** | Done: `getDisplayMedia` with `RTCRtpSender.replaceTrack`, so the switch is instant and needs no renegotiation; the camera track is kept (disabled) so stopping the share returns to it without a new permission prompt. The tile is letterboxed rather than cropped, because cropping a slide hides the slide. |
+| **Calls that survive a reload** | Done: `/api/call/active` on boot plus a re-`answer`, which makes the other side re-offer. Verified in a browser — after a reload the overlay comes back with the room name and the local tile. If the browser cannot get the microphone back, it says so and leaves the room properly instead of sitting there silent. |
 | **Discord-style call page** | Done: `#/calls` is a channel sidebar plus a room view, backed by `/api/channels`. Still open: drag-to-reorder channels. |
-| **Noise suppression / echo cancel** | `getUserMedia({ audio: { echoCancellation, noiseSuppression, autoGainControl } })` as toggles. The speaking ring is in, so the level meter is already there to build on. |
+| **Noise suppression / echo cancel** | Done: `echoCancellation`, `noiseSuppression` and `autoGainControl` on by default, each switchable from a panel in the call; changing one re-captures the microphone and swaps the track in every peer without renegotiation. |
 | **Ringing when the tab is closed** | Web Push with a `call` payload, a ringtone, and an "answer" action in the notification. |
 | **Group layout** | Grid that switches to speaker view, mute-all, "raise hand", per-member volume. The people strip (avatars, count, a blue dot when somebody joins) and the minimised call window are in. |
 | **Call link** | `#/call/<room>` with a copy button, so a room can be pasted into a chat. |
@@ -349,6 +349,11 @@ Kept here so the list above stays honest.
   a participant count that ignores people who declined, a minimised floating call
   window that keeps the media flowing, avatars of who is on the line with a blue dot
   when somebody joins, and rooms that no longer die under the last person in them.
+- Calls, finished: **screen share** through `replaceTrack` (instant, no
+  renegotiation, the camera comes back when the share stops), **calls that survive a
+  page reload**, and **audio processing toggles** (echo cancellation, noise
+  suppression, auto-gain) that re-capture the microphone and swap the track in every
+  peer.
 - Groups with editable settings, pictures and member management.
 - Communities: owner / editor / member roles, join requests for closed groups and a
   moderation queue ("members post, editors approve").

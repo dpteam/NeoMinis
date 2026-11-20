@@ -2038,6 +2038,40 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 }
 .call-btn:hover { background: var(--hover); }
 .call-btn.off { background: var(--err); color: #fff; border-color: transparent; }
+/* an active extra (sharing the screen) is an accent, not a warning */
+.call-btn.on { background: var(--accent); color: #fff; border-color: transparent; }
+.call-btn.on:hover { filter: brightness(1.08); }
+
+/* the audio-processing panel: a small popover above the controls */
+.call-audio-panel {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: min(320px, 90%);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow-hi);
+  animation: attachIn .16s var(--ease);
+}
+.call-audio-h {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+  color: var(--muted); margin-bottom: 8px;
+}
+.call-audio-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 0; font-size: 12.5px; color: var(--text-soft); cursor: pointer;
+}
+.call-audio-row input { accent-color: var(--accent); }
+.call-audio-hint { margin-top: 6px; line-height: 1.4; }
+.call-panel { position: relative; }
+
+/* a shared screen is letterboxed, not cropped: cropping a slide hides the slide */
+.call-tile.screen video { object-fit: contain; background: #000; transform: none; }
 .call-btn.call-hang { background: var(--err); color: #fff; border-color: transparent; }
 .call-btn.call-hang:hover { filter: brightness(1.1); }
 
@@ -2110,7 +2144,9 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .call-overlay.mini .call-tile .call-name { display: none; }
 .call-overlay.mini .call-controls { padding: 6px; gap: 6px; }
 .call-overlay.mini .call-btn { width: 30px; height: 30px; font-size: 11px; }
-.call-overlay.mini #call-cam, .call-overlay.mini #call-retry { display: none !important; }
+.call-overlay.mini #call-cam, .call-overlay.mini #call-retry,
+.call-overlay.mini #call-screen, .call-overlay.mini #call-audio-opts { display: none !important; }
+.call-overlay.mini .call-audio-panel { display: none !important; }
 .call-overlay.mini .call-min { display: none; }
 
 @media (max-width: 720px) {
