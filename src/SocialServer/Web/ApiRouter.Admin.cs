@@ -27,6 +27,8 @@ namespace Social.Web
             }
             if (sub == "reports") { RequireMethod(ctx.Req.Method, "GET"); RequirePermission(ctx.User, Perms.Reports); HandleAdminReports(ctx); return; }
             if (sub == "report") { RequireMethod(ctx.Req.Method, "POST"); RequirePermission(ctx.User, Perms.Reports); HandleAdminReport(ctx); return; }
+            if (sub == "stickers") { RequireMethod(ctx.Req.Method, "GET"); RequirePermission(ctx.User, Perms.Stickers); HandleAdminStickers(ctx); return; }
+            if (sub == "stickers/delete") { RequireMethod(ctx.Req.Method, "POST"); RequirePermission(ctx.User, Perms.Stickers); HandleAdminStickerDelete(ctx); return; }
             if (sub == "broadcast") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminBroadcast(ctx); return; }
             if (sub == "logs") { RequireMethod(ctx.Req.Method, "GET"); RequirePermission(ctx.User, Perms.Logs); HandleAdminLogs(ctx); return; }
             if (sub == "reload") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminReload(ctx); return; }
@@ -679,8 +681,110 @@ namespace Social.Web
                 User u = _store.FindUser(r.Target);
                 if (u != null) b.Name("user").Raw(UserSummary(u));
             }
+            else if (r.Type == "sticker")
+            {
+                // the pack may already be gone (a second report on a removed pack),
+                // in which case the queue says so instead of rendering a blank row
+                StickerPackRec p = _store.FindStickerPack(r.Target);
+                if (p != null)
+                {
+                    b.Name("stickerPack").BeginObject();
+                    b.Prop("id", "u" + p.Id.ToString(CultureInfo.InvariantCulture));
+                    b.Prop("name", p.Name);
+                    b.Prop("shared", p.Shared);
+                    b.Prop("owner", p.Owner);
+                    b.Prop("count", _store.CountStickers(p.Id));
+                    b.Name("preview").BeginArray();
+                    List<StickerRec> list = _store.StickersOf(p.Id);
+                    for (int i = 0; i < list.Count && i < 6; i++) b.Str(list[i].File);
+                    b.EndArray();
+                    b.EndObject();
+                }
+            }
             b.EndObject();
             return b.ToString();
+        }
+
+        /// <summary>
+        /// The moderation view of uploaded sticker packs: every pack, private ones
+        /// included, with a preview strip and the owner. Built-in packs are not here
+        /// because they ship with the site and cannot be edited from the browser.
+        /// </summary>
+        private void HandleAdminStickers(ApiCtx ctx)
+        {
+            string q = GetQuery(ctx.Query, "q");
+            int limit = LimitParam(ctx, 30, 100);
+            long before = 0;
+            string bq = GetQuery(ctx.Query, "before");
+            if (!string.IsNullOrEmpty(bq)) long.TryParse(bq, NumberStyles.Integer, CultureInfo.InvariantCulture, out before);
+
+            bool hasMore;
+            int total;
+            List<StickerPackRec> packs = _store.AllStickerPacks(before, limit, q, out hasMore, out total);
+
+            JsonBuilder b = new JsonBuilder(8192);
+            b.BeginObject();
+            b.Name("packs").BeginArray();
+            for (int i = 0; i < packs.Count; i++)
+            {
+                StickerPackRec p = packs[i];
+                b.BeginObject();
+                b.Prop("id", "u" + p.Id.ToString(CultureInfo.InvariantCulture));
+                b.Prop("name", p.Name);
+                b.Prop("shared", p.Shared);
+                b.Prop("created", Util.Iso(p.Created));
+                b.Prop("count", _store.CountStickers(p.Id));
+                b.Prop("reports", _store.ReportsFor("sticker", p.Id).Count);
+                b.Name("owner").Raw(UserSummary(_store.FindUser(p.Owner)));
+                b.Name("preview").BeginArray();
+                List<StickerRec> list = _store.StickersOf(p.Id);
+                for (int k = 0; k < list.Count && k < 8; k++) b.Str(list[k].File);
+                b.EndArray();
+                b.EndObject();
+            }
+            b.EndArray();
+            b.Prop("total", total);
+            b.Prop("hasMore", hasMore);
+            b.Prop("next", packs.Count == 0 ? 0 : packs[packs.Count - 1].Id);
+            SendOk(ctx, b);
+        }
+
+        private void HandleAdminStickerDelete(ApiCtx ctx)
+        {
+            long id = ParsePackId(BodyStr(ctx, "id", ""));
+            if (id <= 0) throw new ApiException(400, "bad-pack", "Unknown pack");
+            StickerPackRec pack = _store.FindStickerPack(id);
+            if (pack == null) throw new ApiException(404, "no-pack", "That pack is already gone");
+
+            string name = pack.Name;
+            long owner = pack.Owner;
+            List<string> files = new List<string>();
+            if (!_store.DeleteStickerPackAsStaff(id, files))
+                throw new ApiException(404, "no-pack", "That pack is already gone");
+            for (int i = 0; i < files.Count; i++) _media.Delete(files[i]);
+
+            // one pack can carry several reports; deleting it answers all of them
+            string reason = Util.SingleLine(BodyStr(ctx, "reason", ""), 200);
+            int closed = _store.CloseReportsFor("sticker", id,
+                ctx.User.Id, reason.Length > 0 ? reason : "pack removed by staff");
+
+            // tell the owner, unless they did it themselves
+            if (owner != ctx.User.Id && owner > 0)
+            {
+                User target = _store.FindUser(owner);
+                if (target != null)
+                    _store.Notify(owner, ctx.User.Id, "admin",
+                        "removed your sticker pack \"" + name + "\"" +
+                        (reason.Length > 0 ? ": " + reason : ""), "#/settings");
+            }
+            Log.Warn("ADMIN", "@" + ctx.User.Username + " deleted sticker pack #" + id + " (\"" + name + "\")");
+
+            JsonBuilder b = new JsonBuilder(256);
+            b.BeginObject();
+            b.Prop("deleted", true);
+            b.Prop("files", files.Count);
+            b.Prop("closedReports", closed);
+            SendOk(ctx, b);
         }
 
         private void HandleAdminReport(ApiCtx ctx)

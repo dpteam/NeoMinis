@@ -1033,7 +1033,12 @@ pending posts in `GET /api/drafts` under `scheduled[]`, and every post carries
 | --- | --- | --- |
 | GET | `/api/online` | `{ users[], online, total }` |
 | GET | `/api/stats` | counters + `days[]` (7-day visit graph) |
-| POST | `/api/report` | `{ id }` — body `type` (`post|comment|user|message`), `target`, `reason` |
+| POST | `/api/report` | `{ id }` — body `type` (`post|comment|user|message|sticker`), `target`, `reason` |
+
+A `sticker` report targets a **pack id** (the number, not `u12`). The server refuses a
+pack the reporter cannot see, so the queue cannot be used to probe for private packs by
+id, and a moderator holding the `stickers` right gets these reports in their
+notifications alongside the administrators.
 
 ---
 
@@ -1057,6 +1062,8 @@ Administrator: additionally `user` (destructive actions), `broadcast`, `reload`,
 | POST | `/api/admin/broadcast` | `text` | `{ delivered }` |
 | GET | `/api/admin/logs` | `since`, `limit`, `level`, `category` | `{ entries[], lastSeq }` |
 | GET | `/api/admin/storage` | `limit` (cap for the lists, default 20) | media totals, `folders[]`, `biggest[]`, `orphans[]`, `missing[]` |
+| GET | `/api/admin/stickers` | `q`, `before`, `limit` | `{ packs[{ id, name, shared, owner, count, reports, preview[] }], total, hasMore, next }` |
+| POST | `/api/admin/stickers/delete` | `id`, `reason` | `{ deleted, files, closedReports }` |
 | POST | `/api/admin/reload` | — | `{ warnings[] }` (port/bind/root need a restart) |
 | POST | `/api/admin/backup` | — | `{ path }` |
 | POST | `/api/admin/repair` | — | storage state after a forced save |
@@ -1106,6 +1113,7 @@ a post is removed or an avatar is replaced, so `orphans` is where that space sho
 | `users` | `GET /api/admin/users`, `GET /api/admin/user` |
 | `logs` | `GET /api/admin/logs` |
 | `games` | upload `.swf` files, exactly like `canGames` |
+| `stickers` | `GET /api/admin/stickers`, `POST /api/admin/stickers/delete` — review and remove uploaded packs |
 
 An administrator always passes every check. A moderator with an **empty** set keeps
 every right, which is exactly how moderators behaved before this feature — only a

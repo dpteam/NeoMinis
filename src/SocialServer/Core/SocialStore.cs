@@ -3833,6 +3833,86 @@ namespace Social.Core
             }
         }
 
+        /// <summary>
+        /// Every uploaded pack, newest first, for the moderation tab. Unlike
+        /// StickerPacksFor this ignores who is asking: it is the whole catalogue,
+        /// private packs included, because a private pack is exactly the kind of
+        /// thing nobody reports and only staff can find.
+        /// </summary>
+        public List<StickerPackRec> AllStickerPacks(long before, int limit, string query,
+                                                   out bool hasMore, out int total)
+        {
+            List<StickerPackRec> list = new List<StickerPackRec>();
+            hasMore = false;
+            total = 0;
+            string needle = (query ?? "").Trim().ToLowerInvariant();
+            lock (_sync)
+            {
+                List<StickerPackRec> sorted = new List<StickerPackRec>(_stickerPacks);
+                sorted.Sort(delegate(StickerPackRec a, StickerPackRec b) { return b.Id.CompareTo(a.Id); });
+                for (int i = 0; i < sorted.Count; i++)
+                {
+                    StickerPackRec p = sorted[i];
+                    if (needle.Length > 0)
+                    {
+                        // match the pack name or the owner's username, because staff
+                        // search for a person as often as for a pack
+                        User owner = FindUser(p.Owner);
+                        string hay = (p.Name + " " + (owner == null ? "" : owner.Username)).ToLowerInvariant();
+                        if (hay.IndexOf(needle, StringComparison.Ordinal) < 0) continue;
+                    }
+                    total++;
+                    if (before > 0 && p.Id >= before) continue;
+                    if (list.Count >= limit) { hasMore = true; continue; }
+                    list.Add(p);
+                }
+            }
+            return list;
+        }
+
+        /// <summary>
+        /// Removes a pack regardless of who owns it. Used by the moderation tab and
+        /// by the report queue; the caller deletes the returned files.
+        /// </summary>
+        public bool DeleteStickerPackAsStaff(long packId, List<string> removedFiles)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                StickerPackRec pack = null;
+                for (int i = 0; i < _stickerPacks.Count; i++)
+                    if (_stickerPacks[i].Id == packId) { pack = _stickerPacks[i]; break; }
+                if (pack == null) return false;
+
+                for (int i = _stickers.Count - 1; i >= 0; i--)
+                {
+                    if (_stickers[i].Pack != packId) continue;
+                    if (removedFiles != null && !string.IsNullOrEmpty(_stickers[i].File)) removedFiles.Add(_stickers[i].File);
+                    _stickers.RemoveAt(i);
+                }
+                _stickerPacks.Remove(pack);
+                MarkStickerPacks();
+                MarkStickers();
+                return true;
+            }
+        }
+
+        /// <summary>Every open report filed against one sticker pack.</summary>
+        public List<Report> ReportsFor(string type, long target)
+        {
+            List<Report> list = new List<Report>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _reports.Count; i++)
+                {
+                    if (_reports[i].Status != "open") continue;
+                    if (_reports[i].Type != type || _reports[i].Target != target) continue;
+                    list.Add(_reports[i]);
+                }
+            }
+            return list;
+        }
+
         public List<StickerRec> StickersOf(long packId)
         {
             List<StickerRec> list = new List<StickerRec>();
@@ -4533,6 +4613,33 @@ namespace Social.Core
                     return true;
                 }
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Closes every open report against one target in one pass, for the case where
+        /// the target itself is gone: ten people reported the same sticker pack, and
+        /// deleting the pack should answer all ten, not leave nine rows pointing at
+        /// nothing.
+        /// </summary>
+        public int CloseReportsFor(string type, long target, long adminId, string note)
+        {
+            lock (_sync)
+            {
+                EnsureWritable();
+                int n = 0;
+                for (int i = 0; i < _reports.Count; i++)
+                {
+                    if (_reports[i].Status != "open") continue;
+                    if (_reports[i].Type != type || _reports[i].Target != target) continue;
+                    _reports[i].Status = "closed";
+                    _reports[i].Note = note ?? "";
+                    _reports[i].HandledBy = adminId;
+                    _reports[i].HandledAt = DateTime.UtcNow;
+                    n++;
+                }
+                if (n > 0) MarkReports();
+                return n;
             }
         }
 

@@ -255,8 +255,9 @@ Small things that would make what already exists noticeably better.
 **Messages**
 - Scheduled messages ("send at 9:00").
 - Sticker packs: done — built-in packs plus uploaded ones (VIP), with create, rename,
-  share and delete. What is left is moderation: a staff view of every uploaded pack,
-  and a report button on a pack.
+  share and delete, and a moderation tab with a report button. What is left is a
+  per-pack "this was reviewed" mark, and letting staff disable one sticker inside a
+  pack instead of deleting the whole set.
 
 **Communities**
 - Per-community rules shown before joining.
@@ -359,6 +360,13 @@ Kept here so the list above stays honest.
   `u1/1` (it demanded five characters when four is the shortest possible), and
   `stickers/remove` matched the item id without checking the pack, so a crafted id
   could delete a row out of somebody else's pack.
+- **Sticker packs can be moderated.** A report button sits on somebody else's shared
+  pack in the picker, the report targets the pack (not a message), and a new admin tab
+  lists every uploaded pack — private ones included, because a private pack is exactly
+  the kind of thing nobody reports and only staff can find. Deleting from there also
+  closes the reports against that pack and tells the owner why, in one request rather
+  than ten separate "close" clicks. `stickers` is a janitor right, so somebody can be
+  trusted with packs without being made an administrator.
 - **Deleting your own account**, from Settings → Account, in a boxed "danger zone"
   rather than a link next to "log out". It is the real thing: posts, comments,
   messages, photos, albums, stories and sticker packs go, the media files they owned

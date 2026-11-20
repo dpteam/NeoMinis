@@ -1288,6 +1288,11 @@
           '<button type="button" class="sticker-tool sticker-del" data-pack="' + UI.attr(pk.id) + '" data-name="' +
           UI.attr(pk.name) + '" title="' + UI.attr(T('stickers.deletePack')) + '">' + UI.icon('trash') + '</button>' +
           '</div>';
+        // somebody else's shared pack: the only thing you can do to it is complain
+        else if (pk.shared) html += '<div class="sticker-bar"><span class="sticker-tool sticker-owner">' +
+          UI.icon('user') + ' ' + UI.esc(T('stickers.byOwner')) + '</span>' +
+          '<button type="button" class="sticker-tool sticker-report" data-pack="' + UI.attr(pk.id) + '" data-name="' +
+          UI.attr(pk.name) + '">' + UI.icon('flag') + ' ' + T('stickers.report') + '</button></div>';
         for (var s = 0; s < pk.stickers.length; s++) {
           var st = pk.stickers[s];
           html += '<button type="button" class="sticker-item" data-sticker="' + UI.attr(st.id) + '" title="' +
@@ -1415,6 +1420,38 @@
               UI.toast(T('stickers.packDeleted'), 'ok');
               loadStickers(true);
             });
+          });
+        });
+      }
+
+      // reporting somebody else's pack: the target is the numeric id, because the
+      // report table stores numbers and "u12" is a display detail
+      var reports = stickerPage.querySelectorAll('.sticker-report');
+      for (var rp = 0; rp < reports.length; rp++) {
+        reports[rp].addEventListener('click', function () {
+          var raw = String(this.getAttribute('data-pack') || '');
+          var id = Number(raw.replace(/^u/, ''));
+          var name = this.getAttribute('data-name');
+          if (!id) return;
+          UI.modal({
+            title: T('stickers.report'),
+            icon: 'flag',
+            body: '<div class="tiny muted" style="margin-bottom:8px">' + UI.esc(T('stickers.reportHint', name)) + '</div>' +
+              '<div class="field" style="margin-bottom:0"><label>' + T('stickers.reportReason') + '</label>' +
+              '<textarea class="input" id="sticker-report-reason" rows="3" maxlength="1000"></textarea></div>',
+            actions: [
+              { label: T('common.cancel'), cls: 'btn-ghost' },
+              {
+                label: T('stickers.report'), cls: 'btn-danger', onClick: function (box) {
+                  var reason = box.querySelector('#sticker-report-reason').value.trim();
+                  if (reason.length < 3) { UI.toast(T('stickers.reportShort'), 'err'); return false; }
+                  Api.request('POST', '/api/report', { type: 'sticker', target: id, reason: reason }, function (e2) {
+                    if (e2) { UI.toast(Api.errorText(e2), 'err'); return; }
+                    UI.toast(T('stickers.reported'), 'ok');
+                  });
+                }
+              }
+            ]
           });
         });
       }
@@ -3972,6 +4009,7 @@
       (hasPerm('users') ? adminTab('users', 'users', T('admin.users'), sub) : '') +
       (isAdminUser() ? adminTab('ai', 'robot', T('admin.ai'), sub) : '') +
       (hasPerm('reports') ? adminTab('reports', 'flag', T('admin.reports'), sub) : '') +
+      (hasPerm('stickers') ? adminTab('stickers', 'icons', T('admin.stickersTab'), sub) : '') +
       (hasPerm('feedback') ? adminTab('feedback', 'comment-dots', T('admin.feedback'), sub) : '') +
       (isAdminUser() ? adminTab('storage', 'hard-drive', T('admin.storageTitle'), sub) : '') +
       (isAdminUser() ? adminTab('settings', 'sliders', T('admin.settings'), sub) : '') +
@@ -3984,6 +4022,7 @@
     else if (sub === 'storage' && isAdminUser()) adminStorage(body);
     else if (sub === 'settings' && isAdminUser()) adminSettings(body);
     else if (sub === 'reports' && hasPerm('reports')) adminReports(body);
+    else if (sub === 'stickers' && hasPerm('stickers')) adminStickers(body);
     else if (sub === 'feedback' && hasPerm('feedback')) adminFeedback(body);
     else if (sub === 'logs' && hasPerm('logs')) adminLogs(body);
     else adminOverview(body);
@@ -4379,7 +4418,7 @@
 
         // granular moderator rights ("janitors"): empty = the old full set
         if (u.role === 'moderator') {
-          var flags = ['posts', 'reports', 'warn', 'mute', 'feedback', 'users', 'logs', 'games'];
+          var flags = ['posts', 'reports', 'warn', 'mute', 'feedback', 'users', 'logs', 'games', 'stickers'];
           var mine = {};
           var plist = u.perms || [];
           for (var pf = 0; pf < plist.length; pf++) mine[plist[pf]] = true;
@@ -5276,7 +5315,14 @@
     for (var i = 0; i < reports.length; i++) {
       var r = reports[i];
       var target = r.post ? ('<a href="#/post/' + r.post.id + '">' + UI.esc((r.post.body || '').substring(0, 120)) + '</a>') :
-        r.user ? ('<a href="#/u/' + encodeURIComponent(r.user.username) + '">' + UI.esc(r.user.displayName) + '</a>') : ('#' + r.target);
+        r.user ? ('<a href="#/u/' + encodeURIComponent(r.user.username) + '">' + UI.esc(r.user.displayName) + '</a>') :
+        r.stickerPack ? (function (pk) {
+          var strip = '';
+          for (var s = 0; s < (pk.preview || []).length; s++)
+            strip += '<img class="sticker-thumb" src="' + UI.attr(UI.safeUrl(pk.preview[s])) + '" alt="">';
+          return '<b>' + UI.esc(pk.name) + '</b> <span class="tiny muted">(' + pk.count + ')</span>' +
+            '<div class="sticker-admin-previews" style="margin-top:4px">' + strip + '</div>';
+        })(r.stickerPack) : ('#' + r.target);
       h += '<div class="notif"><span class="type">' + UI.icon('flag') + '</span><div class="notif-main">' +
         '<span class="who">#' + r.id + ' ' + UI.esc(r.type) + '</span> ' + target +
         '<div class="tiny muted" style="margin-top:3px">' + UI.esc(r.reason) + ' · ' + UI.timeAgo(r.created) + ' · ' + UI.esc(r.reporter ? r.reporter.displayName : '') + '</div>' +
@@ -5312,6 +5358,106 @@
         });
       });
     }
+  }
+
+  /// <summary>
+  /// Moderation of uploaded sticker packs. Every pack, private ones included, with a
+  /// preview strip and a report count: a private pack is exactly the kind of thing
+  /// nobody reports and only staff can find. Deleting here also closes the reports
+  /// against it and tells the owner why.
+  /// </summary>
+  function adminStickers(body) {
+    var q = App.qs('q') || '';
+    body.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('icons') + ' ' + T('admin.stickersTab') +
+      '</div><div class="card-b">' +
+      '<form id="adm-sticker-search" style="display:flex;gap:7px;margin-bottom:10px">' +
+      '<input class="input" id="adm-sticker-q" type="search" value="' + UI.attr(q) +
+      '" placeholder="' + UI.attr(T('admin.stickersSearch')) + '">' +
+      '<button class="btn btn-primary" type="submit">' + T('common.search') + '</button></form>' +
+      '<div id="adm-sticker-list">' + UI.spinner() + '</div></div></div>';
+    document.getElementById('adm-sticker-search').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var v = document.getElementById('adm-sticker-q').value.trim();
+      App.go('#/admin/stickers' + (v ? '?q=' + encodeURIComponent(v) : ''));
+    });
+    loadAdminStickers(q, 0, false);
+  }
+
+  function loadAdminStickers(q, before, append) {
+    var box = document.getElementById('adm-sticker-list');
+    if (!box) return;
+    Api.request('GET', '/api/admin/stickers?limit=30' + (before ? '&before=' + before : '') +
+      (q ? '&q=' + encodeURIComponent(q) : ''), null, function (err, data) {
+      if (err) { box.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+      var packs = data.packs || [];
+      if (!packs.length) {
+        box.innerHTML = UI.empty('icons', T('admin.noStickerPacks'), T('admin.noStickerPacksHint'));
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < packs.length; i++) {
+        var p = packs[i];
+        var owner = p.owner || {};
+        var strip = '';
+        for (var s = 0; s < (p.preview || []).length; s++) {
+          strip += '<img class="sticker-thumb" src="' + UI.attr(UI.safeUrl(p.preview[s])) + '" alt="" loading="lazy">';
+        }
+        html += '<div class="sticker-admin-row">' +
+          '<div class="sticker-admin-previews">' + (strip || '<span class="tiny muted">' + T('admin.emptyPack') + '</span>') + '</div>' +
+          '<div class="sticker-admin-main">' +
+          '<div class="sticker-admin-name">' + UI.esc(p.name) +
+          (p.shared ? ' <span class="badge ok">' + T('stickers.shared') + '</span>' : '') +
+          (p.reports ? ' <span class="badge err">' + UI.icon('flag') + ' ' + p.reports + '</span>' : '') +
+          '</div>' +
+          '<div class="tiny muted">' +
+          '<a href="#/u/' + encodeURIComponent(owner.username || '') + '">' + UI.esc(owner.displayName || '?') + '</a>' +
+          ' · ' + T('admin.stickerCount', p.count) + ' · ' + UI.timeAgo(p.created) + '</div>' +
+          '</div>' +
+          '<button class="btn btn-xs btn-danger adm-sticker-del" data-id="' + UI.attr(p.id) +
+          '" data-name="' + UI.attr(p.name) + '">' + UI.icon('trash') + ' ' + T('common.delete') + '</button>' +
+          '</div>';
+      }
+      if (data.hasMore) html += '<button class="load-more" id="adm-sticker-more">' + T('people.loadMore') + '</button>';
+      if (append) box.insertAdjacentHTML('beforeend', html);
+      else box.innerHTML = html;
+      var btns = box.querySelectorAll('.adm-sticker-del');
+      for (var b = 0; b < btns.length; b++) {
+        btns[b].addEventListener('click', function () { adminDeletePack(this); });
+      }
+      var more = document.getElementById('adm-sticker-more');
+      if (more) more.addEventListener('click', function () {
+        more.parentNode.removeChild(more);
+        loadAdminStickers(q, data.next, true);
+      });
+    });
+  }
+
+  function adminDeletePack(btn) {
+    var id = btn.getAttribute('data-id');
+    var name = btn.getAttribute('data-name');
+    UI.modal({
+      title: T('admin.stickerDelete'),
+      icon: 'trash',
+      body: '<div style="font-size:13px;line-height:1.55;margin-bottom:10px">' +
+        UI.esc(T('admin.stickerDeleteHint', name)) + '</div>' +
+        '<div class="field"><label>' + T('admin.stickerReason') + '</label>' +
+        '<input class="input" id="adm-sticker-reason" maxlength="200" placeholder="' +
+        UI.attr(T('admin.stickerReasonHint')) + '"></div>',
+      actions: [
+        { label: T('common.cancel'), cls: 'btn-ghost' },
+        {
+          label: T('common.delete'), cls: 'btn-danger', onClick: function (box) {
+            var reason = box.querySelector('#adm-sticker-reason').value;
+            Api.request('POST', '/api/admin/stickers/delete', { id: id, reason: reason }, function (err, data) {
+              if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+              UI.toast(T('admin.stickerDeleted', (data && data.closedReports) || 0), 'ok');
+              SoundFX.play('success');
+              App.route();
+            });
+          }
+        }
+      ]
+    });
   }
 
   function adminLogs(body) {

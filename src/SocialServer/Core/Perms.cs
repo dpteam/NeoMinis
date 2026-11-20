@@ -22,11 +22,12 @@ namespace Social.Core
         public const string Users = "users";        // open the user list and user cards
         public const string Logs = "logs";          // read the log viewer
         public const string Games = "games";        // upload Flash games
+        public const string Stickers = "stickers";  // review and remove uploaded sticker packs
 
         /// <summary>Every flag, in the order the admin panel shows them.</summary>
         public static readonly string[] All = new string[]
         {
-            Posts, Reports, Warn, Mute, Feedback, Users, Logs, Games
+            Posts, Reports, Warn, Mute, Feedback, Users, Logs, Games, Stickers
         };
 
         public static bool Known(string flag)

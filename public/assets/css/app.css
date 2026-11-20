@@ -1739,6 +1739,37 @@ table.table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 }
 .sticker-vip-hint i { color: var(--accent); }
 
+/* a pack you did not make: you cannot edit it, so the row only offers a report */
+.sticker-tool.sticker-owner {
+  border: 0; background: transparent; color: var(--muted); cursor: default; padding: 0 2px;
+}
+.sticker-tool.sticker-owner:hover { color: var(--muted); border: 0; }
+.sticker-tool.sticker-report { margin-left: auto; }
+.sticker-tool.sticker-report:hover { color: var(--err); border-color: var(--err); }
+
+/* the moderation tab: a preview strip, the owner, and one destructive button */
+.sticker-admin-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 2px; border-bottom: 1px solid var(--border);
+}
+.sticker-admin-row:last-child { border-bottom: 0; }
+.sticker-admin-previews {
+  display: flex; gap: 2px; flex: 0 0 auto;
+  max-width: 210px; overflow: hidden;
+}
+.sticker-thumb {
+  width: 26px; height: 26px; object-fit: contain;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--panel);
+}
+.sticker-admin-main { flex: 1; min-width: 0; }
+.sticker-admin-name { font-weight: 600; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sticker-admin-name .badge { font-size: 9.5px; padding: 0 5px; vertical-align: 1px; }
+
+@media (max-width: 620px) {
+  .sticker-admin-row { flex-wrap: wrap; }
+  .sticker-admin-previews { max-width: 100%; order: 3; width: 100%; }
+}
+
 /* a sticker message has no bubble chrome: the picture is the message */
 .bubble.sticker-bubble {
   background: transparent; border: 0; padding: 0 2px 2px;

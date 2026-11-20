@@ -2706,20 +2706,35 @@ namespace Social.Web
             if (!Allow(ctx.User.Id, "report", _cfg.ReportsPerHour, 3600))
                 throw new ApiException(429, "slow-down", "Too many reports");
             string type = BodyStr(ctx, "type", "").Trim().ToLowerInvariant();
-            if (type != "post" && type != "comment" && type != "user" && type != "message")
+            if (type != "post" && type != "comment" && type != "user" && type != "message" &&
+                type != "sticker")
                 throw new ApiException(400, "bad-type", "Unknown report type");
             long target = BodyLong(ctx, "target", 0);
             if (target <= 0) throw new ApiException(400, "bad-target", "Missing target");
             string reason = Util.CleanText(BodyStr(ctx, "reason", ""), 1000);
             if (reason.Length == 0) throw new ApiException(400, "empty", "Describe the problem");
 
+            // a sticker pack can only be reported by somebody who can see it, or
+            // the report queue becomes a way to probe for private packs by id
+            if (type == "sticker")
+            {
+                StickerPackRec pack = _store.FindStickerPack(target);
+                bool visible = pack != null && (pack.Shared || pack.Owner == ctx.User.Id ||
+                                                Perms.Has(ctx.User, Perms.Stickers));
+                if (!visible) throw new ApiException(404, "no-pack", "That pack is not there");
+            }
+
             Report r = _store.CreateReport(type, target, ctx.User.Id, reason);
             _stats.OnReport();
             List<User> users = _store.AllUsers();
             for (int i = 0; i < users.Count; i++)
             {
-                if (users[i].Role != "admin" || users[i].Deleted) continue;
-                _store.Notify(users[i].Id, ctx.User.Id, "report", "new report #" + r.Id + " (" + type + ")", "#/admin/reports");
+                User staff = users[i];
+                if (staff.Deleted) continue;
+                bool tell = staff.Role == "admin" ||
+                            (type == "sticker" && Perms.Has(staff, Perms.Stickers));
+                if (!tell) continue;
+                _store.Notify(staff.Id, ctx.User.Id, "report", "new report #" + r.Id + " (" + type + ")", "#/admin/reports");
             }
 
             JsonBuilder b = new JsonBuilder(128);

@@ -276,7 +276,8 @@ async function main() {
   const first = await alice.call('GET', '/api/me', null, { nonce, signature: sig });
   const replay = await alice.call('GET', '/api/me', null, { nonce, signature: sig });
   ok('first signed call ok', first.status === 200, String(first.status));
-  ok('replay rejected', replay.status === 401 && replay.data && replay.data.error === 'replay', String(replay.status));
+  ok('replay rejected', replay.status === 401 && replay.data && replay.data.error === 'replay',
+    String(replay.status) + ' ' + JSON.stringify(replay.data));
 
   const plainBody = await (async () => {
     const t = String(Math.floor(Date.now() / 1000));
@@ -722,6 +723,22 @@ async function main() {
     JSON.stringify((stillInB.data.packs || []).filter(p => p.id === packB.data.id)
       .map(p => p.stickers.length)));
   await alice.call('POST', '/api/stickers/pack/delete', { id: packB.data.id });
+
+  // ---- reporting a pack: only a pack you can actually see
+  const strangerReport = await bob.call('POST', '/api/report', {
+    type: 'sticker', target: Number(packId.replace(/^u/, '')), reason: 'not my kind of stickers'
+  });
+  ok('a report against a real shared pack is accepted',
+    strangerReport.status === 200, String(strangerReport.status));
+  const ghostReport = await bob.call('POST', '/api/report', {
+    type: 'sticker', target: 999999, reason: 'nothing there'
+  });
+  ok('a report against a pack that does not exist is refused', ghostReport.status === 404,
+    String(ghostReport.status));
+  const shortReport = await bob.call('POST', '/api/report', {
+    type: 'sticker', target: Number(packId.replace(/^u/, '')), reason: ''
+  });
+  ok('a sticker report needs a reason', shortReport.status === 400, String(shortReport.status));
 
   const deletedPack = await alice.call('POST', '/api/stickers/pack/delete', { id: packId });
   ok('a pack can be deleted', deletedPack.status === 200, String(deletedPack.status));
@@ -2008,6 +2025,68 @@ async function main() {
     ok('the missing count matches the list', storage.data.missingCount === (storage.data.missing || []).length,
       storage.data.missingCount + ' vs ' + (storage.data.missing || []).length);
 
+    // ---- sticker pack moderation
+    // a fresh pack, because the one the suite built earlier is already deleted
+    const modPack = await admin.call('POST', '/api/stickers/pack', { name: 'Moderation target ' + stamp });
+    ok('an administrator can make a pack without VIP', modPack.status === 200, String(modPack.status));
+    const modId = modPack.data.id;
+    const modAdd = await admin.call('POST', '/api/stickers/add', { pack: modId, image: PNG });
+    ok('the pack has a sticker to preview', modAdd.status === 200, String(modAdd.status));
+    const modShared = await admin.call('POST', '/api/stickers/pack/update', { id: modId, shared: true });
+    ok('the pack is shared so it can be reported', modShared.status === 200, String(modShared.status));
+    // a fresh account for the report: bob's sessions were killed by the ban test
+    const reporter = new Client('mod-reporter');
+    const repReg = await reporter.register('reporter_' + stamp, 'reporter-pass-1', 'Reporter');
+    ok('a reporter account for the sticker tests', repReg.status === 200, String(repReg.status));
+    const modReport = await reporter.call('POST', '/api/report', {
+      type: 'sticker', target: Number(modId.replace(/^u/, '')), reason: 'offensive pictures'
+    });
+    ok('the pack can be reported by another user', modReport.status === 200, String(modReport.status));
+    ok('the pack can be reported by another user', modReport.status === 200, String(modReport.status));
+
+    const adminPacks = await admin.call('GET', '/api/admin/stickers?limit=50');
+    ok('the moderation list answers', adminPacks.status === 200 &&
+      Array.isArray(adminPacks.data.packs), String(adminPacks.status));
+    const listedPack = (adminPacks.data.packs || []).filter(p => p.id === modId)[0];
+    ok('the pack is in the moderation list', !!listedPack,
+      JSON.stringify((adminPacks.data.packs || []).map(p => p.id)));
+    ok('the list carries the owner and a preview strip',
+      !!listedPack && !!listedPack.owner && Array.isArray(listedPack.preview) &&
+      listedPack.preview.length === 1, JSON.stringify(listedPack && listedPack.owner));
+    ok('the list counts the open reports against the pack',
+      !!listedPack && listedPack.reports >= 1, JSON.stringify(listedPack && listedPack.reports));
+
+    // a pack nobody reported and nobody shared is still visible to staff
+    const hiddenPack = await admin.call('POST', '/api/stickers/pack', { name: 'Hidden one ' + stamp });
+    const hiddenId = hiddenPack.data.id;
+    const adminPacks2 = await admin.call('GET', '/api/admin/stickers?q=' +
+      encodeURIComponent('Hidden one'));
+    ok('a private pack is visible to staff', (adminPacks2.data.packs || []).some(p => p.id === hiddenId),
+      JSON.stringify((adminPacks2.data.packs || []).map(p => p.id)));
+
+    // a plain user cannot open the moderation list at all
+    const bobStickers = await bob.call('GET', '/api/admin/stickers');
+    ok('the moderation list is closed to users', bobStickers.status === 403 || bobStickers.status === 404,
+      String(bobStickers.status));
+    const bobDelete = await bob.call('POST', '/api/admin/stickers/delete', { id: modId });
+    ok('a user cannot delete a pack through the admin API',
+      bobDelete.status === 403 || bobDelete.status === 404, String(bobDelete.status));
+
+    const adminDelete = await admin.call('POST', '/api/admin/stickers/delete',
+      { id: modId, reason: 'suite check' });
+    ok('staff can delete a pack', adminDelete.status === 200 && adminDelete.data.deleted === true,
+      JSON.stringify(adminDelete.data));
+    ok('deleting a reported pack closes its reports', adminDelete.data.closedReports >= 1,
+      JSON.stringify(adminDelete.data.closedReports));
+    const openReports = await admin.call('GET', '/api/admin/reports?status=open');
+    ok('no open report is left against the deleted pack',
+      !(openReports.data.reports || []).some(r => r.type === 'sticker' &&
+        r.target === Number(modId.replace(/^u/, ''))),
+      JSON.stringify((openReports.data.reports || []).filter(r => r.type === 'sticker').length));
+    const deleteAgain = await admin.call('POST', '/api/admin/stickers/delete', { id: modId });
+    ok('deleting a pack twice fails cleanly', deleteAgain.status === 404, String(deleteAgain.status));
+    await admin.call('POST', '/api/admin/stickers/delete', { id: hiddenId });
+
     const logs = await admin.call('GET', '/api/admin/logs?limit=20');
     ok('admin logs', logs.status === 200 && Array.isArray(logs.data.entries), '');
     const broadcast = await admin.call('POST', '/api/admin/broadcast', { text: 'test broadcast' });
@@ -2040,7 +2119,7 @@ async function main() {
     ok('moderator promoted', promoted.status === 200 && promoted.data.user.role === 'moderator',
       String(promoted.status));
     ok('a fresh moderator keeps every right', Array.isArray(promoted.data.user.perms) &&
-      promoted.data.user.perms.length === 8, JSON.stringify(promoted.data.user.perms));
+      promoted.data.user.perms.length === 9, JSON.stringify(promoted.data.user.perms));
 
     // narrowing the set must actually take the other tools away
     const narrowed = await admin.call('POST', '/api/admin/user',
