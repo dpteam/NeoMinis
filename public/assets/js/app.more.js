@@ -1975,75 +1975,178 @@
     var filter = App.qs('f') || 'all';
     if (filter !== 'unread' && filter !== 'mentions') filter = 'all';
     main.innerHTML = spinnerCard();
-    Api.request('GET', '/api/notifications?limit=60', null, function (err, data) {
+    Api.request('GET', '/api/notifications?limit=30', null, function (err, data) {
       if (err) { main.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
-      var all = data.notifications || [];
-      var list = [];
-      for (var i = 0; i < all.length; i++) {
-        var n = all[i];
-        if (filter === 'unread' && n.read) continue;
-        if (filter === 'mentions' && n.type !== 'mention') continue;
-        list.push(n);
-      }
-
-      function ntab(key, label, count) {
-        return '<a class="tab2' + (filter === key ? ' active' : '') + '" href="#/notifications' +
-          (key === 'all' ? '' : '?f=' + key) + '">' + UI.esc(label) +
-          (count ? ' <span class="count" style="margin-left:4px">' + (count > 99 ? '99+' : count) + '</span>' : '') + '</a>';
-      }
-
-      var html = '<div class="card"><div class="card-h">' + UI.icon('bell') + ' ' + T('notifications.title') +
-        '<span class="right"><button class="btn btn-xs" id="notif-read">' + T('notifications.markAll') + '</button></span></div>' +
-        '<div class="card-b" style="padding:8px 10px 0"><div class="feed-tabs" style="margin:0">' +
-        ntab('all', T('notifications.all')) +
-        ntab('unread', T('notifications.unreadTab'), data.unread) +
-        ntab('mentions', T('notifications.mentions')) +
-        '</div></div><div class="card-b flush">';
-      if (!list.length) {
-        html += UI.empty('bell', filter === 'unread' ? T('notifications.noUnread') : T('notifications.empty'),
-          filter === 'mentions' ? T('notifications.noMentions') : '');
-      } else {
-        for (var j = 0; j < list.length; j++) {
-          var item = list[j];
-          var a = item.actor || {};
-          var ic = item.type === 'like' ? 'heart' : item.type === 'comment' ? 'comment' : item.type === 'friend' ? 'user-plus'
-            : item.type === 'message' ? 'envelope' : item.type === 'admin' ? 'bullhorn' : item.type === 'badge' ? 'trophy'
-            : item.type === 'mention' ? 'at' : item.type === 'reaction' ? 'face-smile' : item.type === 'repost' ? 'retweet'
-            : item.type === 'gift' ? 'gift' : 'bell';
-          var who = a.displayName || a.username;
-          var face = a.id ? UI.avatar(a, 32)
-            : '<span class="gift-badge gift-badge-sm" style="--gift-color:#7c8cff">' + UI.icon('gift') + '</span>';
-          html += '<a class="notif' + (item.read ? '' : ' unread') + '" data-id="' + item.id + '" href="' + UI.attr(item.link || '#/notifications') + '">' +
-            face + '<div class="notif-main"><span class="who">' + UI.esc(who || T('gifts.someone')) + '</span> ' + UI.esc(item.text) +
-            '<div class="when">' + UI.timeAgo(item.created) + '</div></div><span class="type">' + UI.icon(ic) + '</span></a>';
-        }
-      }
-      html += '</div></div>';
-      main.innerHTML = html;
-
-      var b = document.getElementById('notif-read');
-      if (b) b.addEventListener('click', function () {
-        Api.request('POST', '/api/notifications/read', { all: true }, function (err2, d2) {
-          if (err2) { UI.toast(Api.errorText(err2), 'err'); return; }
-          UI.toast(T('notifications.marked'), 'ok');
-          if (d2) App.setUnreadLocal(d2.unread);
-          App.route();
-        });
-      });
-
-      // opening a notification marks it read
-      var items = main.querySelectorAll('.notif.unread');
-      for (var k = 0; k < items.length; k++) {
-        items[k].addEventListener('click', function () {
-          var id = Number(this.getAttribute('data-id'));
-          Api.request('POST', '/api/notifications/read', { id: id }, function (err3, d3) {
-            if (err3 || !d3) return;
-            App.setUnreadLocal(d3.unread);
-          });
-        });
-      }
+      state.notif = {
+        filter: filter,
+        all: (data && data.notifications) || [],
+        next: (data && data.next) || 0,
+        hasMore: !!(data && data.hasMore),
+        unread: (data && data.unread) || 0,
+        loading: false
+      };
+      renderNotifications(main);
     });
   };
+
+  /// <summary>
+  /// Renders the notification list from state.notif. Kept separate from the fetch so
+  /// "load more" can append and re-render without refetching the first page - and so
+  /// the grouping pass always sees the whole accumulated list, which is what lets a
+  /// group merge when its second half arrives on the next page.
+  /// </summary>
+  function renderNotifications(main) {
+    var s = state.notif;
+    if (!s) return;
+    var filter = s.filter;
+    var list = [];
+    for (var i = 0; i < s.all.length; i++) {
+      var n = s.all[i];
+      if (filter === 'unread' && n.read) continue;
+      if (filter === 'mentions' && n.type !== 'mention') continue;
+      list.push(n);
+    }
+    // Grouping: ten people liking one post is one row, not ten. The key is the
+    // type plus the target link, so "liked your post" groups per post while
+    // messages (each with its own link) stay separate.
+    list = groupNotifications(list);
+
+    function ntab(key, label, count) {
+      return '<a class="tab2' + (filter === key ? ' active' : '') + '" href="#/notifications' +
+        (key === 'all' ? '' : '?f=' + key) + '">' + UI.esc(label) +
+        (count ? ' <span class="count" style="margin-left:4px">' + (count > 99 ? '99+' : count) + '</span>' : '') + '</a>';
+    }
+
+    var html = '<div class="card"><div class="card-h">' + UI.icon('bell') + ' ' + T('notifications.title') +
+      '<span class="right"><button class="btn btn-xs" id="notif-read">' + T('notifications.markAll') + '</button></span></div>' +
+      '<div class="card-b" style="padding:8px 10px 0"><div class="feed-tabs" style="margin:0">' +
+      ntab('all', T('notifications.all')) +
+      ntab('unread', T('notifications.unreadTab'), s.unread) +
+      ntab('mentions', T('notifications.mentions')) +
+      '</div></div><div class="card-b flush" id="notif-list">';
+    if (!list.length) {
+      html += UI.empty('bell', filter === 'unread' ? T('notifications.noUnread') : T('notifications.empty'),
+        filter === 'mentions' ? T('notifications.noMentions') : '');
+    } else {
+      for (var j = 0; j < list.length; j++) {
+        var item = list[j];
+        var a = item.actor || {};
+        var ic = item.type === 'like' ? 'heart' : item.type === 'comment' ? 'comment' : item.type === 'friend' ? 'user-plus'
+          : item.type === 'message' ? 'envelope' : item.type === 'admin' ? 'bullhorn' : item.type === 'badge' ? 'trophy'
+          : item.type === 'mention' ? 'at' : item.type === 'reaction' ? 'face-smile' : item.type === 'repost' ? 'retweet'
+          : item.type === 'gift' ? 'gift' : 'bell';
+        var who = a.displayName || a.username;
+        var face;
+        if (item.count > 1) {
+          // a small stack of the faces that make up the group
+          face = '<span class="notif-faces">';
+          for (var f = 0; f < item.actors.length && f < 3; f++) face += UI.avatar(item.actors[f], 26);
+          face += '</span>';
+        } else {
+          face = a.id ? UI.avatar(a, 32)
+            : '<span class="gift-badge gift-badge-sm" style="--gift-color:#7c8cff">' + UI.icon('gift') + '</span>';
+        }
+        var label = who || T('gifts.someone');
+        if (item.count > 1) label = T('notifications.grouped', who || T('gifts.someone'), item.count - 1);
+        html += '<a class="notif' + (item.read ? '' : ' unread') + '" data-id="' + item.id + '"' +
+          (item.ids.length > 1 ? ' data-ids="' + item.ids.join(',') + '"' : '') +
+          ' href="' + UI.attr(item.link || '#/notifications') + '">' +
+          face + '<div class="notif-main"><span class="who">' + UI.esc(label) + '</span> ' + UI.esc(item.text) +
+          '<div class="when">' + UI.timeAgo(item.created) + '</div></div><span class="type">' + UI.icon(ic) + '</span></a>';
+      }
+    }
+    html += '</div>';
+    if (list.length && s.hasMore) {
+      html += '<div class="card-f center"><button class="btn btn-sm" id="notif-more">' + T('common.loadMore') + '</button></div>';
+    }
+    html += '</div>';
+    main.innerHTML = html;
+
+    var b = document.getElementById('notif-read');
+    if (b) b.addEventListener('click', function () {
+      Api.request('POST', '/api/notifications/read', { all: true }, function (err2, d2) {
+        if (err2) { UI.toast(Api.errorText(err2), 'err'); return; }
+        UI.toast(T('notifications.marked'), 'ok');
+        if (d2) App.setUnreadLocal(d2.unread);
+        App.route();
+      });
+    });
+
+    var moreBtn = document.getElementById('notif-more');
+    if (moreBtn) moreBtn.addEventListener('click', function () {
+      if (s.loading || !s.next) return;
+      s.loading = true;
+      moreBtn.disabled = true;
+      Api.request('GET', '/api/notifications?limit=30&before=' + s.next, null, function (err3, d3) {
+        s.loading = false;
+        if (err3) { moreBtn.disabled = false; UI.toast(Api.errorText(err3), 'err'); return; }
+        s.all = s.all.concat((d3 && d3.notifications) || []);
+        s.next = (d3 && d3.next) || 0;
+        s.hasMore = !!(d3 && d3.hasMore);
+        if (d3 && typeof d3.unread === 'number') { s.unread = d3.unread; App.setUnreadLocal(d3.unread); }
+        renderNotifications(main);
+      });
+    });
+
+    // opening a notification marks it read - and every sibling in its group, or
+    // the pill keeps counting rows the user has already dealt with
+    var items = main.querySelectorAll('.notif.unread');
+    for (var k = 0; k < items.length; k++) {
+      items[k].addEventListener('click', function () {
+        var ids = this.getAttribute('data-ids');
+        var id = Number(this.getAttribute('data-id'));
+        var payload;
+        if (ids) {
+          var parts = ids.split(','), arr = [];
+          for (var z = 0; z < parts.length; z++) arr.push(Number(parts[z]));
+          payload = { ids: arr };
+        } else {
+          payload = { id: id };
+        }
+        // one request per click, not one per member of the group
+        Api.request('POST', '/api/notifications/read', payload, function (err4, d4) {
+          if (err4 || !d4) return;
+          App.setUnreadLocal(d4.unread);
+        });
+      });
+    }
+  }
+
+  /// <summary>
+  /// Collapses a notification list into groups. A group keeps the newest item's
+  /// identity and text, collects the actors, and remembers every id so opening it
+  /// can mark the whole group read. Order is preserved: the newest group is first.
+  /// </summary>
+  function groupNotifications(list) {
+    var out = [];
+    var byKey = {};
+    for (var i = 0; i < list.length; i++) {
+      var n = list[i];
+      // messages and admin broadcasts are already one-per-event; grouping them
+      // would hide which conversation a row belongs to
+      var groupable = n.type !== 'message' && n.type !== 'admin';
+      var key = groupable ? (n.type + '|' + (n.link || '')) : ('id|' + n.id);
+      var g = byKey[key];
+      if (!g) {
+        g = {
+          id: n.id, ids: [], type: n.type, text: n.text, link: n.link,
+          created: n.created, read: n.read, actor: n.actor, actors: [], count: 0
+        };
+        if (n.actor && n.actor.id) g.actors.push(n.actor);
+        byKey[key] = g;
+        out.push(g);
+      }
+      g.ids.push(n.id);
+      g.count++;
+      if (!n.read) g.read = false;
+      if (n.actor && n.actor.id) {
+        var seen = false;
+        for (var k = 0; k < g.actors.length; k++) if (g.actors[k].id === n.actor.id) seen = true;
+        if (!seen) g.actors.push(n.actor);
+      }
+    }
+    return out;
+  }
 
   // -------------------------------------------------------------- bookmarks
 

@@ -1040,6 +1040,27 @@ namespace Social.Core
 
         public List<Post> Feed(long userId, string tab, long before, int limit)
         {
+            return FeedCore(userId, tab, before, 0, limit);
+        }
+
+        /// <summary>
+        /// Posts newer than <paramref name="since"/>, in the same order the feed uses.
+        /// This is what the "N new posts" pill asks for: a cheap check that costs one
+        /// pass over the newest posts instead of re-fetching the page.
+        /// </summary>
+        public List<Post> FeedSince(long userId, string tab, long since, int limit)
+        {
+            return FeedCore(userId, tab, 0, since, limit);
+        }
+
+        /// <summary>
+        /// The one place that decides whether a post belongs in a feed tab. Both the
+        /// paged feed and the "since" check go through it, so the two cannot drift -
+        /// which is exactly what would happen if the pill counted with one rule and
+        /// the list filtered with another.
+        /// </summary>
+        private List<Post> FeedCore(long userId, string tab, long before, long since, int limit)
+        {
             List<Post> result = new List<Post>();
             HashSet<long> friends = null;
             if (tab == "home" || tab == "friends") friends = new HashSet<long>(FriendIds(userId));
@@ -1052,6 +1073,7 @@ namespace Social.Core
                     if (p.Deleted || p.Group != 0) continue;
                     if (!IsLive(p)) continue;
                     if (before > 0 && p.Id >= before) continue;
+                    if (since > 0 && p.Id <= since) continue;
 
                     if (tab == "global")
                     {
@@ -1947,6 +1969,29 @@ namespace Social.Core
                     if (n.User != userId) continue;
                     if (!all && n.Id != id) continue;
                     if (!n.Read) { n.Read = true; changed = true; }
+                }
+                if (changed) MarkNotifications();
+            }
+        }
+
+        /// <summary>
+        /// Marks a set of notifications read in one pass. A grouped row on the
+        /// notifications page stands for several notifications, and sending one
+        /// request per member would be a burst of round trips for a single click.
+        /// </summary>
+        public void MarkNotifications(long userId, List<long> ids)
+        {
+            if (ids == null || ids.Count == 0) return;
+            lock (_sync)
+            {
+                bool changed = false;
+                for (int i = 0; i < _notifications.Count; i++)
+                {
+                    Notification n = _notifications[i];
+                    if (n.User != userId || n.Read) continue;
+                    if (!ids.Contains(n.Id)) continue;
+                    n.Read = true;
+                    changed = true;
                 }
                 if (changed) MarkNotifications();
             }

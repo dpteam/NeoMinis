@@ -185,7 +185,7 @@ the login form.
 
 | Method | Path | Body / query | Result |
 | --- | --- | --- | --- |
-| GET | `/api/feed` | `tab=home|global|friends`, `before`, `limit` | `{ tab, posts[], hasMore, next }` |
+| GET | `/api/feed` | `tab=home|global|friends`, `before`, `since`, `limit` | `{ tab, posts[], hasMore, next }` or, with `since`, `{ tab, posts[], newCount, latest }` |
 | GET | `/api/wall` | `user`, `before`, `limit` | `{ user, posts[], hasMore, next, canPost }` |
 | GET | `/api/post` | `id` | `{ post, comments[] }` |
 | POST | `/api/post` | `body`, `image`, `video`, `poll`, `scheduledFor`, `visibility`, `wall`, `group` | `{ post }` |
@@ -198,8 +198,7 @@ the login form.
 | POST | `/api/comment` | `post`, `body` | `{ comment, comments }` |
 | POST | `/api/comment/delete` | `id` | `{ ok }` |
 | GET | `/api/bookmarks` | `before`, `limit` | `{ posts[], hasMore, next, total }` |
-| POST | `/api/bookmark` | `id` | `{ bookmarked, total }` |
-| GET | `/api/likes` | `post`, `limit` | `{ users[], total }` |
+| POST | `/api/bookmark` | `id` | `{ bookmarked, total }` || GET | `/api/likes` | `post`, `limit` | `{ users[], total }` |
 | POST | `/api/poll` | `post`, `option` | `{ post }` (with the fresh poll state) |
 | POST | `/api/reaction` | `id`, `emoji` | `{ post }` |
 | GET | `/api/photos` | `user`, `before`, `limit` | `{ user, photos[{ id, image, created, likes, comments }], hasMore, next }` |
@@ -209,6 +208,17 @@ the login form.
 belong to (wins over `wall`). `video`: an `http(s)` link; YouTube links get a
 thumbnail card, `.mp4`/`.webm`/`.ogv` files play inline, everything else becomes a
 link card.
+
+**`since` is the "is anything new?" check.** Pass the id of the newest post already
+on screen and the answer is only what came after it — `{ posts[], newCount, latest }`,
+capped at 20. The client polls it every 25 s and shows a pill instead of rearranging
+the list; a feed that moves under the reader is worse than a stale one. Both the paged
+feed and the `since` check go through one filter in `SocialStore.FeedCore`, so the pill
+can never count posts the list would hide.
+
+Notifications: `POST /api/notifications/read` accepts `{ id }`, `{ all: true }`, or
+`{ ids: [1,2,3] }`. The batch form exists because one grouped row on the page stands
+for several notifications, and a single click should not become ten round trips.
 
 Bookmarks are per user and private: `POST /api/bookmark` toggles the saved state
 of a post and the reply tells you the new state and the total saved count.
@@ -315,8 +325,7 @@ earned (useful after an import or a rule change).
 
 | Method | Path | Body / query | Result |
 | --- | --- | --- | --- |
-| GET | `/api/messages/threads` | — | `{ threads[], unread }` |
-| GET | `/api/messages` | `with`, `before`, `limit` | `{ other, messages[], hasMore, next }` |
+| GET | `/api/messages/threads` | — | `{ threads[], unread }` || GET | `/api/messages` | `with`, `before`, `limit` | `{ other, messages[], hasMore, next }` |
 | POST | `/api/messages/send` | `to`, `body`, `image`, `images[]`, `video`, `audio`, `audioSec`, `file`, `fileName`, `sticker`, `replyTo` | `{ message }` |
 | GET | `/api/messages/wait` | `with`, `after`, `timeout` | `{ messages[], latest, typing, read, unread, live }` |
 | POST | `/api/messages/typing` | `to` | `{ ok }` |

@@ -606,6 +606,33 @@ img { max-width: 100%; }
 }
 .load-more:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
+/* the "N new posts" pill: it appears above the list and does nothing until
+   clicked, because a feed that rearranges itself under the reader is worse than
+   a stale one */
+.feed-new-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: 700 12.5px var(--font-display);
+  cursor: pointer;
+  animation: postIn .28s var(--ease);
+}
+.feed-new-pill:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.feed-new-pill i { font-size: 12px; }
+
+/* a group of notifications: the faces of everybody involved, overlapped */
+.notif-faces { display: inline-flex; align-items: center; flex: none; }
+.notif-faces .avatar { width: 26px; height: 26px; margin-right: -9px; border: 2px solid var(--panel); }
+.notif-faces .avatar:last-child { margin-right: 0; }
+
 /* --------------------------------------------------------------- profile */
 
 .profile-cover {

@@ -297,6 +297,26 @@ async function main() {
   const found = feedBob.data && feedBob.data.posts.some(p => p.id === postId);
   ok('post visible in global feed', !!found, '');
 
+  // ---- the "N new posts" pill: a since= check that must agree with the feed
+  const newestId = feedBob.data.posts.length ? feedBob.data.posts[0].id : 0;
+  const sinceNone = await bob.call('GET', '/api/feed?tab=global&since=' + newestId);
+  ok('since the newest post there is nothing new', sinceNone.status === 200 &&
+    sinceNone.data.newCount === 0 && (sinceNone.data.posts || []).length === 0,
+    JSON.stringify(sinceNone.data && sinceNone.data.newCount));
+  const freshPost = await alice.call('POST', '/api/post', { body: 'a fresh one for the pill' });
+  const freshId = freshPost.data && freshPost.data.post.id;
+  const sinceOne = await bob.call('GET', '/api/feed?tab=global&since=' + newestId);
+  ok('a newer post is counted by the since check', sinceOne.data.newCount === 1 &&
+    (sinceOne.data.posts || []).some(p => p.id === freshId),
+    JSON.stringify(sinceOne.data && sinceOne.data.newCount));
+  ok('the since check reports the newest id it saw',
+    sinceOne.data.latest === freshId, JSON.stringify(sinceOne.data.latest));
+  // the same post must not be counted twice by a second poll
+  const sinceAgain = await bob.call('GET', '/api/feed?tab=global&since=' + freshId);
+  ok('polling again with the new watermark finds nothing', sinceAgain.data.newCount === 0,
+    JSON.stringify(sinceAgain.data.newCount));
+  await alice.call('POST', '/api/post/delete', { id: freshId });
+
   const like = await bob.call('POST', '/api/like', { id: postId });
   ok('like toggles on', like.status === 200 && like.data.liked === true && like.data.likes === 1, JSON.stringify(like.data));
   const unlike = await bob.call('POST', '/api/like', { id: postId });
@@ -312,6 +332,23 @@ async function main() {
   ok('post with mention and tag', mentionPost.status === 200, String(mentionPost.status));
   const aliceNotif = await alice.call('GET', '/api/notifications?limit=50');
   ok('mention notified', aliceNotif.data && aliceNotif.data.notifications.some(n => n.type === 'mention'), '');
+
+  // ---- a grouped row marks several notifications read in one request
+  const unreadNow = (aliceNotif.data.notifications || []).filter(n => !n.read);
+  if (unreadNow.length >= 2) {
+    const two = [unreadNow[0].id, unreadNow[1].id];
+    const batch = await alice.call('POST', '/api/notifications/read', { ids: two });
+    ok('a batch of notifications can be marked read at once', batch.status === 200 &&
+      typeof batch.data.unread === 'number', JSON.stringify(batch.data && batch.data.unread));
+    const afterBatch = await alice.call('GET', '/api/notifications?limit=50');
+    const stillUnread = (afterBatch.data.notifications || []).filter(n => two.indexOf(n.id) >= 0 && !n.read);
+    ok('both notifications in the batch are read', stillUnread.length === 0,
+      JSON.stringify(stillUnread.map(n => n.id)));
+  }
+  // a bad id in the batch is ignored rather than failing the whole call
+  const batchJunk = await alice.call('POST', '/api/notifications/read', { ids: ['x', 0, -5] });
+  ok('a junk batch is ignored, not fatal', batchJunk.status === 200, String(batchJunk.status));
+
   const tagRes = await alice.call('GET', '/api/tag?tag=newtag');
   ok('tag page finds the post', tagRes.status === 200 && tagRes.data.posts.some(p => p.id === mentionPost.data.post.id),
     String(tagRes.status));

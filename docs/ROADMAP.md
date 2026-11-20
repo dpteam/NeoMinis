@@ -349,6 +349,11 @@ Kept here so the list above stays honest.
   a participant count that ignores people who declined, a minimised floating call
   window that keeps the media flowing, avatars of who is on the line with a blue dot
   when somebody joins, and rooms that no longer die under the last person in them.
+- The feed tells you there is something new instead of silently going stale: a poll
+  on `since=<newest id>` every 25 s, and a pill that adds the posts when clicked —
+  nothing moves under the reader. Notifications group by type and target, so ten
+  likes on one post are one row with stacked faces, and opening it marks the whole
+  group read in a single request. Notifications also page now.
 - Calls, finished: **screen share** through `replaceTrack` (instant, no
   renegotiation, the camera comes back when the share stops), **calls that survive a
   page reload**, and **audio processing toggles** (echo cancellation, noise

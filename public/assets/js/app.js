@@ -14,7 +14,9 @@ var App = (function () {
     me: null,
     user: null,
     site: null,
-    feed: { tab: 'home', posts: [], next: 0, hasMore: false, loading: false },
+    feed: { tab: 'home', posts: [], next: 0, hasMore: false, loading: false, newest: 0, pending: [] },
+    feedTimer: null,
+    notif: null,
     im: { withId: 0, timer: null },
     adminLogs: { timer: null },
     notify: { started: false, last: 0, unreadAt: 0 },
@@ -711,6 +713,8 @@ var App = (function () {
   function stopTimers() {
     if (state.im && state.im.timer) { clearInterval(state.im.timer); state.im.timer = null; }
     if (state.adminLogs && state.adminLogs.timer) { clearInterval(state.adminLogs.timer); state.adminLogs.timer = null; }
+    // the feed's "anything new?" poll belongs to the feed view
+    if (state.feedTimer) { clearInterval(state.feedTimer); state.feedTimer = null; }
     // stop a running voice recording and invalidate the chat long poll
     if (state.im && state.im.stopRec) { try { state.im.stopRec(); } catch (e) { } }
     if (state.im) state.im.loopToken = (state.im.loopToken || 0) + 1;
@@ -998,7 +1002,7 @@ var App = (function () {
   function feedView(main, r) {
     var guest = !!state.guest;
     var tab = qs('tab') || (guest ? 'global' : 'home');
-    state.feed = { tab: tab, posts: [], next: 0, hasMore: false, loading: false };
+    state.feed = { tab: tab, posts: [], next: 0, hasMore: false, loading: false, newest: 0, pending: [] };
     var html = guest ? '' : '<div id="stories-tray"></div>';
     html += guest ? guestNotice() : composerHtml(0);
     html += '<div class="feed-tabs">' +
@@ -1006,6 +1010,7 @@ var App = (function () {
         ? feedTab('global', T('feed.global'))
         : feedTab('home', T('feed.home')) + feedTab('global', T('feed.global')) + feedTab('friends', T('feed.friends'))) +
       '</div>';
+    html += '<div id="feed-new"></div>';
     html += '<div id="feed-list"></div>';
     html += '<div id="feed-more"></div>';
     main.innerHTML = html;
@@ -1096,7 +1101,58 @@ var App = (function () {
       state.feed.posts = more ? state.feed.posts.concat(posts) : posts;
       state.feed.next = data.next || 0;
       state.feed.hasMore = !!data.hasMore;
+      // the newest id on screen is the watermark the "anything new?" poll uses
+      if (!more && posts.length) state.feed.newest = posts[0].id;
       renderFeedList(more ? posts : null);
+      if (!more) startFeedWatch();
+    });
+  }
+
+  /// <summary>
+  /// Polls for posts newer than the one at the top of the screen and shows a pill
+  /// instead of yanking the list around. A feed that silently rearranges under the
+  /// reader is worse than a stale one, so nothing moves until the pill is clicked.
+  /// </summary>
+  function startFeedWatch() {
+    if (state.feedTimer) { clearInterval(state.feedTimer); state.feedTimer = null; }
+    if (state.guest) return;
+    state.feedTimer = setInterval(function () {
+      if (state.route !== 'feed' || document.hidden) return;
+      if (!state.feed.newest) return;
+      var tab = state.feed.tab;
+      Api.request('GET', '/api/feed?tab=' + encodeURIComponent(tab) +
+        '&since=' + state.feed.newest, null, function (err, data) {
+        if (err || !data || !data.posts) return;
+        // a late reply from a previous tab must not paint the current one
+        if (state.route !== 'feed' || state.feed.tab !== tab) return;
+        state.feed.pending = data.posts;
+        showNewPill(data.posts.length);
+      });
+    }, 25000);
+  }
+
+  function showNewPill(count) {
+    var box = document.getElementById('feed-new');
+    if (!box) return;
+    if (!count) { box.innerHTML = ''; return; }
+    box.innerHTML = '<button type="button" class="feed-new-pill" id="feed-new-btn">' +
+      UI.icon('arrow-up') + ' ' + T('feed.newPosts', count) + '</button>';
+    var b = document.getElementById('feed-new-btn');
+    if (b) b.addEventListener('click', function () {
+      var fresh = state.feed.pending || [];
+      state.feed.pending = [];
+      if (!fresh.length) { box.innerHTML = ''; return; }
+      state.feed.posts = fresh.concat(state.feed.posts);
+      state.feed.newest = fresh[0].id;
+      var list = document.getElementById('feed-list');
+      if (list) {
+        // insert in reverse so the order survives repeated prepends
+        for (var i = fresh.length - 1; i >= 0; i--) list.insertAdjacentHTML('afterbegin', postHtml(fresh[i]));
+        bindPosts(list);
+      }
+      box.innerHTML = '';
+      UI.scrollTop();
+      SoundFX.play('click');
     });
   }
 
@@ -1474,6 +1530,8 @@ var App = (function () {
           : scheduledFor ? T('feed.scheduled') : T('feed.posted'), queued ? 'info' : 'ok');
         if (state.route === 'feed' && !groupId && !scheduledFor) {
           state.feed.posts.unshift(data.post);
+          // our own post is already on screen, so it must not come back as "new"
+          if (data.post && data.post.id) state.feed.newest = Math.max(state.feed.newest || 0, data.post.id);
           renderFeedList(null);
           loadTags();
         } else if (wallId || groupId || scheduledFor) {

@@ -243,6 +243,23 @@ namespace Social.Web
             if (ctx.Session != null && ctx.Session.IsGuest && tab == "home") tab = "global";
             int limit = LimitParam(ctx, 20, 50);
             long before = LongQuery(ctx, "before");
+            long since = LongQuery(ctx, "since");
+
+            // `since` is the "is anything new?" check: only posts newer than the id
+            // the client already has, capped small because the pill only needs a
+            // number and the newest handful.
+            if (since > 0)
+            {
+                List<Post> fresh = _store.FeedSince(ctx.User.Id, tab, since, 20);
+                JsonBuilder nb = new JsonBuilder(2048);
+                nb.BeginObject();
+                nb.Prop("tab", tab);
+                AppendPosts(nb, "posts", fresh, ctx.User);
+                nb.Prop("newCount", fresh.Count);
+                nb.Prop("latest", fresh.Count == 0 ? since : fresh[0].Id);
+                SendOk(ctx, nb);
+                return;
+            }
 
             List<Post> posts = _store.Feed(ctx.User.Id, tab, before, limit + 1);
             bool hasMore = posts.Count > limit;
@@ -2031,7 +2048,25 @@ namespace Social.Web
         {
             bool all = BodyBool(ctx, "all", false);
             long id = BodyLong(ctx, "id", 0);
-            _store.MarkNotifications(ctx.User.Id, id, all);
+            // a grouped row marks several at once; one id stays the common case
+            List<object> raw = Json.Get(ctx.Body, "ids") as List<object>;
+            if (raw != null && raw.Count > 0)
+            {
+                List<long> ids = new List<long>();
+                for (int i = 0; i < raw.Count && ids.Count < 100; i++)
+                {
+                    long one = 0;
+                    if (raw[i] is double) one = (long)(double)raw[i];
+                    else if (raw[i] is long) one = (long)raw[i];
+                    else if (raw[i] != null) long.TryParse(Convert.ToString(raw[i]), out one);
+                    if (one > 0) ids.Add(one);
+                }
+                _store.MarkNotifications(ctx.User.Id, ids);
+            }
+            else
+            {
+                _store.MarkNotifications(ctx.User.Id, id, all);
+            }
             JsonBuilder b = new JsonBuilder(128);
             b.BeginObject();
             b.Prop("unread", _store.UnreadNotifications(ctx.User.Id));
