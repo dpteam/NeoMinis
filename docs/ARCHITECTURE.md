@@ -19,7 +19,7 @@
       SocialStore (in-memory)     SessionManager            StatsStore / CaptchaStore
       JSON tables + atomic IO     session key = PBKDF2       lifetime counters, SVG codes
               │
-      data/*.json  (17 tables + meta + stats)
+      data/*.json  (26 tables + meta + stats)
 ```
 
 Both listeners share one `SocialStore`, one `SessionManager`, one stats store and
@@ -68,13 +68,18 @@ memory together with a small per-user event queue, because a call only exists wh
 the browsers are connected. Only the finished record (who, when, how long) lands in
 `calls.json` for the history list.
 
+Post edit history is its own table (`postedits.json`) rather than a field on the post:
+a revision is a row, which means an old `posts.json` from before this feature loads
+unchanged, and trimming a post's history is a `RemoveAt` rather than a rewrite of the
+post. The row stores the state *before* the edit that followed it, so the live post is
+always the current version.
+
 Flash games are media rows with `kind=game`; the `.swf` sits in `data/media/games/`.
 The player itself (Ruffle, ~28 MB of wasm) is deliberately *not* in git: it is
 fetched by `tools\fetch-ruffle.ps1` into `public/assets/vendor/ruffle/`, served from
 our own origin, and only ever started inside the sandboxed `/play/<id>` iframe.
 
-The built-in mini-games take the opposite approach on purpose: plain HTML and canvas
-under `public/assets/mini/`, no plugin, no download. Each one is still a real `App`
+The built-in mini-games take the opposite approach on purpose: plain HTML and canvasunder `public/assets/mini/`, no plugin, no download. Each one is still a real `App`
 row (`builtin: true`, `url: /play/mini/<id>`, seeded on start by `MiniGames.Seed`), so
 the leaderboard comes from the Applications API instead of a parallel score table.
 `/play/mini/<id>` is served with the same opaque-origin treatment as the Ruffle host

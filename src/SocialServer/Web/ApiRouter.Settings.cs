@@ -99,6 +99,8 @@ namespace Social.Web
                 .Prop("maxAvatarKB", _cfg.MaxAvatarKB)
                 .Prop("maxPostImageKB", _cfg.MaxPostImageKB)
                 .Prop("editWindowMin", _cfg.EditWindowMin)
+                .Prop("postEditHistory", _cfg.PostEditHistory)
+                .Prop("postEditsKeep", _cfg.PostEditsKeep)
                 .EndObject();
 
             b.Name("server").BeginObject()
@@ -446,6 +448,21 @@ namespace Social.Web
                 ApplyLimit(limits, "maxAvatarKB", _cfg.MaxAvatarKB, 16, delegate(int v) { _cfg.MaxAvatarKB = v; });
                 ApplyLimit(limits, "maxPostImageKB", _cfg.MaxPostImageKB, 64, delegate(int v) { _cfg.MaxPostImageKB = v; });
                 ApplyLimit(limits, "editWindowMin", _cfg.EditWindowMin, 0, delegate(int v) { _cfg.EditWindowMin = v; });
+                if (limits.ContainsKey("postEditsKeep"))
+                {
+                    // capped on purpose: a hundred thousand revisions of one post is
+                    // a way to fill the disk through a form field
+                    int v = Json.GetInt(limits, "postEditsKeep", _cfg.PostEditsKeep);
+                    if (v < 0) v = 0;
+                    if (v > 200) v = 200;
+                    _cfg.PostEditsKeep = v;
+                    _cfg.SetIniValue("limits", "postEditsKeep", v.ToString(CultureInfo.InvariantCulture));
+                }
+                if (limits.ContainsKey("postEditHistory"))
+                {
+                    _cfg.PostEditHistory = Json.GetBool(limits, "postEditHistory", _cfg.PostEditHistory);
+                    _cfg.SetIniValue("limits", "postEditHistory", _cfg.PostEditHistory ? "true" : "false");
+                }
             }
 
             // --------------------------------------------------------------- ui

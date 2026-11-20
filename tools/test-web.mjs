@@ -1852,6 +1852,51 @@ async function main() {
   const editBad = await bob.call('POST', '/api/post/edit', { id: postId, body: 'hijack' });
   ok('foreign post edit refused', editBad.status === 403, String(editBad.status));
 
+  // ---- edit history: the version being replaced is kept, the live one is not
+  const hist1 = await alice.call('GET', '/api/post/edits?id=' + postId);
+  ok('the author can read the edit history', hist1.status === 200 &&
+    Array.isArray(hist1.data.revisions), String(hist1.status));
+  ok('the first revision holds the text before the edit',
+    (hist1.data.revisions || []).some(r => r.body === 'Hello from the test client'),
+    JSON.stringify((hist1.data.revisions || []).map(r => r.body.slice(0, 30))));
+  ok('the live version is listed first and marked current',
+    (hist1.data.revisions || [])[0] && hist1.data.revisions[0].current === true &&
+    hist1.data.revisions[0].body === 'Hello edited',
+    JSON.stringify((hist1.data.revisions || [])[0] && hist1.data.revisions[0].body));
+  ok('the edit count is reported on the post', edit.data.post.edits >= 1,
+    JSON.stringify(edit.data.post.edits));
+
+  // saving without changing anything must not add a revision or say "edited"
+  const beforeNoop = (await alice.call('GET', '/api/post/edits?id=' + postId)).data.revisions.length;
+  const noop = await alice.call('POST', '/api/post/edit', { id: postId, body: 'Hello edited', imageAction: 'keep' });
+  const afterNoop = await alice.call('GET', '/api/post/edits?id=' + postId);
+  ok('saving an unchanged post adds no revision',
+    afterNoop.data.revisions.length === beforeNoop,
+    beforeNoop + ' -> ' + afterNoop.data.revisions.length);
+  ok('saving an unchanged post does not bump the edit counter',
+    noop.data.post.edits === edit.data.post.edits && noop.data.unchanged === true,
+    JSON.stringify({ was: edit.data.post.edits, now: noop.data.post.edits }));
+
+  // a second real edit stacks a second revision, newest first
+  const edit2 = await alice.call('POST', '/api/post/edit', { id: postId, body: 'Hello edited twice' });
+  ok('a second edit works', edit2.status === 200 && edit2.data.post.body === 'Hello edited twice', '');
+  const hist2 = await alice.call('GET', '/api/post/edits?id=' + postId);
+  ok('history grows by one per real edit', hist2.data.revisions.length === beforeNoop + 1,
+    beforeNoop + ' -> ' + hist2.data.revisions.length);
+  ok('history is newest first',
+    hist2.data.revisions[0].body === 'Hello edited twice' &&
+    hist2.data.revisions[1].body === 'Hello edited',
+    JSON.stringify(hist2.data.revisions.map(r => r.body)));
+  ok('the counter counts every edit', edit2.data.post.edits === 2,
+    JSON.stringify(edit2.data.post.edits));
+
+  // the old text is not public: a stranger cannot read it
+  const histStranger = await bob.call('GET', '/api/post/edits?id=' + postId);
+  ok('a stranger cannot read the edit history', histStranger.status === 403,
+    String(histStranger.status));
+  const histGhost = await alice.call('GET', '/api/post/edits?id=99999999');
+  ok('history for an unknown post 404s', histGhost.status === 404, String(histGhost.status));
+
   const pin = await alice.call('POST', '/api/post/pin', { id: postId, on: true });
   ok('post pinned', pin.status === 200 && pin.data.pinned === true, String(pin.status));
   const ownWall = await alice.call('GET', '/api/wall?user=' + alice.user.id);
@@ -2086,6 +2131,22 @@ async function main() {
     const deleteAgain = await admin.call('POST', '/api/admin/stickers/delete', { id: modId });
     ok('deleting a pack twice fails cleanly', deleteAgain.status === 404, String(deleteAgain.status));
     await admin.call('POST', '/api/admin/stickers/delete', { id: hiddenId });
+
+    // ---- edit history: staff can read it, and it dies with the post
+    const histStaff = await admin.call('GET', '/api/post/edits?id=' + postId);
+    ok('staff can read the edit history', histStaff.status === 200 &&
+      histStaff.data.revisions.length >= 2, String(histStaff.status));
+
+    const doomed = await alice.call('POST', '/api/post', { body: 'this will be edited then removed' });
+    const doomedId = doomed.data.post.id;
+    await alice.call('POST', '/api/post/edit', { id: doomedId, body: 'edited once' });
+    const doomedHist = await alice.call('GET', '/api/post/edits?id=' + doomedId);
+    ok('a fresh post keeps its own history', doomedHist.data.revisions.length >= 1,
+      JSON.stringify(doomedHist.data.revisions.length));
+    await alice.call('POST', '/api/post/delete', { id: doomedId });
+    const goneHist = await alice.call('GET', '/api/post/edits?id=' + doomedId);
+    ok('deleting a post takes its history with it', goneHist.status === 404,
+      String(goneHist.status));
 
     const logs = await admin.call('GET', '/api/admin/logs?limit=20');
     ok('admin logs', logs.status === 200 && Array.isArray(logs.data.entries), '');
@@ -2359,6 +2420,32 @@ async function main() {
     ok('the account-delete switch reads back', delOffNow.data.site.allowAccountDelete === false,
       JSON.stringify(delOffNow.data.site.allowAccountDelete));
     await admin.call('POST', '/api/admin/settings/save', { site: { allowAccountDelete: true } });
+
+    // ---- edit-history settings: a real switch and a capped revision count
+    const editCfg = await admin.call('POST', '/api/admin/settings/save',
+      { limits: { postEditHistory: false, postEditsKeep: 500 } });
+    ok('the edit-history settings save', editCfg.status === 200, String(editCfg.status));
+    const editCfgNow = await admin.call('GET', '/api/admin/settings');
+    ok('the history switch reads back off', editCfgNow.data.limits.postEditHistory === false,
+      JSON.stringify(editCfgNow.data.limits.postEditHistory));
+    ok('a silly revision count is capped, not stored',
+      editCfgNow.data.limits.postEditsKeep === 200,
+      JSON.stringify(editCfgNow.data.limits.postEditsKeep));
+    // with history off, an edit still stamps the post but saves no text
+    const offPost = await alice.call('POST', '/api/post', { body: 'history is off for this one' });
+    const offId = offPost.data.post.id;
+    const offEdit = await alice.call('POST', '/api/post/edit', { id: offId, body: 'edited while off' });
+    ok('an edit still marks the post with history off',
+      offEdit.status === 200 && offEdit.data.post.edited !== '', JSON.stringify(offEdit.data.post.edited));
+    const offHist = await alice.call('GET', '/api/post/edits?id=' + offId);
+    ok('no revision is kept while history is off',
+      offHist.status === 200 && offHist.data.kept === false &&
+      (offHist.data.revisions || []).length === 1,
+      JSON.stringify({ kept: offHist.data.kept, n: (offHist.data.revisions || []).length }));
+    await alice.call('POST', '/api/post/delete', { id: offId });
+    // put the shipped values back so the rest of the suite is unaffected
+    await admin.call('POST', '/api/admin/settings/save',
+      { limits: { postEditHistory: true, postEditsKeep: 20 } });
   }
 
   // ---- third-party apps

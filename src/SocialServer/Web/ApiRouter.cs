@@ -820,6 +820,7 @@ namespace Social.Web
             if (r == "post") { HandlePost(ctx); return; }
             if (r == "post/delete") { RequireMethod(m, "POST"); HandlePostDelete(ctx); return; }
             if (r == "post/edit") { RequireMethod(m, "POST"); HandlePostEdit(ctx); return; }
+            if (r == "post/edits") { RequireMethod(m, "GET"); HandlePostEdits(ctx); return; }
             if (r == "post/pin") { RequireMethod(m, "POST"); HandlePostPin(ctx); return; }
             if (r == "likes") { RequireMethod(m, "GET"); HandleLikes(ctx); return; }
             if (r == "poll") { RequireMethod(m, "POST"); HandlePollVote(ctx); return; }

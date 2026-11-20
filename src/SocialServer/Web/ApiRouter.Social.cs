@@ -513,11 +513,15 @@ namespace Social.Web
             if (visibility != "public" && visibility != "friends" && visibility != "private")
                 visibility = p.Visibility;
 
+            // The picture is decided first but *not* deleted yet: the revision saved
+            // below may still point at the old file, and a history entry showing a
+            // broken image is worse than no history at all.
             string image = p.Image;
+            string oldImage = "";
             string imageAction = BodyStr(ctx, "imageAction", "keep").Trim().ToLowerInvariant();
             if (imageAction == "remove")
             {
-                if (!string.IsNullOrEmpty(p.Image)) _media.Delete(p.Image);
+                oldImage = p.Image;
                 image = "";
             }
             else if (imageAction == "replace")
@@ -526,12 +530,40 @@ namespace Social.Web
                 string err;
                 string url = _media.SaveDataUrl(imageData, "post", _cfg.MaxPostImageKB, out err);
                 if (url == null) throw new ApiException(400, err, "Image could not be saved");
-                if (!string.IsNullOrEmpty(p.Image)) _media.Delete(p.Image);
+                oldImage = p.Image;
                 image = url;
             }
 
             if (text.Length == 0 && string.IsNullOrEmpty(image) && video.Length == 0)
                 throw new ApiException(400, "empty", "Write something first");
+
+            // Save the version being replaced, but only when something actually
+            // changed: opening the editor and pressing save must not add a revision,
+            // must not bump the counter and must not say "edited" on a post nobody
+            // touched. A no-op edit is a no-op all the way through.
+            bool changed = text != p.Body || video != p.Video || visibility != p.Visibility ||
+                           image != p.Image;
+            if (!changed)
+            {
+                JsonBuilder same = new JsonBuilder(1024);
+                same.BeginObject();
+                same.Name("post").Raw(PostView(p, ctx.User));
+                same.Prop("unchanged", true);
+                SendOk(ctx, same);
+                return;
+            }
+
+            bool kept = false;
+            if (_cfg.PostEditHistory)
+            {
+                _store.RecordPostEdit(p, ctx.User.Id, _cfg.PostEditsKeep);
+                kept = true;
+            }
+
+            // The old file is only removed when nothing points at it any more. With
+            // history on, the revision just saved is a reference, so the picture
+            // stays on disk and the storage audit knows it is not an orphan.
+            if (oldImage.Length > 0 && oldImage != image && !kept) _media.Delete(oldImage);
 
             _store.UpdatePost(p.Id, text, image, video, visibility);
             Log.Info("DATA", "post #" + p.Id + " edited by @" + ctx.User.Username);
@@ -539,6 +571,54 @@ namespace Social.Web
             JsonBuilder b = new JsonBuilder(1024);
             b.BeginObject();
             b.Name("post").Raw(PostView(p, ctx.User));
+            SendOk(ctx, b);
+        }
+
+        /// <summary>
+        /// The revision history of one post. Only the author and the staff may read
+        /// it: "edited 3 times" is public (it is on the post), but the *old text* is
+        /// not, or editing a typo would leave your first draft readable forever.
+        /// </summary>
+        private void HandlePostEdits(ApiCtx ctx)
+        {
+            long id = LongQuery(ctx, "id");
+            Post p = RequirePost(id);
+            bool mine = p.Author == ctx.User.Id;
+            if (!mine && !Perms.SeesAll(ctx.User))
+                throw new ApiException(403, "forbidden", "Only the author can see the edit history");
+
+            List<PostEdit> edits = _store.PostEdits(p.Id);
+            JsonBuilder b = new JsonBuilder(4096);
+            b.BeginObject();
+            b.Prop("post", p.Id);
+            // the current version comes first, so the list reads newest to oldest
+            b.Prop("count", p.EditCount > 0 ? p.EditCount
+                : (p.Edited == DateTime.MinValue ? 0 : 1));
+            b.Name("revisions").BeginArray();
+            b.BeginObject();
+            b.Prop("current", true);
+            b.Prop("body", p.Body);
+            b.Prop("image", p.Image);
+            b.Prop("video", p.Video);
+            b.Prop("visibility", p.Visibility);
+            b.Prop("created", p.Edited == DateTime.MinValue ? Util.Iso(p.Created) : Util.Iso(p.Edited));
+            b.Name("editor").Raw(UserSummary(_store.FindUser(p.Author)));
+            b.EndObject();
+            for (int i = 0; i < edits.Count; i++)
+            {
+                PostEdit e = edits[i];
+                b.BeginObject();
+                b.Prop("id", e.Id);
+                b.Prop("body", e.Body);
+                b.Prop("image", e.Image);
+                b.Prop("video", e.Video);
+                b.Prop("visibility", e.Visibility);
+                b.Prop("created", Util.Iso(e.Created));
+                b.Name("editor").Raw(UserSummary(_store.FindUser(e.Editor)));
+                b.EndObject();
+            }
+            b.EndArray();
+            b.Prop("kept", _cfg.PostEditHistory);
             SendOk(ctx, b);
         }
 

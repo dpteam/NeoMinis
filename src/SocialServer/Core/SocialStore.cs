@@ -48,13 +48,14 @@ namespace Social.Core
         private readonly List<PushSub> _pushSubs = new List<PushSub>();
         private readonly List<StickerPackRec> _stickerPacks = new List<StickerPackRec>();
         private readonly List<StickerRec> _stickers = new List<StickerRec>();
+        private readonly List<PostEdit> _postEdits = new List<PostEdit>();
         private Meta _meta = new Meta();
 
         private readonly Dictionary<long, User> _userById = new Dictionary<long, User>();
         private readonly Dictionary<string, User> _userByName = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
 
         private bool _dirtyUsers, _dirtyPosts, _dirtyComments, _dirtyFriends, _dirtyMessages;
-        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts, _dirtyAlbums, _dirtyStories, _dirtyChannels, _dirtyApps, _dirtyAppGrants, _dirtyAppData, _dirtyAppScores, _dirtyPush, _dirtyStickerPacks, _dirtyStickers;
+        private bool _dirtyNotifications, _dirtyGroups, _dirtyReports, _dirtyBookmarks, _dirtyMeta, _dirtyDrafts, _dirtyMedia, _dirtyPlaylists, _dirtyFeedback, _dirtyCalls, _dirtyGifts, _dirtyAlbums, _dirtyStories, _dirtyChannels, _dirtyApps, _dirtyAppGrants, _dirtyAppData, _dirtyAppScores, _dirtyPush, _dirtyStickerPacks, _dirtyStickers, _dirtyPostEdits;
         private bool _readOnly;
         private string _saveError = "";
         private DateTime _lastSave = DateTime.MinValue;
@@ -98,7 +99,7 @@ namespace Social.Core
                    _dirtyDrafts || _dirtyMedia || _dirtyPlaylists || _dirtyFeedback || _dirtyCalls ||
                    _dirtyGifts || _dirtyAlbums || _dirtyStories || _dirtyChannels || _dirtyApps ||
                    _dirtyAppGrants || _dirtyAppData || _dirtyAppScores || _dirtyPush ||
-                   _dirtyStickerPacks || _dirtyStickers;
+                   _dirtyStickerPacks || _dirtyStickers || _dirtyPostEdits;
         }
 
         // ============================================================== load
@@ -177,6 +178,8 @@ namespace Social.Core
                 _stickerPacks.AddRange(LoadTable("stickerpacks.json", StickerPackFromDict));
                 _stickers.Clear();
                 _stickers.AddRange(LoadTable("stickers.json", StickerFromDict));
+                _postEdits.Clear();
+                _postEdits.AddRange(LoadTable("postedits.json", PostEditFromDict));
 
                 // sort newest first, keeping the hot queries cheap
                 _posts.Sort(delegate(Post a, Post b) { return b.Id.CompareTo(a.Id); });
@@ -191,6 +194,7 @@ namespace Social.Core
                 _dirtyApps = _dirtyAppGrants = _dirtyAppData = _dirtyAppScores = false;
                 _dirtyPush = false;
                 _dirtyStickerPacks = _dirtyStickers = false;
+                _dirtyPostEdits = false;
 
                 Log.Info("DATA", "loaded users=" + _users.Count + " posts=" + _posts.Count +
                                   " comments=" + _comments.Count + " friends=" + _friends.Count +
@@ -297,6 +301,9 @@ namespace Social.Core
             long maxSticker = 0;
             for (int i = 0; i < _stickers.Count; i++) if (_stickers[i].Id > maxSticker) maxSticker = _stickers[i].Id;
             if (_meta.NextStickerId <= maxSticker) _meta.NextStickerId = maxSticker + 1;
+            long maxEdit = 0;
+            for (int i = 0; i < _postEdits.Count; i++) if (_postEdits[i].Id > maxEdit) maxEdit = _postEdits[i].Id;
+            if (_meta.NextPostEditId <= maxEdit) _meta.NextPostEditId = maxEdit + 1;
         }
 
         private string ReadJson(string path)
@@ -415,12 +422,14 @@ namespace Social.Core
                     if (force || _dirtyPush) WriteTable("push.json", PushSubsToArray());
                     if (force || _dirtyStickerPacks) WriteTable("stickerpacks.json", StickerPacksToArray());
                     if (force || _dirtyStickers) WriteTable("stickers.json", StickersToArray());
+                    if (force || _dirtyPostEdits) WriteTable("postedits.json", PostEditsToArray());
 
                     _dirtyUsers = _dirtyPosts = _dirtyComments = _dirtyFriends = _dirtyMessages = false;
                     _dirtyNotifications = _dirtyGroups = _dirtyReports = _dirtyMeta = _dirtyDrafts = _dirtyMedia = _dirtyPlaylists = _dirtyFeedback = _dirtyCalls = _dirtyGifts = _dirtyAlbums = _dirtyStories = _dirtyChannels = false;
                     _dirtyApps = _dirtyAppGrants = _dirtyAppData = _dirtyAppScores = false;
                     _dirtyPush = false;
                     _dirtyStickerPacks = _dirtyStickers = false;
+                    _dirtyPostEdits = false;
                     _lastSave = DateTime.UtcNow;
                     _saveError = "";
                     if (_readOnly)
@@ -846,6 +855,9 @@ namespace Social.Core
                     p.Image = "";
                 }
                 MarkPosts();
+                // the revisions are of a post that is gone: keeping them would leave
+                // the old text readable through an endpoint whose subject no longer exists
+                DeletePostEdits(id);
                 // nobody can see the post any more, so saved copies go too
                 bool marksChanged = false;
                 for (int b = _bookmarks.Count - 1; b >= 0; b--)
@@ -867,6 +879,8 @@ namespace Social.Core
                 p.Video = video ?? "";
                 p.Visibility = visibility ?? "public";
                 p.Edited = DateTime.UtcNow;
+                // the counter is what the UI shows, and it survives history trimming
+                if (p.EditCount < int.MaxValue) p.EditCount++;
                 MarkPosts();
             }
         }
@@ -3862,6 +3876,117 @@ namespace Social.Core
 
         private void MarkStickerPacks() { _dirtyStickerPacks = true; }
         private void MarkStickers() { _dirtyStickers = true; }
+        private void MarkPostEdits() { _dirtyPostEdits = true; }
+
+        private List<object> PostEditsToArray()
+        {
+            List<object> list = new List<object>(_postEdits.Count);
+            for (int i = 0; i < _postEdits.Count; i++)
+            {
+                PostEdit e = _postEdits[i];
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["id"] = e.Id; d["post"] = e.Post; d["editor"] = e.Editor;
+                d["body"] = e.Body; d["image"] = e.Image; d["video"] = e.Video;
+                d["visibility"] = e.Visibility; d["created"] = e.Created;
+                list.Add(d);
+            }
+            return list;
+        }
+
+        private static PostEdit PostEditFromDict(Dictionary<string, object> d)
+        {
+            PostEdit e = new PostEdit();
+            e.Id = Json.GetLong(d, "id", 0);
+            e.Post = Json.GetLong(d, "post", 0);
+            e.Editor = Json.GetLong(d, "editor", 0);
+            e.Body = Json.GetString(d, "body", "");
+            e.Image = Json.GetString(d, "image", "");
+            e.Video = Json.GetString(d, "video", "");
+            e.Visibility = Json.GetString(d, "visibility", "public");
+            e.Created = Json.GetDate(d, "created", DateTime.UtcNow);
+            if (e.Id <= 0 || e.Post <= 0) return null;
+            return e;
+        }
+
+        /// <summary>
+        /// Saves the post's current state as a revision, then trims the oldest ones
+        /// beyond <paramref name="keep"/>. Called *before* the edit is applied, so the
+        /// row that lands here is the version being replaced.
+        ///
+        /// The image is only recorded, never deleted: the previous picture may still
+        /// be the only copy, and a history entry that points at a removed file would
+        /// be a lie. Removing an image is a separate, explicit action.
+        /// </summary>
+        public PostEdit RecordPostEdit(Post p, long editor, int keep)
+        {
+            if (p == null) return null;
+            lock (_sync)
+            {
+                EnsureWritable();
+                PostEdit e = new PostEdit();
+                e.Id = _meta.NextPostEditId++;
+                e.Post = p.Id;
+                e.Editor = editor;
+                e.Body = p.Body ?? "";
+                e.Image = p.Image ?? "";
+                e.Video = p.Video ?? "";
+                e.Visibility = p.Visibility ?? "public";
+                e.Created = p.Edited == DateTime.MinValue ? p.Created : p.Edited;
+                _postEdits.Add(e);
+                _dirtyMeta = true;
+
+                if (keep > 0)
+                {
+                    // count from the newest so the trim is stable, then drop the tail
+                    List<PostEdit> mine = new List<PostEdit>();
+                    for (int i = 0; i < _postEdits.Count; i++)
+                        if (_postEdits[i].Post == p.Id) mine.Add(_postEdits[i]);
+                    if (mine.Count > keep)
+                    {
+                        mine.Sort(delegate(PostEdit a, PostEdit b) { return b.Id.CompareTo(a.Id); });
+                        for (int i = keep; i < mine.Count; i++) _postEdits.Remove(mine[i]);
+                    }
+                }
+                MarkPostEdits();
+                return e;
+            }
+        }
+
+        /// <summary>Revisions of one post, newest first.</summary>
+        public List<PostEdit> PostEdits(long postId)
+        {
+            List<PostEdit> list = new List<PostEdit>();
+            lock (_sync)
+            {
+                for (int i = 0; i < _postEdits.Count; i++)
+                    if (_postEdits[i].Post == postId) list.Add(_postEdits[i]);
+            }
+            list.Sort(delegate(PostEdit a, PostEdit b) { return b.Id.CompareTo(a.Id); });
+            return list;
+        }
+
+        public int CountPostEdits(long postId)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = 0; i < _postEdits.Count; i++) if (_postEdits[i].Post == postId) n++;
+                return n;
+            }
+        }
+
+        /// <summary>Drops every revision of a post; used when the post itself goes.</summary>
+        public int DeletePostEdits(long postId)
+        {
+            lock (_sync)
+            {
+                int n = 0;
+                for (int i = _postEdits.Count - 1; i >= 0; i--)
+                    if (_postEdits[i].Post == postId) { _postEdits.RemoveAt(i); n++; }
+                if (n > 0) MarkPostEdits();
+                return n;
+            }
+        }
 
         private List<object> StickerPacksToArray()
         {
@@ -5467,6 +5592,8 @@ namespace Social.Core
                         if (_comments[c].Post == postId) _comments.RemoveAt(c);
                     for (int b = _bookmarks.Count - 1; b >= 0; b--)
                         if (_bookmarks[b].Post == postId) _bookmarks.RemoveAt(b);
+                    // and the revision history, which would otherwise outlive the post
+                    DeletePostEdits(postId);
                 }
 
                 // comments elsewhere
@@ -5850,6 +5977,13 @@ namespace Social.Core
                     StickerRec s = _stickers[i];
                     AddRef(used, missing, mediaRoot, s.File, "sticker #" + s.Id);
                 }
+                // a post's old picture is kept while a revision still shows it, so it
+                // is a real reference and must not be reported as an orphan
+                for (int i = 0; i < _postEdits.Count; i++)
+                {
+                    PostEdit e = _postEdits[i];
+                    AddRef(used, missing, mediaRoot, e.Image, "post #" + e.Post + " revision");
+                }
             }
 
             return StorageScan.Run(_cfg, used, missing, topCount);
@@ -5906,6 +6040,7 @@ namespace Social.Core
             d["nextPushId"] = m.NextPushId;
             d["nextStickerPackId"] = m.NextStickerPackId;
             d["nextStickerId"] = m.NextStickerId;
+            d["nextPostEditId"] = m.NextPostEditId;
             d["totalRegistrations"] = m.TotalRegistrations;
             d["lastBackup"] = m.LastBackup;
             d["installId"] = m.InstallId;
@@ -6023,6 +6158,7 @@ namespace Social.Core
                 d["id"] = p.Id; d["author"] = p.Author; d["wall"] = p.Wall; d["group"] = p.Group;
                 d["body"] = p.Body; d["image"] = p.Image; d["video"] = p.Video;
                 d["created"] = p.Created; d["edited"] = p.Edited;
+                if (p.EditCount > 0) d["editCount"] = p.EditCount;
                 d["visibility"] = p.Visibility; d["likes"] = p.Likes; d["comments"] = p.Comments;
                 d["deleted"] = p.Deleted; d["pinned"] = p.Pinned;
                 if (p.Pending) d["pending"] = true;
@@ -6049,6 +6185,7 @@ namespace Social.Core
             p.Image = Json.GetString(d, "image", "");
             p.Created = Json.GetDate(d, "created", DateTime.UtcNow);
             p.Edited = Json.GetDate(d, "edited", DateTime.MinValue);
+            p.EditCount = Json.GetInt(d, "editCount", 0);
             p.Visibility = Json.GetString(d, "visibility", "public");
             p.Comments = Json.GetInt(d, "comments", 0);
             p.Deleted = Json.GetBool(d, "deleted", false);

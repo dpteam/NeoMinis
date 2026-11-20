@@ -174,6 +174,10 @@ namespace Social.Web
             b.Prop("video", p.Video);
             b.Prop("created", Util.Iso(p.Created));
             b.Prop("edited", p.Edited == DateTime.MinValue ? "" : Util.Iso(p.Edited));
+            // a row written before the counter existed still knows it was edited, so
+            // it reports one revision rather than zero
+            b.Prop("edits", p.EditCount > 0 ? p.EditCount
+                : (p.Edited == DateTime.MinValue ? 0 : 1));
             b.Prop("visibility", p.Visibility);
             b.Prop("likes", p.Likes.Count);
             b.Prop("liked", viewer != null && p.Likes.Contains(viewer.Id));
@@ -182,6 +186,10 @@ namespace Social.Web
             b.Prop("canEdit", CanEditPost(viewer, p));
             b.Prop("canPin", CanPinPost(viewer, p));
             b.Prop("canComment", viewer != null && _store.VisibleTo(viewer.Id, p));
+            // "edited 2×" is public; the old text is not. The client needs to know
+            // which one it is looking at, so the mark is only a button when the
+            // server would actually answer.
+            b.Prop("canSeeEdits", viewer != null && (p.Author == viewer.Id || Perms.SeesAll(viewer)));
             b.Prop("pinned", p.Pinned);
             b.Prop("pending", p.Pending);
             b.Prop("reposts", p.Reposts);

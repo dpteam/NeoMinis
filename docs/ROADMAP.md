@@ -247,7 +247,10 @@ What is left:
 Small things that would make what already exists noticeably better.
 
 **Feed and posts**
-- Edit history ("edited 3 times", old versions visible to the author).
+- Edit history: done — the "edited" mark opens the earlier versions for the author and
+  the staff. What is left: a "show the diff" toggle (highlight what changed instead of
+  showing whole versions), and letting the author pin one revision as "the version of
+  record".
 - "Show less like this" per author, remembered per user.
 - Draft autosave in `localStorage` so a closed tab does not lose text.
 - Link preview cards (title + description, no images).
@@ -361,6 +364,19 @@ Kept here so the list above stays honest.
   `u1/1` (it demanded five characters when four is the shortest possible), and
   `stickers/remove` matched the item id without checking the pack, so a crafted id
   could delete a row out of somebody else's pack.
+- **Post edit history.** The "edited" mark on a post is now a button: it opens the
+  earlier versions, newest first, with who changed it and when. The trick is what gets
+  stored — the *version being replaced*, not the new one — so the live post stays
+  current and nothing is rewritten on every change. Only the author and the staff can
+  read the old text; everyone else sees the mark and a tooltip saying so, and
+  `post.canSeeEdits` means the client does not offer a door the server would refuse.
+  Revisions keep their picture: replacing or removing a post's image does not delete
+  the old file while a revision still points at it, and the storage audit counts it as
+  referenced instead of as an orphan. Two bugs found while building it: the image was
+  deleted *before* the revision was recorded (history would have shown a broken
+  picture), and saving a post without changing anything still bumped the edit counter,
+  so a post could claim three edits after two real ones — a no-op edit is now a no-op
+  all the way through.
 - **Four built-in mini-games** that need no plugin and no upload: Snake, 2048, Memory
   and Minesweeper, in `public/assets/mini/`. They are plain HTML and canvas, they read
   the current template's colours so they look like the rest of the site, and each one

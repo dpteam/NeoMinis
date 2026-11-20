@@ -1552,7 +1552,12 @@ var App = (function () {
     var author = p.author || {};
     var meta = '<a class="name" href="#/u/' + encodeURIComponent(author.username || '') + '">' + UI.esc(author.displayName || author.username) + '</a>' +
       '<span>' + UI.timeAgo(p.created) + '</span>' +
-      (p.edited ? '<span>· ' + T('feed.edited') + '</span>' : '') +
+      (p.edited ? (p.canSeeEdits
+        ? '<span class="edited-mark" data-post="' + p.id + '" role="button" tabindex="0" title="' +
+          UI.attr(T('feed.editedHint')) + '">· ' + T('feed.edited') +
+          (p.edits > 1 ? ' ' + T('feed.editedTimes', p.edits) : '') + '</span>'
+        : '<span title="' + UI.attr(T('feed.editedOnlyAuthor')) + '">· ' + T('feed.edited') +
+          (p.edits > 1 ? ' ' + T('feed.editedTimes', p.edits) : '') + '</span>') : '') +
       (p.visibility && p.visibility !== 'public' && !p.group ? '<span>· ' + UI.icon(p.visibility === 'private' ? 'lock' : 'user-group') + ' ' + T(p.visibility === 'private' ? 'feed.private' : 'feed.friendsOnly') + '</span>' : '') +
       (p.wallUser ? '<span>· ' + UI.icon('arrow-right') + ' ' + UI.esc(p.wallUser.displayName) + '</span>' : '') +
       (p.pinned ? '<span class="pin-mark">' + UI.icon('thumbtack') + ' ' + T('feed.pinned') + '</span>' : '');
@@ -2004,6 +2009,57 @@ var App = (function () {
       UI.icon('circle-play') + '<span>' + UI.esc(src.replace(/^https?:\/\//i, '').slice(0, 90)) + '</span></a></div>';
   }
 
+  /// <summary>
+  /// The revision history of a post, newest first, with the live version at the top.
+  /// Only the author and the staff get an answer from the server; anyone else sees
+  /// the refusal, which is the point - the old text is not public.
+  /// </summary>
+  function openEditHistory(postId) {
+    if (!postId) return;
+    Api.request('GET', '/api/post/edits?id=' + encodeURIComponent(postId), null, function (err, data) {
+      if (err) { UI.toast(Api.errorText(err), 'err'); return; }
+      var revs = (data && data.revisions) || [];
+      var body = '<div class="tiny muted" style="margin-bottom:8px">' +
+        T('feed.editsCount', (data && data.count) || revs.length) + '</div>';
+      if (!revs.length) {
+        body += '<div class="tiny muted">' + T('feed.editsNone') + '</div>';
+      } else {
+        body += '<div class="edit-history">';
+        for (var i = 0; i < revs.length; i++) {
+          var r = revs[i];
+          var who = r.editor || {};
+          var text = String(r.body || '');
+          var img = UI.safeUrl(r.image);
+          body += '<div class="edit-rev' + (r.current ? ' current' : '') + '">' +
+            '<div class="edit-rev-head">' +
+            (r.current ? '<span class="badge ok">' + T('feed.editsNow') + '</span> '
+              : '<span class="badge">' + T('feed.editsVersion', revs.length - i) + '</span> ') +
+            '<span class="tiny muted">' + UI.timeAgo(r.created) + '</span>' +
+            (who.displayName ? ' · <span class="tiny muted">' + UI.esc(who.displayName) + '</span>' : '') +
+            (r.visibility && r.visibility !== 'public'
+              ? ' · <span class="tiny muted">' + UI.icon(r.visibility === 'private' ? 'lock' : 'user-group') + ' ' +
+                T(r.visibility === 'private' ? 'feed.private' : 'feed.friendsOnly') + '</span>'
+              : '') +
+            '</div>' +
+            '<div class="edit-rev-body">' +
+            (text ? UI.linkify(text).replace(/\n/g, '<br>') : '<span class="tiny muted">' + T('feed.editsNoText') + '</span>') +
+            '</div>' +
+            (img ? '<img class="edit-rev-img" src="' + UI.attr(img) + '" alt="" loading="lazy">' : '') +
+            (r.video ? '<div class="tiny muted mono" style="margin-top:4px">' + UI.esc(r.video) + '</div>' : '') +
+            '</div>';
+        }
+        body += '</div>';
+      }
+      UI.modal({
+        title: T('feed.editsTitle'),
+        icon: 'clock-rotate-left',
+        wide: true,
+        body: body,
+        actions: [{ label: T('common.close'), cls: 'btn-primary' }]
+      });
+    });
+  }
+
   function bindPosts(scope) {
     var likes = (scope || document).querySelectorAll('.post-like');
     for (var i = 0; i < likes.length; i++) {
@@ -2037,6 +2093,22 @@ var App = (function () {
         e.preventDefault();
         e.stopPropagation();
         likedBy(this.getAttribute('data-id'));
+      });
+    }
+    // the "edited" marker is a button: it opens the revision history
+    var edits = (scope || document).querySelectorAll('.edited-mark');
+    for (var ed = 0; ed < edits.length; ed++) {
+      if (edits[ed].getAttribute('data-bound')) continue;
+      edits[ed].setAttribute('data-bound', '1');
+      edits[ed].addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openEditHistory(this.getAttribute('data-post'));
+      });
+      edits[ed].addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        openEditHistory(this.getAttribute('data-post'));
       });
     }
     var pins = (scope || document).querySelectorAll('.post-pin');

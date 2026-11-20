@@ -4947,6 +4947,9 @@
         field('cfg-xferchunk', T('admin.transferChunkKB'), lim.transferChunkKB, 'number', ' min="32" max="2048"') +
         '<div class="hint">' + T('admin.transferHint') + '</div>' +
         field('cfg-editwin', T('admin.editWindow'), lim.editWindowMin, 'number', ' min="0"') +
+        check('cfg-edithistory', T('admin.postEditHistory'), lim.postEditHistory !== false) +
+        field('cfg-editskeep', T('admin.postEditsKeep'), lim.postEditsKeep, 'number', ' min="0" max="200"') +
+        '<div class="hint" style="margin:-4px 0 8px">' + T('admin.postEditHistoryHint') + '</div>' +
         field('cfg-fbph', T('admin.feedbackPerHour'), lim.feedbackPerHour, 'number', ' min="1"') +
         field('cfg-giftph', T('admin.giftPerHour'), lim.giftPerHour, 'number', ' min="0"') +
         field('cfg-giftmsg', T('admin.maxGiftMessage'), lim.maxGiftMessage, 'number', ' min="0"') +
@@ -5110,6 +5113,8 @@
             maxAvatarKB: Number(App.val('cfg-avatarkb')),
             maxPostImageKB: Number(App.val('cfg-imagekb')),
             editWindowMin: Number(App.val('cfg-editwin')),
+            postEditHistory: document.getElementById('cfg-edithistory').checked,
+            postEditsKeep: Number(App.val('cfg-editskeep')),
             feedbackPerHour: Number(App.val('cfg-fbph')),
             giftPerHour: Number(App.val('cfg-giftph')),
             maxGiftMessage: Number(App.val('cfg-giftmsg')),

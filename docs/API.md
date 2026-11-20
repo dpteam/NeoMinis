@@ -204,7 +204,8 @@ the login form.
 | GET | `/api/post` | `id` | `{ post, comments[] }` |
 | POST | `/api/post` | `body`, `image`, `video`, `poll`, `scheduledFor`, `visibility`, `wall`, `group` | `{ post }` |
 | POST | `/api/post/delete` | `id` | `{ ok }` |
-| POST | `/api/post/edit` | `id`, `body`, `video`, `visibility`, `imageAction` (`keep|remove|replace`), `image` | `{ post }` |
+| POST | `/api/post/edit` | `id`, `body`, `video`, `visibility`, `imageAction` (`keep|remove|replace`), `image` | `{ post }` or, when nothing changed, `{ post, unchanged: true }` |
+| GET | `/api/post/edits` | `id` | `{ post, count, revisions[{ current?, body, image, video, visibility, created, editor }], kept }` |
 | POST | `/api/post/pin` | `id`, `on` | `{ pinned }` |
 | POST | `/api/post/repost` | `id`, `body`, `visibility` | `{ post }` |
 | POST | `/api/like` | `id` | `{ liked, likes }` |
@@ -240,6 +241,26 @@ of a post and the reply tells you the new state and the total saved count.
 `POST /api/post/edit` is limited to the author and the staff. When
 `limits.editWindowMin` is greater than zero, an ordinary user can only edit a post
 inside that window (moderators are never limited). Editing sets `post.edited`.
+
+**Edit history.** With `limits.postEditHistory` on (the default), every edit that
+actually changes something stores the *version being replaced* — not the new one — so
+the live post is always current and nothing is rewritten on each change. A save with
+no changes is a complete no-op: no revision, no counter bump, no `edited` stamp, and
+the reply says `unchanged: true`.
+
+`GET /api/post/edits` returns the live version first (`current: true`) followed by the
+stored revisions, newest first. Only the **author and the staff** may read it:
+`post.edits` (the count) is public, the old text is not — otherwise fixing a typo would
+leave your first draft readable forever. `post.canSeeEdits` tells the client which of
+the two it is looking at, so the mark is only a button when the server would answer.
+
+Revisions keep their picture. When a post's image is replaced or removed, the old file
+is **not** deleted while a revision still points at it, and the storage audit counts
+those files as referenced rather than as orphans. `limits.postEditsKeep` caps the
+revisions per post (0 = keep all, clamped to 200 in the admin panel so a form field
+cannot fill the disk); the counter `post.edits` is separate and never shrinks, so
+"edited 40 times" does not become "edited 20" when the oldest revision falls off.
+Deleting a post deletes its history with it.
 
 `poll` in `/api/post` is `{ question, options[] }`: 2–6 options, 80 chars each,
 160 for the question. A poll alone is a valid post. Votes are single choice and

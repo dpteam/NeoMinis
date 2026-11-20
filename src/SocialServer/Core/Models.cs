@@ -126,6 +126,30 @@ namespace Social.Core
 
         // photo album this picture belongs to (0 = none)
         public long Album;
+
+        // how many times the post has been edited. Kept as a counter rather than
+        // counted from the history table, because history is trimmed: "edited 40
+        // times" must not become "edited 20 times" once the oldest revision falls
+        // off. 0 on a row written before this existed, which reads as 1 if Edited set.
+        public int EditCount;
+    }
+
+    /// <summary>
+    /// One saved revision of a post: what the post looked like *before* the edit
+    /// that followed it. Storing the previous state (rather than the new one) means
+    /// the live post is always the current version and nothing has to be rewritten
+    /// on every change.
+    /// </summary>
+    public sealed class PostEdit
+    {
+        public long Id;
+        public long Post;
+        public long Editor;
+        public string Body = "";
+        public string Image = "";
+        public string Video = "";
+        public string Visibility = "public";
+        public DateTime Created = DateTime.UtcNow;
     }
 
     public sealed class Bookmark
@@ -531,6 +555,7 @@ namespace Social.Core
         public long NextPushId = 1;
         public long NextStickerPackId = 1;
         public long NextStickerId = 1;
+        public long NextPostEditId = 1;
         public long TotalRegistrations;
         public DateTime LastBackup = DateTime.MinValue;
         public string InstallId = "";

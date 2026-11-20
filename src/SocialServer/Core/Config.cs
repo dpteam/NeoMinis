@@ -283,6 +283,11 @@ namespace Social.Core
         // the built-in mini-games (HTML, no Ruffle needed). Off hides the tab and
         // refuses to serve the player pages; the app rows stay, so scores survive.
         public bool MiniGames = true;
+        // keep a revision of a post on every edit, so "edited" can be opened and the
+        // old text read. Off keeps the timestamp and the counter but not the text.
+        public bool PostEditHistory = true;
+        // how many revisions per post are kept; the oldest fall off first
+        public int PostEditsKeep = 20;
         // user-made sticker packs (uploads). VIP only by default, like Telegram's
         // paid tier - the switch and the caps are here so an operator can open it
         // to everyone or close it without a rebuild
@@ -644,6 +649,8 @@ namespace Social.Core
                     else if (key == "storiesenabled") StoriesEnabled = Bool(val, StoriesEnabled);
                     else if (key == "stickersenabled") StickersEnabled = Bool(val, StickersEnabled);
                     else if (key == "minigames") MiniGames = Bool(val, MiniGames);
+                    else if (key == "postedithistory") PostEditHistory = Bool(val, PostEditHistory);
+                    else if (key == "posteditskeep") PostEditsKeep = Int(val, PostEditsKeep);
                     else if (key == "customstickers") CustomStickers = Bool(val, CustomStickers);
                     else if (key == "stickersviponly") StickersVipOnly = Bool(val, StickersVipOnly);
                     else if (key == "stickerpacksperuser") StickerPacksPerUser = Int(val, StickerPacksPerUser);
