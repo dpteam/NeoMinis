@@ -3786,6 +3786,7 @@
       (isAdminUser() ? adminTab('ai', 'robot', T('admin.ai'), sub) : '') +
       (hasPerm('reports') ? adminTab('reports', 'flag', T('admin.reports'), sub) : '') +
       (hasPerm('feedback') ? adminTab('feedback', 'comment-dots', T('admin.feedback'), sub) : '') +
+      (isAdminUser() ? adminTab('storage', 'hard-drive', T('admin.storageTitle'), sub) : '') +
       (isAdminUser() ? adminTab('settings', 'sliders', T('admin.settings'), sub) : '') +
       (hasPerm('logs') ? adminTab('logs', 'terminal', T('admin.logs'), sub) : '') +
       '</div>';
@@ -3793,6 +3794,7 @@
     var body = document.getElementById('admin-body');
     if (sub === 'users' && hasPerm('users')) adminUsers(body);
     else if (sub === 'ai' && isAdminUser()) adminAi(body);
+    else if (sub === 'storage' && isAdminUser()) adminStorage(body);
     else if (sub === 'settings' && isAdminUser()) adminSettings(body);
     else if (sub === 'reports' && hasPerm('reports')) adminReports(body);
     else if (sub === 'feedback' && hasPerm('feedback')) adminFeedback(body);
@@ -3834,7 +3836,8 @@
       html += '<div class="card"><div class="card-h">' + UI.icon('screwdriver-wrench') + ' ' + T('admin.tools') +
         '<span class="right"><button class="btn btn-xs" id="adm-backup">' + T('admin.backup') + '</button> <button class="btn btn-xs" id="adm-reload">' + T('admin.reload') + '</button> <button class="btn btn-xs" id="adm-repair">' + T('admin.repair') + '</button> <button class="btn btn-xs btn-primary" id="adm-broadcast">' + T('admin.broadcast') + '</button></span></div>' +
         '<div class="card-b"><div class="info-table" style="font-size:12px">' +
-        '<div style="display:flex;justify-content:space-between;padding:4px 0"><span class="muted">' + T('admin.storage') + '</span><b>' + UI.bytes(data.storageBytes) + '</b></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0"><span class="muted">' + T('admin.storage') + '</span><b>' +
+        (isAdminUser() ? '<a href="#/admin/storage">' + UI.bytes(data.storageBytes) + ' ' + UI.icon('arrow-right') + '</a>' : UI.bytes(data.storageBytes)) + '</b></div>' +
         '<div style="display:flex;justify-content:space-between;padding:4px 0"><span class="muted">' + T('admin.lastSave') + '</span><b>' + UI.timeAgo(data.lastSave) + '</b></div>' +
         '<div style="display:flex;justify-content:space-between;padding:4px 0"><span class="muted">' + T('admin.uptime') + '</span><b>' + Math.floor((data.uptimeSec || 0) / 60) + 'm</b></div>' +
         '<div style="display:flex;justify-content:space-between;padding:4px 0"><span class="muted">' + T('admin.peak') + '</span><b>' + data.peakOnline + '</b></div>' +
@@ -3914,16 +3917,26 @@
 
   function adminUsers(body) {
     var q = App.qs('q') || '';
+    var filter = App.qs('filter') || '';
+    var filters = [['', T('admin.filterAll')], ['online', T('admin.online')],
+      ['staff', T('admin.filterStaff')], ['banned', T('admin.filterBanned')],
+      ['deleted', T('admin.filterDeleted')]];
+    var chips = '';
+    for (var f = 0; f < filters.length; f++) {
+      chips += '<a class="chip' + (filters[f][0] === filter ? ' active' : '') + '" href="#/admin/users' +
+        userListQuery(q, filters[f][0]) + '">' + UI.esc(filters[f][1]) + '</a>';
+    }
     body.innerHTML = '<div class="card"><div class="card-h">' + UI.icon('users') + ' ' + T('admin.users') +
       '<span class="right"><button class="btn btn-xs" id="adm-badges-recalc">' + UI.icon('trophy') + ' ' + T('admin.badgesRecalc') + '</button></span></div><div class="card-b">' +
-      '<form id="adm-user-search" style="display:flex;gap:7px;margin-bottom:10px">' +
+      '<form id="adm-user-search" style="display:flex;gap:7px;margin-bottom:8px">' +
       '<input class="input" id="adm-q" type="search" value="' + UI.attr(q) + '" placeholder="' + UI.attr(T('people.search')) + '">' +
       '<button class="btn btn-primary" type="submit">' + T('common.search') + '</button></form>' +
+      '<div class="chips" style="margin-bottom:10px">' + chips + '</div>' +
       '<div id="adm-users-list">' + UI.spinner() + '</div></div></div>';
     document.getElementById('adm-user-search').addEventListener('submit', function (e) {
       e.preventDefault();
       var v = document.getElementById('adm-q').value.trim();
-      App.go('#/admin/users' + (v ? '?q=' + encodeURIComponent(v) : ''));
+      App.go('#/admin/users' + userListQuery(v, filter));
     });
     var recalc = document.getElementById('adm-badges-recalc');
     if (recalc) recalc.addEventListener('click', function () {
@@ -3935,14 +3948,33 @@
         SoundFX.play('success');
       });
     });
-    loadAdminUsers(q, 0, false);
+    loadAdminUsers(q, filter, 0, false);
   }
 
-  function loadAdminUsers(q, offset, append) {
+  /// Builds the users-list query string, skipping whatever is empty so the URL
+  /// stays readable and shareable.
+  function userListQuery(q, filter) {
+    var parts = [];
+    if (q) parts.push('q=' + encodeURIComponent(q));
+    if (filter) parts.push('filter=' + encodeURIComponent(filter));
+    return parts.length ? '?' + parts.join('&') : '';
+  }
+
+  function loadAdminUsers(q, filter, offset, append) {
     var box = document.getElementById('adm-users-list');
-    Api.request('GET', '/api/admin/users?limit=40&offset=' + offset + (q ? '&q=' + encodeURIComponent(q) : ''), null, function (err, data) {
+    Api.request('GET', '/api/admin/users?limit=40&offset=' + offset +
+      (q ? '&q=' + encodeURIComponent(q) : '') +
+      (filter ? '&filter=' + encodeURIComponent(filter) : ''), null, function (err, data) {
       if (err) { box.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
       var users = data.users || [];
+      if (!users.length) {
+        if (!append) box.innerHTML = '<div class="empty" style="padding:24px 8px"><div class="empty-icon">' +
+          UI.icon('users') + '</div><div>' + T('admin.noUsers') + '</div></div>';
+        return;
+      }
+      // a count above the table, so a filter cannot silently look like an empty site
+      var head = '<div class="tiny muted" style="margin-bottom:6px">' +
+        T('admin.showingCount', Math.min(offset + users.length, data.total), data.total) + '</div>';
       var html = '<div class="table-wrap"><table class="table"><thead><tr><th>#</th><th>' + T('auth.username') + '</th><th>' + T('admin.role') + '</th><th>' + T('profile.posts') + '</th><th>' + T('profile.friends') + '</th><th>' + T('profile.joined') + '</th><th></th></tr></thead><tbody>';
       for (var i = 0; i < users.length; i++) {
         var u = users[i];
@@ -3956,7 +3988,7 @@
       html += '</tbody></table></div>';
       if (data.hasMore) html += '<button class="load-more" id="adm-users-more" style="margin-top:8px">' + T('people.loadMore') + '</button>';
       if (append) box.insertAdjacentHTML('beforeend', html);
-      else box.innerHTML = html;
+      else box.innerHTML = head + html;
       var btns = box.querySelectorAll('.adm-user');
       for (var j = 0; j < btns.length; j++) {
         btns[j].addEventListener('click', function () { adminUserModal(this.getAttribute('data-id')); });
@@ -3964,8 +3996,102 @@
       var more = document.getElementById('adm-users-more');
       if (more) more.addEventListener('click', function () {
         more.parentNode.removeChild(more);
-        loadAdminUsers(q, offset + users.length, true);
+        loadAdminUsers(q, filter, offset + users.length, true);
       });
+    });
+  }
+
+  /// <summary>
+  /// Storage audit. Deliberately read-only: it says how big each folder is, what
+  /// the biggest files are, which files nothing references and which records point
+  /// at files that are gone. Deleting is a decision, so the panel links the files
+  /// and leaves the decision to the operator.
+  /// </summary>
+  function adminStorage(body) {
+    body.innerHTML = spinnerCard();
+    Api.request('GET', '/api/admin/storage?limit=25', null, function (err, data) {
+      if (err) { body.innerHTML = '<div class="alert err">' + UI.esc(Api.errorText(err)) + '</div>'; return; }
+      var total = data.totalBytes || 1;
+
+      var html = '<div class="admin-grid">' +
+        stat('hard-drive', UI.bytes(data.totalBytes), T('admin.mediaTotal')) +
+        stat('file', data.totalFiles, T('admin.mediaFiles')) +
+        stat('database', UI.bytes(data.jsonBytes), T('admin.jsonTotal')) +
+        stat('broom', UI.bytes(data.orphanBytes), T('admin.orphanBytes'),
+          data.orphanCount ? 'warn' : 'ok') +
+        '</div>';
+
+      // folders
+      html += '<div class="card"><div class="card-h">' + UI.icon('folder-tree') + ' ' + T('admin.folders') + '</div><div class="card-b">';
+      var folders = data.folders || [];
+      if (!folders.length) html += '<div class="tiny muted">' + T('admin.nothingYet') + '</div>';
+      else {
+        html += '<div class="store-bars">';
+        for (var i = 0; i < folders.length; i++) {
+          var pct = Math.max(1, Math.round(folders[i].bytes * 100 / total));
+          html += '<div class="store-bar-row">' +
+            '<span class="store-bar-name">' + UI.esc(folders[i].name) + '</span>' +
+            '<span class="store-bar-track"><span class="store-bar-fill" style="width:' + pct + '%"></span></span>' +
+            '<span class="store-bar-val">' + UI.bytes(folders[i].bytes) + '</span></div>';
+        }
+        html += '</div>';
+      }
+      html += '</div></div>';
+
+      // biggest files
+      html += '<div class="card"><div class="card-h">' + UI.icon('arrow-up-wide-short') + ' ' + T('admin.biggest') + '</div><div class="card-b">';
+      var big = data.biggest || [];
+      if (!big.length) html += '<div class="tiny muted">' + T('admin.nothingYet') + '</div>';
+      else {
+        html += '<div class="table-wrap"><table class="table"><thead><tr><th>' + T('admin.path') + '</th><th>' +
+          T('admin.size') + '</th><th>' + T('admin.modified') + '</th></tr></thead><tbody>';
+        for (var b = 0; b < big.length; b++) {
+          html += '<tr><td><a href="/media/' + UI.attr(big[b].path) + '" target="_blank" rel="noopener noreferrer">' +
+            UI.esc(big[b].path) + '</a></td><td>' + UI.bytes(big[b].bytes) + '</td><td class="tiny muted">' +
+            UI.formatDate(big[b].modified) + '</td></tr>';
+        }
+        html += '</tbody></table></div>';
+      }
+      html += '</div></div>';
+
+      // orphans
+      var orphans = data.orphans || [];
+      html += '<div class="card"><div class="card-h">' + UI.icon('broom') + ' ' + T('admin.orphans') +
+        '<span class="right tiny muted">' + data.orphanCount + ' · ' + UI.bytes(data.orphanBytes) + '</span></div><div class="card-b">' +
+        '<div class="tiny muted" style="margin-bottom:8px">' + T('admin.orphansHint') + '</div>';
+      if (!orphans.length) html += '<div class="tiny muted">' + T('admin.noOrphans') + '</div>';
+      else {
+        html += '<div class="table-wrap"><table class="table"><thead><tr><th>' + T('admin.path') + '</th><th>' +
+          T('admin.size') + '</th><th>' + T('admin.modified') + '</th></tr></thead><tbody>';
+        for (var o = 0; o < orphans.length; o++) {
+          html += '<tr><td><a href="/media/' + UI.attr(orphans[o].path) + '" target="_blank" rel="noopener noreferrer">' +
+            UI.esc(orphans[o].path) + '</a></td><td>' + UI.bytes(orphans[o].bytes) + '</td><td class="tiny muted">' +
+            UI.formatDate(orphans[o].modified) + '</td></tr>';
+        }
+        html += '</tbody></table></div>';
+      }
+      html += '</div></div>';
+
+      // broken references
+      var missing = data.missing || [];
+      html += '<div class="card"><div class="card-h">' + UI.icon('link-slash') + ' ' + T('admin.missingFiles') +
+        '<span class="right tiny muted">' + data.missingCount + '</span></div><div class="card-b">';
+      if (!missing.length) html += '<div class="tiny muted">' + T('admin.noMissing') + '</div>';
+      else {
+        html += '<div class="table-wrap"><table class="table"><thead><tr><th>' + T('admin.path') + '</th><th>' +
+          T('admin.referencedBy') + '</th></tr></thead><tbody>';
+        for (var m = 0; m < missing.length; m++) {
+          html += '<tr><td>' + UI.esc(missing[m].path) + '</td><td class="tiny muted">' +
+            UI.esc(missing[m].where) + '</td></tr>';
+        }
+        html += '</tbody></table></div>';
+      }
+      html += '</div></div>';
+
+      body.innerHTML = '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">' +
+        '<button class="btn btn-xs" id="adm-storage-refresh">' + UI.icon('rotate') + ' ' + T('admin.rescan') + '</button></div>' + html;
+      var refresh = document.getElementById('adm-storage-refresh');
+      if (refresh) refresh.addEventListener('click', function () { adminStorage(body); });
     });
   }
 

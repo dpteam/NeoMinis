@@ -12,7 +12,7 @@ Runs on Windows XP SP3 and anything newer, including behind Nginx Proxy Manager
 [![.NET Framework](https://img.shields.io/badge/.NET_Framework-4.0-512bd4)](https://dotnet.microsoft.com/)
 [![C#](https://img.shields.io/badge/C%23-4.0-239120)](https://learn.microsoft.com/dotnet/csharp/)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#why-this-exists)
-[![API tests](https://img.shields.io/badge/API_tests-521_passing-brightgreen)](#testing)
+[![API tests](https://img.shields.io/badge/API_tests-538_passing-brightgreen)](#testing)
 [![License](https://img.shields.io/badge/license-use_it_fork_it-blue)](#license)
 
 [Quick start](#quick-start) · [Screenshots](#screenshots) · [Features](#features) · [Configuration](#configuration) · [API](#api-and-security) · [Docs](#documentation) · [Testing](#testing)
@@ -145,7 +145,7 @@ effect separately if you want a different one:
 | **Achievements** | 34 badges, auto-granted from activity (posts, comments, likes, friends, messages, bookmarks, age) plus manual awards; admin can grant or revoke any badge |
 | **Peer file transfer** | direct browser-to-browser transfer between friends with an 8-digit code, consent, SHA-256 verification and no server-side storage |
 | **AI citizens** | imported personas that post, comment and like on their own — Markov chain or any OpenAI-compatible endpoint. Off by default. See [docs/AI.md](docs/AI.md) |
-| **Admin** | **a separate board on its own port** — dashboard, users (ban / unban / grant or revoke admin & moderator / warn / mute / reset / badges / delete), reports queue, live log tail, broadcast, backup, storage repair, config reload, AI panel, and a Settings tab that writes straight back to `config.ini` |
+| **Admin** | **a separate board on its own port** — dashboard, users (ban / unban / grant or revoke admin & moderator / warn / mute / reset / badges / delete, with **All / Online / Staff / Banned / Deleted filters** that run server-side), reports queue, live log tail, broadcast, backup, storage repair, **a read-only storage audit** (folder sizes, biggest files, unreferenced files, records pointing at missing files), config reload, AI panel, and a Settings tab that writes straight back to `config.ini` |
 | **Moderation** | a permission matrix for moderators (8 flags, empty means "all", for backwards compatibility), warnings, chat mutes, reports, per-IP account caps |
 | **Themes** | `light` / `dark` / `oled`, instant switch, remembered per user, and a generated `brand.css` from `[branding]` |
 | **Settings** | five tabs — Profile, Appearance, Notifications, Privacy, Account — instead of one long wall, so nothing is squeezed into an unreadable column |
@@ -360,7 +360,7 @@ powershell -ExecutionPolicy Bypass -File tools\ci-test.ps1
 folder, runs the Node suite against **both boards**, restarts the server and
 verifies that data survived.
 
-`tools/test-web.mjs` speaks the same crypto as the browser: **521 checks** covering
+`tools/test-web.mjs` speaks the same crypto as the browser: **538 checks** covering
 registration, login, signature enforcement, replay rejection, encryption
 enforcement, posts, likes, comments, friends, messages, groups, notifications,
 calls, channels, apps, push, transfers, admin actions, recovery and logout.

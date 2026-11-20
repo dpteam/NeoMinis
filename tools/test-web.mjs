@@ -1749,6 +1749,8 @@ async function main() {
   // ---- admin
   const adminOnPublic = await alice.call('GET', '/api/admin/overview');
   ok('admin API hidden on the public board', adminOnPublic.status === 404, String(adminOnPublic.status));
+  const storageOnPublic = await alice.call('GET', '/api/admin/storage');
+  ok('storage audit hidden on the public board', storageOnPublic.status === 404, String(storageOnPublic.status));
 
   let admin = null;
   if (ADMIN_BASE) {
@@ -1778,12 +1780,75 @@ async function main() {
     const forbidden = bobLogin.status === 200 ? await bobAdmin.call('GET', '/api/admin/overview') : null;
     ok('admin area closed for users', forbidden !== null && forbidden.status === 403,
       forbidden ? String(forbidden.status) : 'login failed');
+    const storageForbidden = bobLogin.status === 200 ? await bobAdmin.call('GET', '/api/admin/storage') : null;
+    ok('storage audit closed for users', storageForbidden !== null && storageForbidden.status === 403,
+      storageForbidden ? String(storageForbidden.status) : 'login failed');
     const banned = await admin.call('POST', '/api/admin/user', { id: bob.user.id, action: 'ban', reason: 'test', days: 1 });
     ok('admin can ban', banned.status === 200 && banned.data.user.banned === true, String(banned.status));
+
+    // ---- the user list filters on the server, so paging stays honest
+    const onlyBanned = await admin.call('GET', '/api/admin/users?filter=banned');
+    ok('the banned filter lists the banned user',
+      onlyBanned.status === 200 && (onlyBanned.data.users || []).some(u => u.id === bob.user.id),
+      JSON.stringify(onlyBanned.data && onlyBanned.data.users && onlyBanned.data.users.length));
+    ok('the banned filter lists nothing else',
+      (onlyBanned.data.users || []).every(u => u.banned === true),
+      JSON.stringify((onlyBanned.data.users || []).filter(u => !u.banned).map(u => u.id)));
+    ok('a filtered list reports the filtered total',
+      onlyBanned.data.total === (onlyBanned.data.users || []).length,
+      JSON.stringify(onlyBanned.data.total) + ' vs ' + (onlyBanned.data.users || []).length);
+
     const bannedCall = await bob.call('GET', '/api/me');
     ok('banned user blocked', bannedCall.status === 403 || bannedCall.status === 401, String(bannedCall.status));
     const unbanned = await admin.call('POST', '/api/admin/user', { id: bob.user.id, action: 'unban' });
     ok('admin can unban', unbanned.status === 200 && unbanned.data.user.banned === false, '');
+
+    const bannedAfter = await admin.call('GET', '/api/admin/users?filter=banned');
+    ok('an unbanned user leaves the banned filter',
+      !(bannedAfter.data.users || []).some(u => u.id === bob.user.id),
+      JSON.stringify((bannedAfter.data.users || []).map(u => u.id)));
+
+    const staffList = await admin.call('GET', '/api/admin/users?filter=staff');
+    ok('the staff filter lists only staff',
+      staffList.status === 200 && (staffList.data.users || []).every(u => u.role === 'admin' || u.role === 'moderator'),
+      JSON.stringify((staffList.data.users || []).map(u => u.role)));
+
+    // the caller just made a request, so they are online by definition
+    const onlineList = await admin.call('GET', '/api/admin/users?filter=online');
+    ok('the online filter includes the caller',
+      onlineList.status === 200 && (onlineList.data.users || []).some(u => u.id === alice.user.id),
+      String(onlineList.status));
+
+    // ---- storage audit: read-only, and it must agree with the filesystem
+    const storage = await admin.call('GET', '/api/admin/storage?limit=5');
+    ok('storage audit answers', storage.status === 200 && typeof storage.data.totalBytes === 'number',
+      String(storage.status));
+    ok('storage audit counts files and bytes',
+      storage.data.totalFiles >= 1 && storage.data.totalBytes > 0,
+      storage.data.totalFiles + ' files / ' + storage.data.totalBytes + ' bytes');
+    ok('storage audit breaks the total down by folder',
+      Array.isArray(storage.data.folders) && storage.data.folders.length >= 1 &&
+      storage.data.folders.every(f => typeof f.bytes === 'number' && f.bytes > 0),
+      JSON.stringify(storage.data.folders && storage.data.folders.length));
+    const folderSum = (storage.data.folders || []).reduce((n, f) => n + f.bytes, 0);
+    ok('the folder sizes add up to the media total', folderSum === storage.data.totalBytes,
+      folderSum + ' vs ' + storage.data.totalBytes);
+    ok('the biggest files are listed largest first',
+      Array.isArray(storage.data.biggest) && storage.data.biggest.every((f, i, all) =>
+        i === 0 || all[i - 1].bytes >= f.bytes),
+      JSON.stringify((storage.data.biggest || []).map(f => f.bytes)));
+    ok('the audit respects the requested cap',
+      (storage.data.biggest || []).length <= 5 && (storage.data.orphans || []).length <= 5,
+      JSON.stringify([(storage.data.biggest || []).length, (storage.data.orphans || []).length]));
+    ok('the audit reports unreferenced bytes as a number',
+      typeof storage.data.orphanBytes === 'number' && typeof storage.data.orphanCount === 'number', '');
+    // a picture was uploaded earlier in this run, so the audit must not call it broken
+    ok('every missing-file entry names a path and a record',
+      (storage.data.missing || []).every(m => m.path && m.where),
+      JSON.stringify((storage.data.missing || []).slice(0, 3)));
+    ok('the missing count matches the list', storage.data.missingCount === (storage.data.missing || []).length,
+      storage.data.missingCount + ' vs ' + (storage.data.missing || []).length);
+
     const logs = await admin.call('GET', '/api/admin/logs?limit=20');
     ok('admin logs', logs.status === 200 && Array.isArray(logs.data.entries), '');
     const broadcast = await admin.call('POST', '/api/admin/broadcast', { text: 'test broadcast' });

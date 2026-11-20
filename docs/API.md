@@ -1020,12 +1020,13 @@ Administrator: additionally `user` (destructive actions), `broadcast`, `reload`,
 | Method | Path | Body / query | Result |
 | --- | --- | --- | --- |
 | GET | `/api/admin/overview` | — | counts, storage, uptime, `recentUsers`, `topUsers`, `reports`, `logs`, `config` |
-| GET | `/api/admin/users` | `q`, `offset`, `limit` | `{ users[], total, offset, hasMore }` |
+| GET | `/api/admin/users` | `q`, `filter`, `offset`, `limit` | `{ users[], total, offset, filter, hasMore }` |
 | POST | `/api/admin/user` | `id`, `action`, `reason`, `days`, `role` | `{ user }` or `{ recoveryCode }` |
 | GET | `/api/admin/reports` | `status=open|closed` | `{ reports[] }` |
 | POST | `/api/admin/report` | `id`, `note` | `{ ok }` |
 | POST | `/api/admin/broadcast` | `text` | `{ delivered }` |
 | GET | `/api/admin/logs` | `since`, `limit`, `level`, `category` | `{ entries[], lastSeq }` |
+| GET | `/api/admin/storage` | `limit` (cap for the lists, default 20) | media totals, `folders[]`, `biggest[]`, `orphans[]`, `missing[]` |
 | POST | `/api/admin/reload` | — | `{ warnings[] }` (port/bind/root need a restart) |
 | POST | `/api/admin/backup` | — | `{ path }` |
 | POST | `/api/admin/repair` | — | storage state after a forced save |
@@ -1045,6 +1046,20 @@ Administrator: additionally `user` (destructive actions), `broadcast`, `reload`,
 Guards: the last administrator cannot be banned, demoted or deleted; nobody can
 ban or delete themselves; role changes respect `allowRoleChange`, `allowSelfDemote`
 and `protectLastAdmin` from the config. A janitor can never act on an administrator.
+
+`filter` on the user list is `banned` · `staff` · `online` · `deleted`, and it runs
+**on the server**, before paging: filtering a page in the browser would show three
+rows and claim there is nothing more. `online` ignores `hideOnline` on purpose — an
+administrator is asking who is actually connected, not what the site admits publicly.
+
+**The storage audit** (`GET /api/admin/storage`) walks `data/media` once and compares
+it with every record that can point at a file (avatars, covers, post images, message
+attachments and albums, stories, library items, group and album covers). It answers
+four questions and nothing else: how much each folder holds, the biggest files, files
+no record references, and records whose file is gone (`missing[]`, capped at 500 so a
+wiped folder cannot produce a huge reply). It is **read-only by design** — an audit
+that also deletes is one nobody dares run on a live server. Media is not deleted when
+a post is removed or an avatar is replaced, so `orphans` is where that space shows up.
 
 ### Janitors (granular moderator rights)
 

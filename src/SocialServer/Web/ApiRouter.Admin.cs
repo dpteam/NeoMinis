@@ -13,6 +13,7 @@ namespace Social.Web
             if (_web == null || !_web.IsAdminBoard)
                 throw new ApiException(404, "unknown-endpoint", "Unknown endpoint");
             if (sub == "overview") { RequireMethod(ctx.Req.Method, "GET"); RequireModerator(ctx.User); HandleAdminOverview(ctx); return; }
+            if (sub == "storage") { RequireMethod(ctx.Req.Method, "GET"); RequireAdmin(ctx.User); HandleAdminStorage(ctx); return; }
             if (sub == "users") { RequireMethod(ctx.Req.Method, "GET"); RequirePermission(ctx.User, Perms.Users); HandleAdminUsers(ctx); return; }
             if (sub == "badges/recalc") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminBadgesRecalc(ctx); return; }
             if (sub == "notify-test") { RequireMethod(ctx.Req.Method, "POST"); RequireAdmin(ctx.User); HandleAdminNotifyTest(ctx); return; }
@@ -48,9 +49,79 @@ namespace Social.Web
 
         // ========================================================== overview
 
-        private void HandleAdminOverview(ApiCtx ctx)
+        /// <summary>
+        /// Read-only storage audit. Answers the three questions an operator actually
+        /// has: how big is each folder, what are the biggest files, and what is
+        /// broken - media nothing points at, and records pointing at missing files.
+        /// It never deletes: an audit that also deletes is one nobody dares run.
+        /// </summary>
+        private void HandleAdminStorage(ApiCtx ctx)
         {
-            int online = _store.CountOnline(_cfg.OnlineWindowSec);
+            int top = LimitParam(ctx, 20, 100);
+            StorageAudit audit = _store.AuditStorage(top);
+
+            JsonBuilder b = new JsonBuilder(8192);
+            b.BeginObject();
+            b.Prop("totalBytes", audit.TotalBytes);
+            b.Prop("totalFiles", audit.TotalFiles);
+            b.Prop("jsonBytes", audit.JsonBytes);
+            b.Prop("jsonFiles", audit.JsonFiles);
+            b.Prop("orphanBytes", audit.OrphanBytes);
+            b.Prop("orphanCount", audit.Orphans.Count);
+            b.Prop("missingCount", audit.Missing.Count);
+
+            b.Name("folders").BeginArray();
+            for (int i = 0; i < audit.Folders.Count; i++)
+            {
+                b.BeginObject();
+                b.Prop("name", audit.Folders[i].Key);
+                b.Prop("bytes", audit.Folders[i].Value);
+                b.EndObject();
+            }
+            b.EndArray();
+
+            b.Name("biggest").BeginArray();
+            for (int i = 0; i < audit.Biggest.Count; i++)
+            {
+                StorageFile f = audit.Biggest[i];
+                b.BeginObject();
+                b.Prop("path", f.Path);
+                b.Prop("bytes", f.Bytes);
+                b.Prop("modified", Util.Iso(f.Modified));
+                b.EndObject();
+            }
+            b.EndArray();
+
+            // orphans are capped: a wiped reference table could otherwise list every
+            // file on the disk, and the panel only ever shows the top of the list
+            b.Name("orphans").BeginArray();
+            for (int i = 0; i < audit.Orphans.Count && i < top; i++)
+            {
+                StorageFile f = audit.Orphans[i];
+                b.BeginObject();
+                b.Prop("path", f.Path);
+                b.Prop("bytes", f.Bytes);
+                b.Prop("modified", Util.Iso(f.Modified));
+                b.EndObject();
+            }
+            b.EndArray();
+
+            b.Name("missing").BeginArray();
+            for (int i = 0; i < audit.Missing.Count && i < top; i++)
+            {
+                StorageMissing m = audit.Missing[i];
+                b.BeginObject();
+                b.Prop("path", m.Path);
+                b.Prop("where", m.Where);
+                b.EndObject();
+            }
+            b.EndArray();
+
+            SendOk(ctx, b);
+        }
+
+        private void HandleAdminOverview(ApiCtx ctx)
+        {            int online = _store.CountOnline(_cfg.OnlineWindowSec);
             _stats.NotePeak(online);
             List<User> recent = _store.RecentUsers(8);
             List<KeyValuePair<User, int>> top = _store.TopUsers(5);
@@ -201,6 +272,9 @@ namespace Social.Web
         private void HandleAdminUsers(ApiCtx ctx)
         {
             string q = GetQuery(ctx.Query, "q");
+            // the filter is applied server-side, so paging stays correct: filtering
+            // 40 rows in the browser would show 3 results and claim there are no more
+            string filter = (GetQuery(ctx.Query, "filter") ?? "").Trim().ToLowerInvariant();
             int limit = LimitParam(ctx, 40, 100);
             int offset = 0;
             string off = GetQuery(ctx.Query, "offset");
@@ -208,6 +282,27 @@ namespace Social.Web
 
             List<User> users = string.IsNullOrEmpty(q) ? _store.AllUsers() : _store.SearchUsers(q, 500);
             users.Sort(delegate(User x, User y) { return y.Id.CompareTo(x.Id); });
+
+            if (filter.Length > 0)
+            {
+                List<User> kept = new List<User>();
+                for (int i = 0; i < users.Count; i++)
+                {
+                    User u = users[i];
+                    bool ok;
+                    switch (filter)
+                    {
+                        case "banned": ok = u.Banned; break;
+                        case "staff": ok = u.Role == "admin" || u.Role == "moderator"; break;
+                        case "online": ok = _store.IsOnline(u.Id, _cfg.OnlineWindowSec); break;
+                        case "deleted": ok = u.Deleted; break;
+                        default: ok = true; break;
+                    }
+                    if (ok) kept.Add(u);
+                }
+                users = kept;
+            }
+
             int total = users.Count;
             if (offset > 0 && offset < users.Count) users.RemoveRange(0, offset);
             else if (offset >= users.Count) users.Clear();
@@ -220,6 +315,7 @@ namespace Social.Web
             b.EndArray();
             b.Prop("total", total);
             b.Prop("offset", offset);
+            b.Prop("filter", filter);
             b.Prop("hasMore", offset + users.Count < total);
             SendOk(ctx, b);
         }

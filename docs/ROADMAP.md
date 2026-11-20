@@ -348,6 +348,15 @@ Kept here so the list above stays honest.
   a participant count that ignores people who declined, a minimised floating call
   window that keeps the media flowing, avatars of who is on the line with a blue dot
   when somebody joins, and rooms that no longer die under the last person in them.
+- Admin, made useful: a **storage audit** that walks `data/media` once and answers the
+  four questions an operator actually has — how big each folder is, what the biggest
+  files are, which files no record references, and which records point at files that
+  are gone. Read-only on purpose; it never deletes. On the live test instance it
+  immediately found 703 unreferenced files (14.4 MB) left by deleted posts and
+  replaced avatars — checked independently against the JSON tables before trusting it.
+  The user list also gained **server-side filters** (all / online / staff / banned /
+  deleted) with a "showing N of M" line, because filtering one page in the browser
+  shows three rows and lies about the rest.
 - Messages, sharpened: **search inside one conversation** with a jump to the hit (it
   pages back through the history until the message is on screen), **per-conversation
   drafts** that survive switching threads, a reload and closing the tab — and the

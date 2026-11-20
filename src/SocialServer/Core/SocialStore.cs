@@ -683,6 +683,25 @@ namespace Social.Core
             }
         }
 
+        /// <summary>
+        /// Online check for one user, used by the admin filter. Unlike the public
+        /// count it ignores HideOnline: the admin is looking at who is actually
+        /// connected, not at what the site is willing to admit publicly.
+        /// </summary>
+        public bool IsOnline(long userId, int windowSec)
+        {
+            DateTime cutoff = DateTime.UtcNow.AddSeconds(-windowSec);
+            lock (_sync)
+            {
+                for (int i = 0; i < _users.Count; i++)
+                {
+                    User u = _users[i];
+                    if (u.Id == userId) return !u.Deleted && u.LastSeen >= cutoff;
+                }
+                return false;
+            }
+        }
+
         public List<User> OnlineUsers(int windowSec, int limit)
         {
             DateTime cutoff = DateTime.UtcNow.AddSeconds(-windowSec);
@@ -5109,6 +5128,94 @@ namespace Social.Core
                 return total;
             }
             catch { return 0; }
+        }
+
+        /// <summary>
+        /// Every media path any record claims to use, plus the references that point
+        /// at nothing. Kept next to the data because only this class knows the shape
+        /// of every table; the walk of the folder itself lives in StorageScan.
+        /// </summary>
+        public StorageAudit AuditStorage(int topCount)
+        {
+            HashSet<string> used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<StorageMissing> missing = new List<StorageMissing>();
+            string mediaRoot = _cfg.MediaDir;
+
+            lock (_sync)
+            {
+                for (int i = 0; i < _users.Count; i++)
+                {
+                    User u = _users[i];
+                    AddRef(used, missing, mediaRoot, u.Avatar, "user #" + u.Id);
+                    AddRef(used, missing, mediaRoot, u.Cover, "user #" + u.Id);
+                }
+                for (int i = 0; i < _posts.Count; i++)
+                {
+                    Post p = _posts[i];
+                    AddRef(used, missing, mediaRoot, p.Image, "post #" + p.Id);
+                }
+                for (int i = 0; i < _messages.Count; i++)
+                {
+                    Message m = _messages[i];
+                    string where = "message #" + m.Id;
+                    AddRef(used, missing, mediaRoot, m.Image, where);
+                    AddRef(used, missing, mediaRoot, m.Audio, where);
+                    AddRef(used, missing, mediaRoot, m.Video, where);
+                    AddRef(used, missing, mediaRoot, m.FileUrl, where);
+                    if (!string.IsNullOrEmpty(m.Images))
+                    {
+                        string[] parts = m.Images.Split('\n');
+                        for (int k = 0; k < parts.Length; k++) AddRef(used, missing, mediaRoot, parts[k], where);
+                    }
+                }
+                for (int i = 0; i < _stories.Count; i++)
+                {
+                    Story s = _stories[i];
+                    AddRef(used, missing, mediaRoot, s.Image, "story #" + s.Id);
+                    AddRef(used, missing, mediaRoot, s.Video, "story #" + s.Id);
+                }
+                for (int i = 0; i < _media.Count; i++)
+                {
+                    MediaItem mi = _media[i];
+                    // games live in this table too (Kind == "game"), so their file and
+                    // cover are covered by the same pass
+                    AddRef(used, missing, mediaRoot, mi.Url, "library #" + mi.Id);
+                    AddRef(used, missing, mediaRoot, mi.Cover, "library #" + mi.Id);
+                }
+                for (int i = 0; i < _groups.Count; i++)
+                {
+                    Group g = _groups[i];
+                    AddRef(used, missing, mediaRoot, g.Avatar, "group #" + g.Id);
+                }
+                for (int i = 0; i < _albums.Count; i++)
+                {
+                    Album a = _albums[i];
+                    AddRef(used, missing, mediaRoot, a.Cover, "album #" + a.Id);
+                }
+            }
+
+            return StorageScan.Run(_cfg, used, missing, topCount);
+        }
+
+        private static void AddRef(HashSet<string> used, List<StorageMissing> missing,
+                                   string mediaRoot, string url, string where)
+        {
+            string rel = StorageScan.Normalize(url);
+            if (rel.Length == 0) return;
+            used.Add(rel);
+            try
+            {
+                string full = Path.Combine(mediaRoot, rel.Replace('/', Path.DirectorySeparatorChar));
+                if (!File.Exists(full))
+                {
+                    StorageMissing m = new StorageMissing();
+                    m.Path = rel;
+                    m.Where = where;
+                    // a cap keeps a wiped media folder from producing a 100k-entry reply
+                    if (missing.Count < 500) missing.Add(m);
+                }
+            }
+            catch { }
         }
 
         // ========================================================== serialize
